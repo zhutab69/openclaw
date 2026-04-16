@@ -38,36 +38,143 @@
 
 ## 🚀 快速开始
 
-### 启动 Gateway
+### 前置要求
+
+- Python 3.10+
+- Trae CN IDE 账号（用于获取 CLI Token）
+
+### 安装步骤
+
 ```bash
-# 进入目录
+# 1. 进入 trae-gateway 目录
 cd trae-gateway
 
-# 启动服务
+# 2. 安装依赖
+pip install -r requirements.txt
+
+# 3. 配置环境变量（见下方配置说明）
+cp .env.example .env
+# 编辑 .env 文件，配置你的凭据
+
+# 4. 启动服务
 python main.py
 
-# 或指定端口
-python main.py --port 9010
+# 或指定端口（如果 9010 被占用）
+python main.py --port 9011
 ```
 
-### 查看模型列表
-```bash
-curl http://127.0.0.1:9010/v1/models \
-  -H "Authorization: Bearer trae-super-secret-password-456"
+服务将在 `http://localhost:9010` 启动
+
+---
+
+## ⚙️ 配置说明
+
+### 方式 1: CLI Token（推荐）
+
+从 Trae 企业控制台获取 CLI Token：
+
+**步骤**:
+1. 访问 [Trae 企业控制台](https://console.enterprise.trae.cn/personal/token)
+2. 登录你的 Trae 账号
+3. 生成或复制 CLI Token
+
+**配置 .env 文件**:
+```env
+# Trae CLI Token（推荐方式）
+TRAE_CLI_TOKEN="trae-lt-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+
+# 代理服务器密码（自定义，用于保护你的网关）
+PROXY_API_KEY="trae-super-secret-password-456"
+
+# 服务器配置
+SERVER_PORT="9010"
+SERVER_HOST="0.0.0.0"
+
+# 日志级别
+LOG_LEVEL="INFO"
 ```
 
-### 测试（仅模型列表可用）
-```bash
-# 返回 12 个 Trae 模型
-curl http://127.0.0.1:9010/v1/models \
-  -H "Authorization: Bearer trae-super-secret-password-456"
+### 方式 2: storage.json 文件（备选）
 
-# Chat API 暂不可用（返回 404）
-curl http://127.0.0.1:9010/v1/chat/completions \
-  -H "Authorization: Bearer trae-super-secret-password-456" \
-  -H "Content-Type: application/json" \
-  -d '{"model": "glm-5.1", "messages": [{"role": "user", "content": "Hello"}]}'
+如果你已经安装了 Trae CN IDE，可以直接使用其认证文件：
+
+**配置 .env 文件**:
+```env
+# Trae 认证文件路径
+KIRO_CREDS_FILE="C:/Users/你的用户名/AppData/Roaming/Trae CN/User/globalStorage/storage.json"
+
+# 代理服务器密码
+PROXY_API_KEY="trae-super-secret-password-456"
+
+# 服务器配置
+SERVER_PORT="9010"
+SERVER_HOST="0.0.0.0"
 ```
+
+<details>
+<summary>📄 storage.json 文件格式</summary>
+
+Trae CN 的认证信息存储在 `storage.json` 中的特殊字段：
+
+```json
+{
+  "iCubeAuthInfo://icube.cloudide": "{\"token\":\"...\",\"expiredAt\":\"2026-04-29T08:35:43.248Z\",\"user\":{...}}"
+}
+```
+
+**注意**: 这是一个嵌套的 JSON 字符串，Gateway 会自动解析。
+
+</details>
+
+<details>
+<summary>🔍 认证优先级</summary>
+
+Gateway 按以下优先级选择认证方式：
+
+1. **CLI Token** (最高优先级)
+   - 环境变量: `TRAE_CLI_TOKEN`
+   - 推荐使用，最简单可靠
+
+2. **storage.json 文件** (备选)
+   - 环境变量: `KIRO_CREDS_FILE`
+   - 自动从 Trae CN IDE 读取
+
+如果两者都配置，CLI Token 优先。
+
+</details>
+
+### 获取凭据
+
+**方式 1: 从企业控制台获取 CLI Token（推荐）**
+
+1. 访问 https://console.enterprise.trae.cn/personal/token
+2. 登录你的 Trae 账号（用户名: `yulin.zhu@istarshine.com`）
+3. 点击"生成 Token"或复制现有 Token
+4. Token 格式: `trae-lt-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`
+
+**方式 2: 使用 Trae CN IDE 的 storage.json**
+
+1. 确保 Trae CN IDE 已安装并登录
+2. 找到 storage.json 文件位置:
+   - Windows: `C:\Users\你的用户名\AppData\Roaming\Trae CN\User\globalStorage\storage.json`
+3. 在 .env 中配置 `KIRO_CREDS_FILE` 指向该文件
+
+<details>
+<summary>🔧 查找 storage.json 文件</summary>
+
+**Windows PowerShell**:
+```powershell
+# 查找 Trae CN 安装目录
+Get-ChildItem -Path "$env:APPDATA" -Filter "Trae CN" -Recurse -Directory
+
+# 查找 storage.json
+Get-ChildItem -Path "$env:APPDATA\Trae CN" -Filter "storage.json" -Recurse
+```
+
+**常见位置**:
+- `C:\Users\你的用户名\AppData\Roaming\Trae CN\User\globalStorage\storage.json`
+
+</details>
 
 ---
 
@@ -98,23 +205,54 @@ curl http://127.0.0.1:9010/v1/chat/completions \
 
 ### ✅ 可用功能
 
-#### 1. 模型列表查询
+#### 1. 模型列表 API
 ```bash
 curl http://127.0.0.1:9010/v1/models \
   -H "Authorization: Bearer trae-super-secret-password-456"
 ```
-返回 12 个 Trae 内置模型
+
+**返回示例**:
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "doubao-seed-2.0-code",
+      "object": "model",
+      "created": 1234567890,
+      "owned_by": "trae"
+    },
+    {
+      "id": "glm-5.1",
+      "object": "model",
+      "created": 1234567890,
+      "owned_by": "trae"
+    },
+    ...
+  ]
+}
+```
 
 #### 2. OpenClaw 集成
-- 在 OpenClaw 中可以看到 `trae-gw/*` 模型
-- 例如：`trae-gw/glm-5.1`, `trae-gw/doubao-seed-2.0-code`
+在 OpenClaw 中可以看到 `trae-gw/*` 模型：
+- `trae-gw/glm-5.1`
+- `trae-gw/doubao-seed-2.0-code`
+- `trae-gw/minimax-m2.7`
+- 等等...
 
 #### 3. 模型同步
 ```bash
 # 在项目根目录运行
+cd ..
 python sync_models.py
 ```
+
 自动同步所有模型到 OpenClaw 和 sub-agents
+
+#### 4. API 文档
+- **Swagger UI**: http://127.0.0.1:9010/docs
+- **ReDoc**: http://127.0.0.1:9010/redoc
+- **Health Check**: http://127.0.0.1:9010/health
 
 ### ⏳ 待实现功能
 
@@ -122,6 +260,17 @@ python sync_models.py
 - **状态**: 需要抓包获取真实 API 端点
 - **当前**: 返回 404（端点未知）
 - **需要**: Trae 后端 Chat API 的 URL、请求格式、响应格式
+
+**测试（当前返回 404）**:
+```bash
+curl http://127.0.0.1:9010/v1/chat/completions \
+  -H "Authorization: Bearer trae-super-secret-password-456" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "glm-5.1",
+    "messages": [{"role": "user", "content": "Hello"}]
+  }'
+```
 
 #### 2. 流式响应
 - 依赖于 Chat API 实现
