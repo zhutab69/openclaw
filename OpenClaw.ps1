@@ -42,6 +42,14 @@ function Clear-AllPorts {
             Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue 
         }
         Start-Sleep -Milliseconds 1500
+        
+        # 清理 OpenClaw 锁文件
+        $lockDir = "$env:TEMP\openclaw"
+        if (Test-Path $lockDir) {
+            Get-ChildItem $lockDir -Filter "gateway.*.lock" -ErrorAction SilentlyContinue |
+                ForEach-Object { Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue }
+        }
+        
         return $true
     }
     return $false
@@ -88,6 +96,14 @@ function Cleanup {
         }
     }
     Clear-AllPorts | Out-Null
+    
+    # 清理 OpenClaw 锁文件
+    $lockDir = "$env:TEMP\openclaw"
+    if (Test-Path $lockDir) {
+        Get-ChildItem $lockDir -Filter "gateway.*.lock" -ErrorAction SilentlyContinue |
+            ForEach-Object { Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue }
+    }
+    
     Write-Host "  All services stopped." -ForegroundColor Green
 }
 
