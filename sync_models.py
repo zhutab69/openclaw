@@ -92,45 +92,119 @@ else:
         all_models_map[f"kiro-gw/{m['id']}"] = {"alias": m["id"]}
     sync_results.append(f"OK kiro-gw: {len(kiro_models)} models")
 
-# 1.2 Trae Gateway (使用 Trae 内置模型列表)
-# 注意：这些是 Trae 文档中列出的内置模型
-# API 端点需要通过抓包 Trae CN 应用来确定
-trae_builtin_models = [
-    {"id": "doubao-seed-2.0-code", "name": "Doubao Seed 2.0 Code", "reasoning": True, "input": ["text", "image"], "contextWindow": 200000, "maxTokens": 64000},
-    {"id": "doubao-seed-1.8", "name": "Doubao Seed 1.8", "reasoning": True, "input": ["text", "image"], "contextWindow": 200000, "maxTokens": 64000},
-    {"id": "doubao-seed-code", "name": "Doubao Seed Code", "reasoning": True, "input": ["text", "image"], "contextWindow": 200000, "maxTokens": 64000},
-    {"id": "minimax-m2.7", "name": "MiniMax M2.7", "reasoning": True, "input": ["text", "image"], "contextWindow": 200000, "maxTokens": 64000},
-    {"id": "minimax-m2.5", "name": "MiniMax M2.5", "reasoning": True, "input": ["text", "image"], "contextWindow": 200000, "maxTokens": 64000},
-    {"id": "glm-5.1", "name": "GLM 5.1", "reasoning": True, "input": ["text", "image"], "contextWindow": 200000, "maxTokens": 64000},
-    {"id": "glm-5v-turbo", "name": "GLM 5V Turbo", "reasoning": True, "input": ["text", "image"], "contextWindow": 200000, "maxTokens": 64000},
-    {"id": "glm-5", "name": "GLM 5", "reasoning": True, "input": ["text", "image"], "contextWindow": 200000, "maxTokens": 64000},
-    {"id": "deepseek-v3.1-terminus", "name": "DeepSeek V3.1 Terminus", "reasoning": True, "input": ["text"], "contextWindow": 200000, "maxTokens": 64000},
-    {"id": "kimi-k2.5", "name": "Kimi K2.5", "reasoning": True, "input": ["text"], "contextWindow": 200000, "maxTokens": 64000},
-    {"id": "qwen3.5-plus", "name": "Qwen 3.5 Plus", "reasoning": True, "input": ["text"], "contextWindow": 200000, "maxTokens": 64000},
-    {"id": "qwen3-coder-next", "name": "Qwen 3 Coder Next", "reasoning": True, "input": ["text"], "contextWindow": 200000, "maxTokens": 64000},
-]
+# 1.2 Volcengine Ark (火山引擎方舟) - 直连火山引擎 API
+VOLCENGINE_ARK_BASEURL = "https://ark.cn-beijing.volces.com/api/v3"
+VOLCENGINE_ARK_APIKEY = "f3684480-c0d1-4a97-a2b3-41b86d226d46"
 
-# 尝试从 Trae Gateway 获取模型（如果运行中）
-trae_models, trae_error = fetch_gateway_models(
-    "http://127.0.0.1:9010/v1",
-    "trae-gw",
-    "trae-super-secret-password-456"  # 添加正确的认证 token
-)
+def fetch_volcengine_models(base_url, api_key):
+    """从火山引擎 API 动态获取已开通的模型列表。"""
+    import ssl
+    ctx = ssl.create_default_context()
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
 
-# 如果 Gateway 未运行或失败，使用内置模型列表
+    # Step 1: 获取所有可用模型
+    try:
+        req = urllib.request.Request(f"{base_url}/models", headers=headers)
+        resp = urllib.request.urlopen(req, timeout=15, context=ctx)
+        data = json.loads(resp.read().decode("utf-8"))
+        all_models = data.get("data", [])
+    except Exception as e:
+        return [], f"Failed to list models: {e}"
+
+    if not all_models:
+        return [], "No models returned from API"
+
+    # Step 2: 过滤出 chat 类模型（排除 embedding、image、video 等）
+    skip_keywords = ["embedding", "seedance", "seedream", "seededit", "seed3d",
+                     "wan2", "vision-lite", "ui-tars", "character", "translation",
+                     "smart-router", "seaweed", "pretrain", "browsing", "functioncall",
+                     "mistral", "vision-pro"]
+    chat_model_ids = []
+    for m in all_models:
+        mid = m.get("id", "")
+        if any(kw in mid for kw in skip_keywords):
+            continue
+        chat_model_ids.append(mid)
+
+    # Step 3: 并发探测模型是否已开通
+    # 策略：发送无效请求（空 messages），根据错误码判断：
+    #   - 404 ModelNotOpen/NotFound = 未开通
+    #   - 400 InvalidParameter = 已开通（参数错误说明模型存在）
+    #   - 200 = 已开通
+    #   - 429 = 已开通（限流）
+    import concurrent.futures
+    
+    def probe_model(mid):
+        # 发送空 messages 触发 400 而非实际推理，速度极快
+        payload = json.dumps({
+            "model": mid,
+            "messages": [],
+            "max_tokens": 1,
+        }).encode("utf-8")
+        try:
+            req = urllib.request.Request(f"{base_url}/chat/completions",
+                                        data=payload, headers=headers, method="POST")
+            resp = urllib.request.urlopen(req, timeout=15, context=ctx)
+            # 200 = 模型存在且可用（不太可能空 messages 返回 200，但以防万一）
+            return mid
+        except urllib.error.HTTPError as e:
+            code = e.code
+            body = ""
+            try: body = e.read().decode("utf-8")
+            except: pass
+            if code == 404:
+                # ModelNotOpen 或 NotFound = 未开通
+                return None
+            if code in (400, 422, 429):
+                # 400 InvalidParameter / 422 / 429 RateLimit = 模型存在
+                return mid
+            return None
+        except Exception:
+            return None
+
+    available_ids = set()
+    with concurrent.futures.ThreadPoolExecutor(max_workers=15) as executor:
+        futures = {executor.submit(probe_model, mid): mid for mid in chat_model_ids}
+        done, _ = concurrent.futures.wait(futures, timeout=90)
+        for future in done:
+            try:
+                result = future.result()
+                if result:
+                    available_ids.add(result)
+            except Exception:
+                pass
+    
+    # 构建模型列表
+    opened_models = []
+    for mid in sorted(available_ids):
+        is_reasoning = "thinking" in mid or "seed" in mid or "r1" in mid
+        opened_models.append({
+            "id": mid,
+            "name": mid,
+            "reasoning": is_reasoning,
+            "input": ["text"],
+            "contextWindow": 200000 if "doubao" in mid else 128000,
+            "maxTokens": 64000 if "doubao" in mid else 8192,
+        })
+
+    return opened_models, None
+
+trae_models, trae_error = fetch_volcengine_models(VOLCENGINE_ARK_BASEURL, VOLCENGINE_ARK_APIKEY)
 if trae_error:
-    sync_results.append(f"INFO trae-gw: Using builtin models ({trae_error})")
-    trae_models = trae_builtin_models
+    sync_results.append(f"WARN trae-gw: {trae_error}")
+else:
+    sync_results.append(f"OK trae-gw: {len(trae_models)} models (Volcengine Ark, dynamic)")
 
-# 添加 Trae Gateway provider
-all_providers["trae-gw"] = {
-    "api": "openai-completions",
-    "baseUrl": "http://127.0.0.1:9010/v1",
-    "models": trae_models
-}
-for m in trae_models:
-    all_models_map[f"trae-gw/{m['id']}"] = {"alias": m["id"]}
-sync_results.append(f"OK trae-gw: {len(trae_models)} models")
+# 添加 Volcengine Ark provider (保留 trae-gw 名称以兼容现有配置)
+if trae_models:
+    all_providers["trae-gw"] = {
+        "api": "openai-completions",
+        "baseUrl": VOLCENGINE_ARK_BASEURL,
+        "apiKey": VOLCENGINE_ARK_APIKEY,
+        "models": trae_models
+    }
+    for m in trae_models:
+        all_models_map[f"trae-gw/{m['id']}"] = {"alias": m["name"]}
 
 # 1.3 Direct providers
 for provider_id, provider_info in DIRECT_PROVIDERS.items():
@@ -181,13 +255,15 @@ for provider_id, provider_data in all_providers.items():
         models_changed = True
         break
     
-    # Check if api/baseUrl changed
+    # Check if api/baseUrl/apiKey changed
     current_api = current_provider.get("api")
     current_baseUrl = current_provider.get("baseUrl")
+    current_apiKey = current_provider.get("apiKey")
     new_api = provider_data.get("api")
     new_baseUrl = provider_data.get("baseUrl")
+    new_apiKey = provider_data.get("apiKey")
     
-    if current_api != new_api or current_baseUrl != new_baseUrl:
+    if current_api != new_api or current_baseUrl != new_baseUrl or current_apiKey != new_apiKey:
         models_changed = True
         break
 
@@ -202,8 +278,8 @@ if models_changed:
         # Clear old structure and rebuild
         provider_config = config["models"]["providers"][provider_id]
         
-        # Keep apiKey if exists (for kiro-gw)
-        api_key = provider_config.get("apiKey")
+        # Keep apiKey from provider_data (source of truth), fallback to existing config
+        api_key = provider_data.get("apiKey") or provider_config.get("apiKey")
         
         # Rebuild provider config with correct structure
         config["models"]["providers"][provider_id] = {
@@ -215,7 +291,7 @@ if models_changed:
         if "baseUrl" in provider_data:
             config["models"]["providers"][provider_id]["baseUrl"] = provider_data["baseUrl"]
         
-        # Restore apiKey if it existed
+        # Restore/set apiKey if it existed
         if api_key:
             config["models"]["providers"][provider_id]["apiKey"] = api_key
 

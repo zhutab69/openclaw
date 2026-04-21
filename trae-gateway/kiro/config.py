@@ -133,6 +133,9 @@ REFRESH_TOKEN: str = os.getenv("REFRESH_TOKEN", "")
 # Profile ARN for AWS CodeWhisperer
 PROFILE_ARN: str = os.getenv("PROFILE_ARN", "")
 
+# Trae Chat API endpoint (can be configured to find the correct endpoint)
+TRAE_CHAT_API_ENDPOINT: str = os.getenv("TRAE_CHAT_API_ENDPOINT", "/v1/chat/completions")
+
 # AWS region (default us-east-1)
 REGION: str = os.getenv("KIRO_REGION", "us-east-1")
 

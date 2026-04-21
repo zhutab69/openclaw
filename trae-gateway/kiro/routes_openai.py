@@ -151,7 +151,7 @@ async def get_models(request: Request):
 
 
 @router.post("/v1/chat/completions", dependencies=[Depends(verify_api_key)])
-async def chat_completions(request: Request, request_data: ChatCompletionRequest):
+async def chat_completions(request: Request, request_data: ChatCompletionRequest, test_endpoint: str = None):
     """
     Chat completions endpoint - compatible with OpenAI API.
     
@@ -232,35 +232,70 @@ async def chat_completions(request: Request, request_data: ChatCompletionRequest
     # Generate conversation ID for Kiro API (random UUID, not used for tracking)
     conversation_id = generate_conversation_id()
     
-    # Build payload for Kiro
-    # profileArn is only needed for Kiro Desktop auth
-    # AWS SSO OIDC (Builder ID) users don't need profileArn and it causes 403 if sent
-    profile_arn_for_payload = ""
-    if auth_manager.auth_type == AuthType.KIRO_DESKTOP and auth_manager.profile_arn:
-        profile_arn_for_payload = auth_manager.profile_arn
+    # Determine if we're using Kiro or Trae API
+    is_trae = hasattr(auth_manager, 'auth_type') and auth_manager.auth_type == 'TRAE'
     
-    try:
-        kiro_payload = build_kiro_payload(
-            request_data,
-            conversation_id,
-            profile_arn_for_payload
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    
-    # Log Kiro payload
-    try:
-        kiro_request_body = json.dumps(kiro_payload, ensure_ascii=False, indent=2).encode('utf-8')
-        if debug_logger:
-            debug_logger.log_kiro_request_body(kiro_request_body)
-    except Exception as e:
-        logger.warning(f"Failed to log Kiro request: {e}")
-    
-    # Create HTTP client with retry logic
-    # For streaming: use per-request client to avoid CLOSE_WAIT leak on VPN disconnect (issue #54)
-    # For non-streaming: use shared client for connection pooling
-    url = f"{auth_manager.api_host}/generateAssistantResponse"
-    logger.debug(f"Kiro API URL: {url}")
+    if is_trae:
+        # Use Trae API
+        logger.info(f"Using Trae API for model: {request_data.model}")
+        
+        # Import Trae converters
+        from kiro.converters_trae import convert_openai_to_trae
+        
+        # Build payload for Trae
+        try:
+            payload = convert_openai_to_trae(request_data)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        
+        # Log Trae payload
+        try:
+            trae_request_body = json.dumps(payload, ensure_ascii=False, indent=2).encode('utf-8')
+            if debug_logger:
+                debug_logger.log_kiro_request_body(trae_request_body)  # Reuse same log method
+        except Exception as e:
+            logger.warning(f"Failed to log Trae request: {e}")
+        
+        # Import Trae API endpoint configuration
+        from kiro.config import TRAE_CHAT_API_ENDPOINT
+        
+        # Determine which endpoint to use
+        endpoint = test_endpoint if test_endpoint else TRAE_CHAT_API_ENDPOINT
+        
+        # Use configured or test Trae API endpoint
+        url = f"{auth_manager.api_host}{endpoint}"
+        logger.info(f"Using Trae API endpoint: {url} (test_endpoint: {test_endpoint})")
+        logger.debug(f"Trae request payload: {json.dumps(payload, ensure_ascii=False, indent=2)}")
+    else:
+        # Use Kiro API
+        logger.info(f"Using Kiro API for model: {request_data.model}")
+        
+        # profileArn is only needed for Kiro Desktop auth
+        # AWS SSO OIDC (Builder ID) users don't need profileArn and it causes 403 if sent
+        profile_arn_for_payload = ""
+        if auth_manager.auth_type == AuthType.KIRO_DESKTOP and auth_manager.profile_arn:
+            profile_arn_for_payload = auth_manager.profile_arn
+        
+        try:
+            payload = build_kiro_payload(
+                request_data,
+                conversation_id,
+                profile_arn_for_payload
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        
+        # Log Kiro payload
+        try:
+            kiro_request_body = json.dumps(payload, ensure_ascii=False, indent=2).encode('utf-8')
+            if debug_logger:
+                debug_logger.log_kiro_request_body(kiro_request_body)
+        except Exception as e:
+            logger.warning(f"Failed to log Kiro request: {e}")
+        
+        # Kiro API endpoint for chat completions
+        url = f"{auth_manager.api_host}/generateAssistantResponse"
+        logger.debug(f"Kiro API URL: {url}")
     
     if request_data.stream:
         # Streaming mode: per-request client prevents orphaned connections
@@ -277,7 +312,7 @@ async def chat_completions(request: Request, request_data: ChatCompletionRequest
         response = await http_client.request_with_retry(
             "POST",
             url,
-            kiro_payload,
+            payload,
             stream=True
         )
         
@@ -290,18 +325,29 @@ async def chat_completions(request: Request, request_data: ChatCompletionRequest
             await http_client.close()
             error_text = error_content.decode('utf-8', errors='replace')
             
-            # Try to parse JSON response from Kiro to extract error message
+            # Try to parse JSON response from Trae/Kiro to extract error message
             error_message = error_text
-            try:
-                error_json = json.loads(error_text)
-                # Enhance Kiro API errors with user-friendly messages
-                from kiro.kiro_errors import enhance_kiro_error
-                error_info = enhance_kiro_error(error_json)
-                error_message = error_info.user_message
-                # Log original error for debugging
-                logger.debug(f"Original Kiro error: {error_info.original_message} (reason: {error_info.reason})")
-            except (json.JSONDecodeError, KeyError):
-                pass
+            
+            # Handle Trae specific errors
+            if is_trae:
+                logger.debug(f"Trae API raw response: {error_text}")
+                
+                # Add Trae specific error context
+                trae_error_context = f"\n\nTrae API调试信息:\n- 使用的端点: {url}\n- 请尝试修改.env文件中的TRAE_CHAT_API_ENDPOINT配置项\n- 例如: TRAE_CHAT_API_ENDPOINT=/chat/completions\n- 或: TRAE_CHAT_API_ENDPOINT=/api/v1/chat/completions\n- 或: TRAE_CHAT_API_ENDPOINT=/generate\n- 查看详细文档: https://forum.trae.cn/search?q=openclaw"
+                
+                error_message = error_text + trae_error_context
+            else:
+                # Handle Kiro errors
+                try:
+                    error_json = json.loads(error_text)
+                    # Enhance Kiro API errors with user-friendly messages
+                    from kiro.kiro_errors import enhance_kiro_error
+                    error_info = enhance_kiro_error(error_json)
+                    error_message = error_info.user_message
+                    # Log original error for debugging
+                    logger.debug(f"Original Kiro error: {error_info.original_message} (reason: {error_info.reason})")
+                except (json.JSONDecodeError, KeyError):
+                    pass
             
             # Log access log for error (before flush, so it gets into app_logs)
             logger.warning(
@@ -318,7 +364,7 @@ async def chat_completions(request: Request, request_data: ChatCompletionRequest
                 content={
                     "error": {
                         "message": error_message,
-                        "type": "kiro_api_error",
+                        "type": "trae_api_error" if is_trae else "kiro_api_error",
                         "code": response.status_code
                     }
                 }
@@ -335,16 +381,27 @@ async def chat_completions(request: Request, request_data: ChatCompletionRequest
                 streaming_error = None
                 client_disconnected = False
                 try:
-                    async for chunk in stream_kiro_to_openai(
-                        http_client.client,
-                        response,
-                        request_data.model,
-                        model_cache,
-                        auth_manager,
-                        request_messages=messages_for_tokenizer,
-                        request_tools=tools_for_tokenizer
-                    ):
-                        yield chunk
+                    if is_trae:
+                        # Use Trae streaming handler
+                        from kiro.streaming_trae import stream_trae_to_openai
+                        async for chunk in stream_trae_to_openai(
+                            http_client.client,
+                            response,
+                            request_data.model
+                        ):
+                            yield chunk
+                    else:
+                        # Use Kiro streaming handler
+                        async for chunk in stream_kiro_to_openai(
+                            http_client.client,
+                            response,
+                            request_data.model,
+                            model_cache,
+                            auth_manager,
+                            request_messages=messages_for_tokenizer,
+                            request_tools=tools_for_tokenizer
+                        ):
+                            yield chunk
                 except GeneratorExit:
                     # Client disconnected - this is normal
                     client_disconnected = True
@@ -381,15 +438,25 @@ async def chat_completions(request: Request, request_data: ChatCompletionRequest
         else:
             
             # Non-streaming mode - collect entire response
-            openai_response = await collect_stream_response(
-                http_client.client,
-                response,
-                request_data.model,
-                model_cache,
-                auth_manager,
-                request_messages=messages_for_tokenizer,
-                request_tools=tools_for_tokenizer
-            )
+            if is_trae:
+                # Use Trae response collector
+                from kiro.streaming_trae import collect_stream_response
+                openai_response = await collect_stream_response(
+                    http_client.client,
+                    response,
+                    request_data.model
+                )
+            else:
+                # Use Kiro response collector
+                openai_response = await collect_stream_response(
+                    http_client.client,
+                    response,
+                    request_data.model,
+                    model_cache,
+                    auth_manager,
+                    request_messages=messages_for_tokenizer,
+                    request_tools=tools_for_tokenizer
+                )
             
             await http_client.close()
             

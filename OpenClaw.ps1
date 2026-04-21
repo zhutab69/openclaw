@@ -220,13 +220,11 @@ $script:perfStats["dashboard"] = (Get-Date) - $t0
 $t0 = Get-Date
 Write-Host "[7/8] Starting Bot Review Server (port 8900)..." -NoNewline
 $psiBot = New-Object System.Diagnostics.ProcessStartInfo
-$psiBot.FileName = $NODE
-$psiBot.Arguments = "`"D:\Kiro\testopenclaw\OpenClaw-bot-review\.next\standalone\server.js`""
+$psiBot.FileName = "cmd.exe"
+$psiBot.Arguments = "/c set PORT=8900&& set OPENCLAW_HOME=$env:USERPROFILE\.openclaw&& set NODE_ENV=production&& `"$NODE`" `"D:\Kiro\testopenclaw\OpenClaw-bot-review\.next\standalone\server.js`""
 $psiBot.WorkingDirectory = "D:\Kiro\testopenclaw\OpenClaw-bot-review\.next\standalone"
 $psiBot.UseShellExecute = $false
 $psiBot.CreateNoWindow = $true
-$psiBot.EnvironmentVariables["PORT"] = "8900"
-$psiBot.EnvironmentVariables["OPENCLAW_DISABLE_BONJOUR"] = "1"
 $script:pBot = [System.Diagnostics.Process]::Start($psiBot)
 Write-Host " Started PID $($script:pBot.Id) ($(Elapsed $t0))" -ForegroundColor Green
 $script:perfStats["bot-review"] = (Get-Date) - $t0
@@ -446,6 +444,14 @@ while ($true) {
                 $script:p2.Kill()
                 Start-Sleep -Milliseconds 1000 
             }
+            
+            # 清理锁文件
+            $lockDir = "$env:TEMP\openclaw"
+            if (Test-Path $lockDir) {
+                Get-ChildItem $lockDir -Filter "gateway.*.lock" -ErrorAction SilentlyContinue |
+                    ForEach-Object { Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue }
+            }
+            
             $script:p2 = Start-MainGateway
             
             if (Wait-ForPort 18789 30 $false) {

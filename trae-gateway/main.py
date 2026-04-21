@@ -578,18 +578,18 @@ def print_startup_banner(host: str, port: int) -> None:
     url = f"http://{display_host}:{port}"
     
     print()
-    print(f"  {WHITE}{BOLD}👻 {APP_TITLE} v{APP_VERSION}{RESET}")
+    print(f"  {WHITE}{BOLD}[Trae] {APP_TITLE} v{APP_VERSION}{RESET}")
     print()
     print(f"  {WHITE}Server running at:{RESET}")
-    print(f"  {GREEN}{BOLD}➜  {url}{RESET}")
+    print(f"  {GREEN}{BOLD}-> {url}{RESET}")
     print()
     print(f"  {DIM}API Docs:      {url}/docs{RESET}")
     print(f"  {DIM}Health Check:  {url}/health{RESET}")
     print()
-    print(f"  {DIM}{'─' * 48}{RESET}")
-    print(f"  {WHITE}💬 Found a bug? Need help? Have questions?{RESET}")
-    print(f"  {YELLOW}➜  https://github.com/jwadow/kiro-gateway/issues{RESET}")
-    print(f"  {DIM}{'─' * 48}{RESET}")
+    print(f"  {DIM}{'-' * 48}{RESET}")
+    print(f"  {WHITE}Found a bug? Need help? Have questions?{RESET}")
+    print(f"  {YELLOW}-> https://github.com/jwadow/kiro-gateway/issues{RESET}")
+    print(f"  {DIM}{'-' * 48}{RESET}")
     print()
 
 

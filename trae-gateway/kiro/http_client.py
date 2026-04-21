@@ -209,16 +209,32 @@ class KiroHttpClient:
             try:
                 # Get current token
                 token = await self.auth_manager.get_access_token()
-                headers = get_kiro_headers(self.auth_manager, token)
+                
+                # Check if we're using Trae API
+                is_trae = hasattr(self.auth_manager, 'auth_type') and self.auth_manager.auth_type == 'TRAE'
+                
+                if is_trae:
+                    # Use Trae API headers
+                    headers = {
+                        "Authorization": f"Bearer {token}",
+                        "Content-Type": "application/json"
+                    }
+                    if stream:
+                        # Prevent CLOSE_WAIT connection leak (issue #38)
+                        headers["Connection"] = "close"
+                    logger.debug("Sending request to Trae API...")
+                else:
+                    # Use Kiro API headers
+                    headers = get_kiro_headers(self.auth_manager, token)
+                    if stream:
+                        # Prevent CLOSE_WAIT connection leak (issue #38)
+                        headers["Connection"] = "close"
+                    logger.debug("Sending request to Kiro API...")
                 
                 if stream:
-                    # Prevent CLOSE_WAIT connection leak (issue #38)
-                    headers["Connection"] = "close"
                     req = client.build_request(method, url, json=json_data, headers=headers)
-                    logger.debug("Sending request to Kiro API...")
                     response = await client.send(req, stream=True)
                 else:
-                    logger.debug("Sending request to Kiro API...")
                     response = await client.request(method, url, json=json_data, headers=headers)
                 
                 # Check status
