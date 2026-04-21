@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
-# Kiro Gateway
-# https://github.com/jwadow/kiro-gateway
+# Trae Gateway
+# (Trae Gateway - based on Kiro Gateway)
 # Copyright (C) 2025 Jwadow
 #
 # This program is free software: you can redistribute it and/or modify
@@ -18,7 +18,7 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 """
-Exception handlers for Kiro Gateway.
+Exception handlers for Trae Gateway.
 
 Contains functions for handling validation errors and other exceptions
 in a JSON-serialization compatible format.
@@ -93,7 +93,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     # This is called AFTER middleware has initialized debug logging,
     # so all app logs during request processing will be captured
     try:
-        from kiro.debug_logger import debug_logger
+        from trae.debug_logger import debug_logger
         if debug_logger:
             error_message = f"Validation error: {sanitized_errors}"
             debug_logger.flush_on_error(422, error_message)

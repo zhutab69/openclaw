@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
-# Kiro Gateway
-# https://github.com/jwadow/kiro-gateway
+# Trae Gateway
+# (Trae Gateway - based on Kiro Gateway)
 # Copyright (C) 2025 Jwadow
 #
 # This program is free software: you can redistribute it and/or modify
@@ -18,7 +18,7 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 """
-Kiro Gateway Configuration.
+Trae Gateway Configuration.
 
 Centralized storage for all settings, constants, and mappings.
 Loads environment variables and provides typed access to them.
@@ -99,10 +99,10 @@ SERVER_PORT: int = int(os.getenv("SERVER_PORT", str(DEFAULT_SERVER_PORT)))
 PROXY_API_KEY: str = os.getenv("PROXY_API_KEY", "my-super-secret-password-123")
 
 # ==================================================================================================
-# VPN/Proxy Settings for Kiro API Access
+# VPN/Proxy Settings for Trae API Access
 # ==================================================================================================
 
-# VPN/Proxy URL for accessing Kiro API through a proxy server.
+# VPN/Proxy URL for accessing Trae API through a proxy server.
 # Leave empty to connect directly (default).
 #
 # Use cases:
@@ -142,22 +142,22 @@ REGION: str = os.getenv("KIRO_REGION", "us-east-1")
 # Path to credentials file (optional, alternative to .env)
 # Read directly from .env to avoid escape sequence issues on Windows
 # (e.g., \a in path D:\Projects\adolf is interpreted as bell character)
-_raw_creds_file = _get_raw_env_value("KIRO_CREDS_FILE") or os.getenv("KIRO_CREDS_FILE", "")
+_raw_creds_file = _get_raw_env_value("TRAE_CREDS_FILE") or os.getenv("TRAE_CREDS_FILE", "")
 # Normalize path for cross-platform compatibility
-KIRO_CREDS_FILE: str = str(Path(_raw_creds_file)) if _raw_creds_file else ""
+TRAE_CREDS_FILE: str = str(Path(_raw_creds_file)) if _raw_creds_file else ""
 
 # Path to kiro-cli SQLite database (optional, for AWS SSO OIDC authentication)
 # Default location: ~/.local/share/kiro-cli/data.sqlite3 (Linux/macOS)
 # or ~/.local/share/amazon-q/data.sqlite3 (amazon-q-developer-cli)
-_raw_cli_db_file = _get_raw_env_value("KIRO_CLI_DB_FILE") or os.getenv("KIRO_CLI_DB_FILE", "")
-KIRO_CLI_DB_FILE: str = str(Path(_raw_cli_db_file)) if _raw_cli_db_file else ""
+_raw_cli_db_file = _get_raw_env_value("TRAE_CLI_DB_FILE") or os.getenv("TRAE_CLI_DB_FILE", "")
+TRAE_CLI_DB_FILE: str = str(Path(_raw_cli_db_file)) if _raw_cli_db_file else ""
 
 # ==================================================================================================
-# Kiro API URL Templates
+# Trae API URL Templates
 # ==================================================================================================
 
-# URL for token refresh (Kiro Desktop Auth)
-KIRO_REFRESH_URL_TEMPLATE: str = "https://prod.{region}.auth.desktop.kiro.dev/refreshToken"
+# URL for token refresh (Trae Desktop Auth)
+TRAE_REFRESH_URL_TEMPLATE: str = "https://prod.{region}.auth.desktop.kiro.dev/refreshToken"
 
 # URL for token refresh (AWS SSO OIDC - used by kiro-cli)
 AWS_SSO_OIDC_URL_TEMPLATE: str = "https://oidc.{region}.amazonaws.com/token"
@@ -166,10 +166,10 @@ AWS_SSO_OIDC_URL_TEMPLATE: str = "https://oidc.{region}.amazonaws.com/token"
 # Universal endpoint for all regions (us-east-1, eu-central-1, etc.)
 # See: https://docs.aws.amazon.com/amazonq/latest/qdeveloper-ug/security-data-perimeter.html
 # Fixed in issue #58 - codewhisperer.{region}.amazonaws.com doesn't exist for non-us-east-1 regions
-KIRO_API_HOST_TEMPLATE: str = "https://q.{region}.amazonaws.com"
+TRAE_API_HOST_TEMPLATE: str = "https://q.{region}.amazonaws.com"
 
 # Host for Q API (ListAvailableModels)
-KIRO_Q_HOST_TEMPLATE: str = "https://q.{region}.amazonaws.com"
+TRAE_Q_HOST_TEMPLATE: str = "https://q.{region}.amazonaws.com"
 
 # ==================================================================================================
 # Token Settings
@@ -214,7 +214,7 @@ HIDDEN_FROM_LIST: List[str] = []
 # Trae builtin model list - these are the models available in Trae CN IDE.
 # Source: https://docs.trae.cn/ide/models
 #
-# NOTE: Trae does not provide a model list API like Kiro. Models are builtin to the IDE.
+# NOTE: Trae does not provide a model list API (models are builtin to the IDE). Models are builtin to the IDE.
 # This list should be updated when Trae releases new models.
 #
 # IMPORTANT: This is used as the primary model list (not a fallback).
@@ -256,10 +256,10 @@ MODEL_CACHE_TTL: int = 3600
 DEFAULT_MAX_INPUT_TOKENS: int = 200000
 
 # ==================================================================================================
-# Tool Description Handling (Kiro API Limitations)
+# Tool Description Handling (Trae API Limitations)
 # ==================================================================================================
 
-# Kiro API returns 400 "Improperly formed request" error when tool descriptions
+# Trae API returns 400 "Improperly formed request" error when tool descriptions
 # in toolSpecification.description are too long.
 #
 # Solution: Tool Documentation Reference Pattern
@@ -273,7 +273,7 @@ DEFAULT_MAX_INPUT_TOKENS: int = 200000
 
 # Maximum length of tool description in characters.
 # Descriptions longer than this limit will be moved to system prompt.
-# Set to 0 to disable (not recommended - will cause Kiro API errors).
+# Set to 0 to disable (not recommended - will cause Trae API errors).
 TOOL_DESCRIPTION_MAX_LENGTH: int = int(os.getenv("TOOL_DESCRIPTION_MAX_LENGTH", "10000"))
 
 # ==================================================================================================
@@ -284,7 +284,7 @@ TOOL_DESCRIPTION_MAX_LENGTH: int = int(os.getenv("TOOL_DESCRIPTION_MAX_LENGTH", 
 # When enabled, gateway will inject synthetic messages ONLY when truncation is detected:
 # - For tool calls: synthetic tool_result with error message
 # - For content: synthetic user message notifying about truncation
-# This helps the model understand and adapt to Kiro API limitations
+# This helps the model understand and adapt to Trae API limitations
 # Default: true (enabled)
 TRUNCATION_RECOVERY: bool = os.getenv("TRUNCATION_RECOVERY", "true").lower() in ("true", "1", "yes")
 
@@ -426,12 +426,12 @@ FAKE_REASONING_INITIAL_BUFFER_SIZE: int = int(os.getenv("FAKE_REASONING_INITIAL_
 
 APP_VERSION: str = "1.0"
 APP_TITLE: str = "Trae Gateway"
-APP_DESCRIPTION: str = "Proxy gateway for Trae API. OpenAI and Anthropic compatible. Based on Kiro Gateway by @jwadow"
+APP_DESCRIPTION: str = "Proxy gateway for Trae API. OpenAI and Anthropic compatible. Based on Trae Gateway by @jwadow"
 
 
-def get_kiro_refresh_url(region: str) -> str:
-    """Return Kiro Desktop Auth token refresh URL for the specified region."""
-    return KIRO_REFRESH_URL_TEMPLATE.format(region=region)
+def get_trae_refresh_url(region: str) -> str:
+    """Return Trae Desktop Auth token refresh URL for the specified region."""
+    return TRAE_REFRESH_URL_TEMPLATE.format(region=region)
 
 
 def get_aws_sso_oidc_url(region: str) -> str:
@@ -439,12 +439,12 @@ def get_aws_sso_oidc_url(region: str) -> str:
     return AWS_SSO_OIDC_URL_TEMPLATE.format(region=region)
 
 
-def get_kiro_api_host(region: str) -> str:
+def get_trae_api_host(region: str) -> str:
     """Return API host for the specified region."""
-    return KIRO_API_HOST_TEMPLATE.format(region=region)
+    return TRAE_API_HOST_TEMPLATE.format(region=region)
 
 
-def get_kiro_q_host(region: str) -> str:
+def get_trae_q_host(region: str) -> str:
     """Return Q API host for the specified region."""
-    return KIRO_Q_HOST_TEMPLATE.format(region=region)
+    return TRAE_Q_HOST_TEMPLATE.format(region=region)
 

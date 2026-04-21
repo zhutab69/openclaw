@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
-# Kiro Gateway
-# https://github.com/jwadow/kiro-gateway
+# Trae Gateway
+# (Trae Gateway - based on Kiro Gateway)
 # Copyright (C) 2025 Jwadow
 #
 # This program is free software: you can redistribute it and/or modify
@@ -18,7 +18,7 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 """
-HTTP client for Kiro API with retry logic support.
+HTTP client for Trae API with retry logic support.
 
 Handles:
 - 403: automatic token refresh and retry
@@ -37,15 +37,15 @@ import httpx
 from fastapi import HTTPException
 from loguru import logger
 
-from kiro.config import MAX_RETRIES, BASE_RETRY_DELAY, FIRST_TOKEN_MAX_RETRIES, STREAMING_READ_TIMEOUT
-from kiro.auth import KiroAuthManager
-from kiro.utils import get_kiro_headers
-from kiro.network_errors import classify_network_error, get_short_error_message, NetworkErrorInfo
+from trae.config import MAX_RETRIES, BASE_RETRY_DELAY, FIRST_TOKEN_MAX_RETRIES, STREAMING_READ_TIMEOUT
+from trae.auth import TraeAuthManager
+from trae.utils import get_trae_headers
+from trae.network_errors import classify_network_error, get_short_error_message, NetworkErrorInfo
 
 
-class KiroHttpClient:
+class TraeHttpClient:
     """
-    HTTP client for Kiro API with retry logic support.
+    HTTP client for Trae API with retry logic support.
     
     Automatically handles errors and retries requests:
     - 403: refreshes token and retries
@@ -66,18 +66,18 @@ class KiroHttpClient:
     
     Example:
         >>> # Per-request client (legacy mode)
-        >>> client = KiroHttpClient(auth_manager)
+        >>> client = TraeHttpClient(auth_manager)
         >>> response = await client.request_with_retry(...)
         
         >>> # Shared client (recommended)
         >>> shared = httpx.AsyncClient(limits=httpx.Limits(...))
-        >>> client = KiroHttpClient(auth_manager, shared_client=shared)
+        >>> client = TraeHttpClient(auth_manager, shared_client=shared)
         >>> response = await client.request_with_retry(...)
     """
     
     def __init__(
         self,
-        auth_manager: KiroAuthManager,
+        auth_manager: TraeAuthManager,
         shared_client: Optional[httpx.AsyncClient] = None
     ):
         """
@@ -224,12 +224,12 @@ class KiroHttpClient:
                         headers["Connection"] = "close"
                     logger.debug("Sending request to Trae API...")
                 else:
-                    # Use Kiro API headers
-                    headers = get_kiro_headers(self.auth_manager, token)
+                    # Use Trae API headers
+                    headers = get_trae_headers(self.auth_manager, token)
                     if stream:
                         # Prevent CLOSE_WAIT connection leak (issue #38)
                         headers["Connection"] = "close"
-                    logger.debug("Sending request to Kiro API...")
+                    logger.debug("Sending request to Trae API...")
                 
                 if stream:
                     req = client.build_request(method, url, json=json_data, headers=headers)
@@ -333,7 +333,7 @@ class KiroHttpClient:
                     detail=f"Request failed after {max_retries} attempts. Unknown error."
                 )
     
-    async def __aenter__(self) -> "KiroHttpClient":
+    async def __aenter__(self) -> "TraeHttpClient":
         """Async context manager support."""
         return self
     

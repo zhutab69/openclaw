@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
-# Kiro Gateway
-# https://github.com/jwadow/kiro-gateway
+# Trae Gateway
+# (Trae Gateway - based on Kiro Gateway)
 # Copyright (C) 2025 Jwadow
 #
 # This program is free software: you can redistribute it and/or modify
@@ -18,7 +18,7 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 """
-Converters for transforming Anthropic Messages API format to Kiro format.
+Converters for transforming Anthropic Messages API format to Trae format.
 
 This module is an adapter layer that converts Anthropic-specific formats
 to the unified format used by converters_core.py.
@@ -28,17 +28,17 @@ from typing import Any, Dict, List, Optional
 
 from loguru import logger
 
-from kiro.config import HIDDEN_MODELS
-from kiro.model_resolver import get_model_id_for_kiro
-from kiro.models_anthropic import (
+from trae.config import HIDDEN_MODELS
+from trae.model_resolver import get_model_id_for_trae
+from trae.models_anthropic import (
     AnthropicMessagesRequest,
     AnthropicMessage,
     AnthropicTool,
 )
-from kiro.converters_core import (
+from trae.converters_core import (
     UnifiedMessage,
     UnifiedTool,
-    build_kiro_payload,
+    build_trae_payload,
     extract_text_content,
     extract_images_from_content,
 )
@@ -83,7 +83,7 @@ def extract_system_prompt(system: Any) -> str:
     2. List of content blocks: [{"type": "text", "text": "...", "cache_control": {...}}]
 
     The second format is used for prompt caching with cache_control.
-    We extract only the text, ignoring cache_control (not supported by Kiro).
+    We extract only the text, ignoring cache_control (not supported by Trae).
 
     Args:
         system: System prompt in string or list format
@@ -369,13 +369,13 @@ def convert_anthropic_tools(
     return unified_tools if unified_tools else None
 
 
-def anthropic_to_kiro(
+def anthropic_to_trae(
     request: AnthropicMessagesRequest, conversation_id: str, profile_arn: str
 ) -> dict:
     """
-    Converts Anthropic Messages API request to Kiro API payload.
+    Converts Anthropic Messages API request to Trae API payload.
 
-    This is the main entry point for Anthropic → Kiro conversion.
+    This is the main entry point for Anthropic → Trae conversion.
 
     Key differences from OpenAI:
     - System prompt is a separate field (not in messages)
@@ -388,7 +388,7 @@ def anthropic_to_kiro(
         profile_arn: AWS CodeWhisperer profile ARN
 
     Returns:
-        Payload dictionary for POST request to Kiro API
+        Payload dictionary for POST request to Trae API
 
     Raises:
         ValueError: If there are no messages to send
@@ -403,9 +403,9 @@ def anthropic_to_kiro(
     # It can be a string or list of content blocks (for prompt caching)
     system_prompt = extract_system_prompt(request.system)
 
-    # Get model ID for Kiro API (normalizes + resolves hidden models)
-    # Pass-through principle: we normalize and send to Kiro, Kiro decides if valid
-    model_id = get_model_id_for_kiro(request.model, HIDDEN_MODELS)
+    # Get model ID for Trae API (normalizes + resolves hidden models)
+    # Pass-through principle: we normalize and send to Trae, Trae decides if valid
+    model_id = get_model_id_for_trae(request.model, HIDDEN_MODELS)
 
     logger.debug(
         f"Converting Anthropic request: model={request.model} -> {model_id}, "
@@ -414,7 +414,7 @@ def anthropic_to_kiro(
     )
 
     # Use core function to build payload
-    result = build_kiro_payload(
+    result = build_trae_payload(
         messages=unified_messages,
         system_prompt=system_prompt,
         model_id=model_id,

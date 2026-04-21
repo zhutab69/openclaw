@@ -226,19 +226,19 @@ class TraeAuthManager:
     
     @property
     def auth_type(self):
-        """认证类型（用于兼容 Kiro AuthManager）"""
+        """认证类型（用于兼容 TraeAuthManager 接口）"""
         return "TRAE"
     
     @property
     def api_host(self):
-        """API 主机（用于兼容 Kiro AuthManager）"""
+        """API 主机（用于兼容 TraeAuthManager 接口）"""
         # Trae AI Agent 主服务
         # 根据 Trae CN 架构分析，AI 服务使用此域名
         return "https://trae-api-cn.mchost.guru"
     
     @property
     def q_host(self):
-        """Q API 主机（用于兼容 Kiro AuthManager）"""
+        """Q API 主机（用于兼容 TraeAuthManager 接口）"""
         # Trae 主 API 网关（用于获取模型列表等）
         return "https://api.trae.com.cn"
     
@@ -254,10 +254,10 @@ class TraeAuthManager:
     
     @property
     def fingerprint(self):
-        """设备指纹（用于兼容 Kiro AuthManager）"""
+        """设备指纹（用于兼容 TraeAuthManager 接口）"""
         # Trae 可能不需要，返回固定值
         return "trae-gateway-fingerprint"
 
 
 # 用于兼容性的别名
-KiroAuthManager = TraeAuthManager
+TraeAuthManager = TraeAuthManager

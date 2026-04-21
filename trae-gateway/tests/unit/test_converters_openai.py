@@ -12,13 +12,13 @@ Tests for OpenAI-specific conversion logic:
 import pytest
 from unittest.mock import patch
 
-from kiro.converters_openai import (
-    build_kiro_payload,
+from trae.converters_openai import (
+    build_trae_payload,
     convert_openai_messages_to_unified,
     convert_openai_tools_to_unified,
     _extract_images_from_tool_message,
 )
-from kiro.models_openai import ChatMessage, ChatCompletionRequest, Tool, ToolFunction
+from trae.models_openai import ChatMessage, ChatCompletionRequest, Tool, ToolFunction
 
 
 # ==================================================================================================
@@ -662,11 +662,11 @@ class TestConvertOpenAIToolsToUnified:
 
 
 # ==================================================================================================
-# Tests for build_kiro_payload
+# Tests for build_trae_payload
 # ==================================================================================================
 
 class TestBuildKiroPayload:
-    """Tests for build_kiro_payload function."""
+    """Tests for build_trae_payload function."""
     
     def test_builds_simple_payload(self):
         """
@@ -680,7 +680,7 @@ class TestBuildKiroPayload:
         )
         
         print("Action: Building payload...")
-        result = build_kiro_payload(request, "conv-123", "arn:aws:test")
+        result = build_trae_payload(request, "conv-123", "arn:aws:test")
         
         print(f"Result: {result}")
         assert "conversationState" in result
@@ -703,7 +703,7 @@ class TestBuildKiroPayload:
         )
         
         print("Action: Building payload...")
-        result = build_kiro_payload(request, "conv-123", "")
+        result = build_trae_payload(request, "conv-123", "")
         
         print(f"Result: {result}")
         current_content = result["conversationState"]["currentMessage"]["userInputMessage"]["content"]
@@ -726,7 +726,7 @@ class TestBuildKiroPayload:
         )
         
         print("Action: Building payload...")
-        result = build_kiro_payload(request, "conv-123", "")
+        result = build_trae_payload(request, "conv-123", "")
         
         print(f"Result: {result}")
         assert "history" in result["conversationState"]
@@ -747,7 +747,7 @@ class TestBuildKiroPayload:
         )
         
         print("Action: Building payload...")
-        result = build_kiro_payload(request, "conv-123", "")
+        result = build_trae_payload(request, "conv-123", "")
         
         print(f"Result: {result}")
         current_content = result["conversationState"]["currentMessage"]["userInputMessage"]["content"]
@@ -766,7 +766,7 @@ class TestBuildKiroPayload:
         
         print("Action: Attempting to build payload...")
         with pytest.raises(ValueError) as exc_info:
-            build_kiro_payload(request, "conv-123", "")
+            build_trae_payload(request, "conv-123", "")
         
         print(f"Exception: {exc_info.value}")
         assert "No messages to send" in str(exc_info.value)
@@ -783,9 +783,9 @@ class TestBuildKiroPayload:
         )
 
         print("Action: Building payload (with fake reasoning and truncation recovery disabled)...")
-        with patch('kiro.converters_core.FAKE_REASONING_ENABLED', False):
-            with patch('kiro.config.TRUNCATION_RECOVERY', False):
-                result = build_kiro_payload(request, "conv-123", "")
+        with patch('trae.converters_core.FAKE_REASONING_ENABLED', False):
+            with patch('trae.config.TRUNCATION_RECOVERY', False):
+                result = build_trae_payload(request, "conv-123", "")
 
         print(f"Result: {result}")
         current_content = result["conversationState"]["currentMessage"]["userInputMessage"]["content"]
@@ -798,7 +798,7 @@ class TestBuildKiroPayload:
         
         Note: The new Dynamic Model Resolution System normalizes model names
         (e.g., claude-sonnet-4-5 → claude-sonnet-4.5) instead of mapping to
-        internal IDs. Kiro API accepts the normalized format directly.
+        internal IDs. Trae API accepts the normalized format directly.
         """
         print("Setup: Request with external model ID...")
         request = ChatCompletionRequest(
@@ -807,7 +807,7 @@ class TestBuildKiroPayload:
         )
         
         print("Action: Building payload...")
-        result = build_kiro_payload(request, "conv-123", "")
+        result = build_trae_payload(request, "conv-123", "")
         
         print(f"Result: {result}")
         model_id = result["conversationState"]["currentMessage"]["userInputMessage"]["modelId"]
@@ -835,7 +835,7 @@ class TestBuildKiroPayload:
         )
         
         print("Action: Building payload...")
-        result = build_kiro_payload(request, "conv-123", "")
+        result = build_trae_payload(request, "conv-123", "")
         
         print(f"Result: {result}")
         context = result["conversationState"]["currentMessage"]["userInputMessage"]["userInputMessageContext"]
@@ -878,9 +878,9 @@ class TestBuildKiroPayload:
         )
         
         print("Action: Building payload with FAKE_REASONING_ENABLED=True...")
-        with patch('kiro.converters_core.FAKE_REASONING_ENABLED', True):
-            with patch('kiro.converters_core.FAKE_REASONING_MAX_TOKENS', 4000):
-                result = build_kiro_payload(request, "conv-123", "")
+        with patch('trae.converters_core.FAKE_REASONING_ENABLED', True):
+            with patch('trae.converters_core.FAKE_REASONING_MAX_TOKENS', 4000):
+                result = build_trae_payload(request, "conv-123", "")
         
         current_msg = result["conversationState"]["currentMessage"]["userInputMessage"]
         content = current_msg["content"]
@@ -905,9 +905,9 @@ class TestBuildKiroPayload:
         )
         
         print("Action: Building payload with FAKE_REASONING_ENABLED=True...")
-        with patch('kiro.converters_core.FAKE_REASONING_ENABLED', True):
-            with patch('kiro.converters_core.FAKE_REASONING_MAX_TOKENS', 4000):
-                result = build_kiro_payload(request, "conv-123", "")
+        with patch('trae.converters_core.FAKE_REASONING_ENABLED', True):
+            with patch('trae.converters_core.FAKE_REASONING_MAX_TOKENS', 4000):
+                result = build_trae_payload(request, "conv-123", "")
         
         current_msg = result["conversationState"]["currentMessage"]["userInputMessage"]
         content = current_msg["content"]
@@ -1028,7 +1028,7 @@ class TestToolDescriptionHandling:
         Purpose: Ensure empty description is replaced with "Tool: {name}".
         
         This is a critical test for a Cline bug where tool focus_chain had
-        empty description "", which caused a 400 error from Kiro API.
+        empty description "", which caused a 400 error from Trae API.
         """
         print("Setup: Tool with empty description...")
         request = ChatCompletionRequest(
@@ -1045,7 +1045,7 @@ class TestToolDescriptionHandling:
         )
         
         print("Action: Building payload...")
-        result = build_kiro_payload(request, "conv-123", "")
+        result = build_trae_payload(request, "conv-123", "")
         
         print(f"Result: {result}")
         print("Checking that description is replaced with placeholder...")
@@ -1073,7 +1073,7 @@ class TestToolDescriptionHandling:
         )
         
         print("Action: Building payload...")
-        result = build_kiro_payload(request, "conv-123", "")
+        result = build_trae_payload(request, "conv-123", "")
         
         print(f"Result: {result}")
         print("Checking that description is replaced with placeholder...")
@@ -1101,7 +1101,7 @@ class TestToolDescriptionHandling:
         )
         
         print("Action: Building payload...")
-        result = build_kiro_payload(request, "conv-123", "")
+        result = build_trae_payload(request, "conv-123", "")
         
         print(f"Result: {result}")
         print("Checking that description is replaced with placeholder...")
@@ -1129,7 +1129,7 @@ class TestToolDescriptionHandling:
         )
         
         print("Action: Building payload...")
-        result = build_kiro_payload(request, "conv-123", "")
+        result = build_trae_payload(request, "conv-123", "")
         
         print(f"Result: {result}")
         print("Checking that description is preserved...")
@@ -1162,7 +1162,7 @@ class TestToolDescriptionHandling:
         )
         
         print("Action: Building payload...")
-        result = build_kiro_payload(request, "conv-123", "")
+        result = build_trae_payload(request, "conv-123", "")
         
         print(f"Result: {result}")
         print("Checking that parameters are sanitized...")
@@ -1212,7 +1212,7 @@ class TestToolDescriptionHandling:
         )
         
         print("Action: Building payload...")
-        result = build_kiro_payload(request, "conv-123", "")
+        result = build_trae_payload(request, "conv-123", "")
         
         print(f"Result: {result}")
         print("Checking descriptions...")
@@ -1229,7 +1229,7 @@ class TestToolDescriptionHandling:
 
 class TestBuildKiroPayloadToolCallsIntegration:
     """
-    Integration tests for build_kiro_payload with tool_calls.
+    Integration tests for build_trae_payload with tool_calls.
     Tests full flow from OpenAI format to Kiro format.
     """
     
@@ -1284,7 +1284,7 @@ class TestBuildKiroPayloadToolCallsIntegration:
         )
         
         print("Action: Building Kiro payload...")
-        result = build_kiro_payload(request, "conv-123", "arn:aws:test")
+        result = build_trae_payload(request, "conv-123", "arn:aws:test")
         
         print(f"Result: {result}")
         
@@ -1350,8 +1350,8 @@ class TestBuildKiroPayloadToolCallsIntegration:
         )
         
         print("Action: Building payload...")
-        with patch('kiro.converters_core.TOOL_DESCRIPTION_MAX_LENGTH', 10000):
-            result = build_kiro_payload(request, "conv-123", "")
+        with patch('trae.converters_core.TOOL_DESCRIPTION_MAX_LENGTH', 10000):
+            result = build_trae_payload(request, "conv-123", "")
         
         print("Checking that system prompt contains tool documentation...")
         current_content = result["conversationState"]["currentMessage"]["userInputMessage"]["content"]

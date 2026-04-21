@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
-# Kiro Gateway
-# https://github.com/jwadow/kiro-gateway
+# Trae Gateway
+# (Trae Gateway - based on Kiro Gateway)
 # Copyright (C) 2025 Jwadow
 #
 # This program is free software: you can redistribute it and/or modify
@@ -34,27 +34,27 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import APIKeyHeader
 from loguru import logger
 
-from kiro.config import PROXY_API_KEY
-from kiro.models_anthropic import (
+from trae.config import PROXY_API_KEY
+from trae.models_anthropic import (
     AnthropicMessagesRequest,
     AnthropicMessagesResponse,
     AnthropicErrorResponse,
     AnthropicErrorDetail,
 )
-from kiro.auth import KiroAuthManager, AuthType
-from kiro.cache import ModelInfoCache
-from kiro.converters_anthropic import anthropic_to_kiro
-from kiro.streaming_anthropic import (
-    stream_kiro_to_anthropic,
+from trae.auth import TraeAuthManager, AuthType
+from trae.cache import ModelInfoCache
+from trae.converters_anthropic import anthropic_to_trae
+from trae.streaming_anthropic import (
+    stream_trae_to_anthropic,
     collect_anthropic_response,
 )
-from kiro.http_client import KiroHttpClient
-from kiro.utils import generate_conversation_id
-from kiro.tokenizer import count_tools_tokens
+from trae.http_client import TraeHttpClient
+from trae.utils import generate_conversation_id
+from trae.tokenizer import count_tools_tokens
 
 # Import debug_logger
 try:
-    from kiro.debug_logger import debug_logger
+    from trae.debug_logger import debug_logger
 except ImportError:
     debug_logger = None
 
@@ -122,7 +122,7 @@ async def messages(
     Anthropic Messages API endpoint.
     
     Compatible with Anthropic's /v1/messages endpoint.
-    Accepts requests in Anthropic format and translates them to Kiro API.
+    Accepts requests in Anthropic format and translates them to Trae API.
     
     Required headers:
     - x-api-key: Your API key (or Authorization: Bearer)
@@ -146,16 +146,16 @@ async def messages(
     if anthropic_version:
         logger.debug(f"Anthropic-Version header: {anthropic_version}")
     
-    auth_manager: KiroAuthManager = request.app.state.auth_manager
+    auth_manager: TraeAuthManager = request.app.state.auth_manager
     model_cache: ModelInfoCache = request.app.state.model_cache
     
     # Note: prepare_new_request() and log_request_body() are now called by DebugLoggerMiddleware
     # This ensures debug logging works even for requests that fail Pydantic validation (422 errors)
     
     # Check for truncation recovery opportunities
-    from kiro.truncation_state import get_tool_truncation, get_content_truncation
-    from kiro.truncation_recovery import generate_truncation_tool_result, generate_truncation_user_message
-    from kiro.models_anthropic import AnthropicMessage
+    from trae.truncation_state import get_tool_truncation, get_content_truncation
+    from trae.truncation_recovery import generate_truncation_tool_result, generate_truncation_user_message
+    from trae.models_anthropic import AnthropicMessage
     
     modified_messages = []
     tool_results_modified = 0
@@ -247,17 +247,17 @@ async def messages(
         request_data.messages = modified_messages
         logger.info(f"Truncation recovery: modified {tool_results_modified} tool_result(s), added {content_notices_added} content notice(s)")
     
-    # Generate conversation ID for Kiro API (random UUID, not used for tracking)
+    # Generate conversation ID for Trae API (random UUID, not used for tracking)
     conversation_id = generate_conversation_id()
     
-    # Build payload for Kiro
-    # profileArn is only needed for Kiro Desktop auth
+    # Build payload for Trae
+    # profileArn is only needed for Trae Desktop auth
     profile_arn_for_payload = ""
     if auth_manager.auth_type == AuthType.KIRO_DESKTOP and auth_manager.profile_arn:
         profile_arn_for_payload = auth_manager.profile_arn
     
     try:
-        kiro_payload = anthropic_to_kiro(
+        trae_payload = anthropic_to_trae(
             request_data,
             conversation_id,
             profile_arn_for_payload
@@ -275,28 +275,28 @@ async def messages(
             }
         )
     
-    # Log Kiro payload
+    # Log Trae payload
     try:
-        kiro_request_body = json.dumps(kiro_payload, ensure_ascii=False, indent=2).encode('utf-8')
+        trae_request_body = json.dumps(trae_payload, ensure_ascii=False, indent=2).encode('utf-8')
         if debug_logger:
-            debug_logger.log_kiro_request_body(kiro_request_body)
+            debug_logger.log_trae_request_body(trae_request_body)
     except Exception as e:
-        logger.warning(f"Failed to log Kiro request: {e}")
+        logger.warning(f"Failed to log Trae request: {e}")
     
     # Create HTTP client with retry logic
     # For streaming: use per-request client to avoid CLOSE_WAIT leak on VPN disconnect (issue #54)
     # For non-streaming: use shared client for connection pooling
     url = f"{auth_manager.api_host}/generateAssistantResponse"
-    logger.debug(f"Kiro API URL: {url}")
+    logger.debug(f"Trae API URL: {url}")
     
     if request_data.stream:
         # Streaming mode: per-request client prevents orphaned connections
         # when network interface changes (VPN disconnect/reconnect)
-        http_client = KiroHttpClient(auth_manager, shared_client=None)
+        http_client = TraeHttpClient(auth_manager, shared_client=None)
     else:
         # Non-streaming mode: shared client for efficient connection reuse
         shared_client = request.app.state.http_client
-        http_client = KiroHttpClient(auth_manager, shared_client=shared_client)
+        http_client = TraeHttpClient(auth_manager, shared_client=shared_client)
     
     # Prepare data for token counting
     # Convert Pydantic models to dicts for tokenizer
@@ -304,13 +304,13 @@ async def messages(
     tools_for_tokenizer = [tool.model_dump() for tool in request_data.tools] if request_data.tools else None
     
     try:
-        # Make request to Kiro API (for both streaming and non-streaming modes)
-        # Important: we wait for Kiro response BEFORE returning StreamingResponse,
-        # so that we can return proper HTTP error codes if Kiro fails
+        # Make request to Trae API (for both streaming and non-streaming modes)
+        # Important: we wait for Trae response BEFORE returning StreamingResponse,
+        # so that we can return proper HTTP error codes if Trae fails
         response = await http_client.request_with_retry(
             "POST",
             url,
-            kiro_payload,
+            trae_payload,
             stream=True
         )
         
@@ -323,16 +323,16 @@ async def messages(
             await http_client.close()
             error_text = error_content.decode('utf-8', errors='replace')
             
-            # Try to parse JSON response from Kiro to extract error message
+            # Try to parse JSON response from Trae to extract error message
             error_message = error_text
             try:
                 error_json = json.loads(error_text)
-                # Enhance Kiro API errors with user-friendly messages
-                from kiro.kiro_errors import enhance_kiro_error
-                error_info = enhance_kiro_error(error_json)
+                # Enhance Trae API errors with user-friendly messages
+                from trae.trae_errors import enhance_trae_error
+                error_info = enhance_trae_error(error_json)
                 error_message = error_info.user_message
                 # Log original error for debugging
-                logger.debug(f"Original Kiro error: {error_info.original_message} (reason: {error_info.reason})")
+                logger.debug(f"Original Trae error: {error_info.original_message} (reason: {error_info.reason})")
             except (json.JSONDecodeError, KeyError):
                 pass
             
@@ -358,12 +358,12 @@ async def messages(
             )
         
         if request_data.stream:
-            # Streaming mode - Kiro already returned 200, now stream the response
+            # Streaming mode - Trae already returned 200, now stream the response
             async def stream_wrapper():
                 streaming_error = None
                 client_disconnected = False
                 try:
-                    async for chunk in stream_kiro_to_anthropic(
+                    async for chunk in stream_trae_to_anthropic(
                         response,
                         request_data.model,
                         model_cache,

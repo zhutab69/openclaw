@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
-# Kiro Gateway
-# https://github.com/jwadow/kiro-gateway
+# Trae Gateway
+# (Trae Gateway - based on Kiro Gateway)
 # Copyright (C) 2025 Jwadow
 #
 # This program is free software: you can redistribute it and/or modify
@@ -18,16 +18,16 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 """
-Core converters for transforming API formats to Kiro format.
+Core converters for transforming API formats to Trae format.
 
 This module contains shared logic used by both OpenAI and Anthropic converters:
 - Text content extraction from various formats
 - Message merging and processing
-- Kiro payload building
+- Trae payload building
 - Tool processing and sanitization
 
 The core layer provides a unified interface that API-specific adapters use
-to convert their formats to Kiro API format.
+to convert their formats to Trae API format.
 """
 
 import json
@@ -36,7 +36,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from loguru import logger
 
-from kiro.config import (
+from trae.config import (
     TOOL_DESCRIPTION_MAX_LENGTH,
     FAKE_REASONING_ENABLED,
     FAKE_REASONING_MAX_TOKENS,
@@ -53,7 +53,7 @@ class UnifiedMessage:
     Unified message format used internally by converters.
     
     This format is API-agnostic and can be created from both OpenAI and Anthropic formats.
-    Serves as the canonical representation for all message data before conversion to Kiro API.
+    Serves as the canonical representation for all message data before conversion to Trae API.
     
     Attributes:
         role: Message role (user, assistant, system)
@@ -86,12 +86,12 @@ class UnifiedTool:
 
 
 @dataclass
-class KiroPayloadResult:
+class TraePayloadResult:
     """
-    Result of building Kiro payload.
+    Result of building Trae payload.
     
     Attributes:
-        payload: The complete Kiro API payload
+        payload: The complete Trae API payload
         tool_documentation: Documentation for tools with long descriptions (to add to system prompt)
     """
     payload: Dict[str, Any]
@@ -216,8 +216,8 @@ def extract_images_from_content(content: Any) -> List[Dict[str, Any]]:
                 except (ValueError, IndexError) as e:
                     logger.warning(f"Failed to parse image data URL: {e}")
             elif url.startswith("http"):
-                # URL-based images require fetching - not supported by Kiro API directly
-                logger.warning(f"URL-based images are not supported by Kiro API, skipping: {url[:80]}...")
+                # URL-based images require fetching - not supported by Trae API directly
+                logger.warning(f"URL-based images are not supported by Trae API, skipping: {url[:80]}...")
         
         # Anthropic format: {"type": "image", "source": {"type": "base64", "media_type": "...", "data": "..."}}
         elif item_type == "image":
@@ -241,7 +241,7 @@ def extract_images_from_content(content: Any) -> List[Dict[str, Any]]:
                 elif source_type == "url":
                     # URL-based images in Anthropic format
                     url = source.get("url", "")
-                    logger.warning(f"URL-based images are not supported by Kiro API, skipping: {url[:80]}...")
+                    logger.warning(f"URL-based images are not supported by Trae API, skipping: {url[:80]}...")
             
             # Handle Pydantic model objects (ImageContentBlock.source)
             elif hasattr(source, "type"):
@@ -256,7 +256,7 @@ def extract_images_from_content(content: Any) -> List[Dict[str, Any]]:
                         })
                 elif source.type == "url":
                     url = getattr(source, "url", "")
-                    logger.warning(f"URL-based images are not supported by Kiro API, skipping: {url[:80]}...")
+                    logger.warning(f"URL-based images are not supported by Trae API, skipping: {url[:80]}...")
     
     if images:
         logger.debug(f"Extracted {len(images)} image(s) from content")
@@ -309,7 +309,7 @@ def get_truncation_recovery_system_addition() -> str:
     Returns:
         System prompt addition text (empty string if truncation recovery is disabled)
     """
-    from kiro.config import TRUNCATION_RECOVERY
+    from trae.config import TRUNCATION_RECOVERY
     
     if not TRUNCATION_RECOVERY:
         return ""
@@ -372,9 +372,9 @@ def inject_thinking_tags(content: str) -> str:
 
 def sanitize_json_schema(schema: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     """
-    Sanitizes JSON Schema from fields that Kiro API doesn't accept.
+    Sanitizes JSON Schema from fields that Trae API doesn't accept.
     
-    Kiro API returns 400 "Improperly formed request" error if:
+    Trae API returns 400 "Improperly formed request" error if:
     - required is an empty array []
     - additionalProperties is present in schema
     
@@ -396,7 +396,7 @@ def sanitize_json_schema(schema: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         if key == "required" and isinstance(value, list) and len(value) == 0:
             continue
         
-        # Skip additionalProperties - Kiro API doesn't support it
+        # Skip additionalProperties - Trae API doesn't support it
         if key == "additionalProperties":
             continue
         
@@ -430,7 +430,7 @@ def process_tools_with_long_descriptions(
     """
     Processes tools with long descriptions.
     
-    Kiro API has a limit on description length in toolSpecification.
+    Trae API has a limit on description length in toolSpecification.
     If description exceeds the limit, full description is moved to system prompt,
     and a reference to documentation remains in the tool.
     
@@ -493,7 +493,7 @@ def process_tools_with_long_descriptions(
 
 def validate_tool_names(tools: Optional[List[UnifiedTool]]) -> None:
     """
-    Validates tool names against Kiro API 64-character limit.
+    Validates tool names against Trae API 64-character limit.
     
     Logs WARNING for each problematic tool and raises ValueError
     with complete list of violations.
@@ -526,38 +526,38 @@ def validate_tool_names(tools: Optional[List[UnifiedTool]]) -> None:
         ])
         
         raise ValueError(
-            f"Tool name(s) exceed Kiro API limit of 64 characters:\n"
+            f"Tool name(s) exceed Trae API limit of 64 characters:\n"
             f"{tool_list}\n\n"
             f"Solution: Use shorter tool names (max 64 characters).\n"
             f"Example: 'get_user_data' instead of 'get_authenticated_user_profile_data_with_extended_information_about_it'"
         )
 
 
-def convert_tools_to_kiro_format(tools: Optional[List[UnifiedTool]]) -> List[Dict[str, Any]]:
+def convert_tools_to_trae_format(tools: Optional[List[UnifiedTool]]) -> List[Dict[str, Any]]:
     """
-    Converts unified tools to Kiro API format.
+    Converts unified tools to Trae API format.
     
     Args:
         tools: List of tools in unified format
     
     Returns:
-        List of tools in Kiro toolSpecification format
+        List of tools in Trae toolSpecification format
     """
     if not tools:
         return []
     
-    kiro_tools = []
+    trae_tools = []
     for tool in tools:
-        # Sanitize parameters from fields that Kiro API doesn't accept
+        # Sanitize parameters from fields that Trae API doesn't accept
         sanitized_params = sanitize_json_schema(tool.input_schema)
         
-        # Kiro API requires non-empty description
+        # Trae API requires non-empty description
         description = tool.description
         if not description or not description.strip():
             description = f"Tool: {tool.name}"
             logger.debug(f"Tool '{tool.name}' has empty description, using placeholder")
         
-        kiro_tools.append({
+        trae_tools.append({
             "toolSpecification": {
                 "name": tool.name,
                 "description": description,
@@ -565,22 +565,22 @@ def convert_tools_to_kiro_format(tools: Optional[List[UnifiedTool]]) -> List[Dic
             }
         })
     
-    return kiro_tools
+    return trae_tools
 
 
 # ==================================================================================================
-# Image Conversion to Kiro Format
+# Image Conversion to Trae Format
 # ==================================================================================================
 
-def convert_images_to_kiro_format(images: Optional[List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
+def convert_images_to_trae_format(images: Optional[List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
     """
-    Converts unified images to Kiro API format.
+    Converts unified images to Trae API format.
     
     Unified format: [{"media_type": "image/jpeg", "data": "base64..."}]
-    Kiro format: [{"format": "jpeg", "source": {"bytes": "base64..."}}]
+    Trae format: [{"format": "jpeg", "source": {"bytes": "base64..."}}]
     
     IMPORTANT: Images must be placed directly in userInputMessage.images,
-    NOT in userInputMessageContext.images. This matches the native Kiro IDE format.
+    NOT in userInputMessageContext.images. This matches the native Trae IDE format.
     
     Also handles the case where data contains a full data URL (data:image/jpeg;base64,...)
     by stripping the prefix and extracting pure base64.
@@ -589,16 +589,16 @@ def convert_images_to_kiro_format(images: Optional[List[Dict[str, Any]]]) -> Lis
         images: List of images in unified format
     
     Returns:
-        List of images in Kiro format, ready for userInputMessage.images
+        List of images in Trae format, ready for userInputMessage.images
     
     Example:
-        >>> convert_images_to_kiro_format([{"media_type": "image/png", "data": "abc123"}])
+        >>> convert_images_to_trae_format([{"media_type": "image/png", "data": "abc123"}])
         [{'format': 'png', 'source': {'bytes': 'abc123'}}]
     """
     if not images:
         return []
     
-    kiro_images = []
+    trae_images = []
     for img in images:
         media_type = img.get("media_type", "image/jpeg")
         data = img.get("data", "")
@@ -608,7 +608,7 @@ def convert_images_to_kiro_format(images: Optional[List[Dict[str, Any]]]) -> Lis
             continue
         
         # Strip data URL prefix if present (some clients send "data:image/jpeg;base64,..." in data field)
-        # Kiro API expects pure base64 without the prefix
+        # Trae API expects pure base64 without the prefix
         if data.startswith("data:"):
             try:
                 header, actual_data = data.split(",", 1)
@@ -625,37 +625,37 @@ def convert_images_to_kiro_format(images: Optional[List[Dict[str, Any]]]) -> Lis
         # Extract format from media_type: "image/jpeg" -> "jpeg"
         format_str = media_type.split("/")[-1] if "/" in media_type else media_type
         
-        kiro_images.append({
+        trae_images.append({
             "format": format_str,
             "source": {
                 "bytes": data
             }
         })
     
-    if kiro_images:
-        logger.debug(f"Converted {len(kiro_images)} image(s) to Kiro format")
+    if trae_images:
+        logger.debug(f"Converted {len(trae_images)} image(s) to Trae format")
     
-    return kiro_images
+    return trae_images
 
 
 # ==================================================================================================
 # Tool Results and Tool Uses Extraction
 # ==================================================================================================
 
-def convert_tool_results_to_kiro_format(tool_results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def convert_tool_results_to_trae_format(tool_results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
-    Converts unified tool results to Kiro API format.
+    Converts unified tool results to Trae API format.
     
     Unified format: {"type": "tool_result", "tool_use_id": "...", "content": "..."}
-    Kiro format: {"content": [{"text": "..."}], "status": "success", "toolUseId": "..."}
+    Trae format: {"content": [{"text": "..."}], "status": "success", "toolUseId": "..."}
     
     Args:
         tool_results: List of tool results in unified format
     
     Returns:
-        List of tool results in Kiro format
+        List of tool results in Trae format
     """
-    kiro_results = []
+    trae_results = []
     for tr in tool_results:
         content = tr.get("content", "")
         if isinstance(content, str):
@@ -663,17 +663,17 @@ def convert_tool_results_to_kiro_format(tool_results: List[Dict[str, Any]]) -> L
         else:
             content_text = extract_text_content(content)
         
-        # Ensure content is not empty - Kiro API requires non-empty content
+        # Ensure content is not empty - Trae API requires non-empty content
         if not content_text:
             content_text = "(empty result)"
         
-        kiro_results.append({
+        trae_results.append({
             "content": [{"text": content_text}],
             "status": "success",
             "toolUseId": tr.get("tool_use_id", "")
         })
     
-    return kiro_results
+    return trae_results
 
 
 def extract_tool_results_from_content(content: Any) -> List[Dict[str, Any]]:
@@ -681,13 +681,13 @@ def extract_tool_results_from_content(content: Any) -> List[Dict[str, Any]]:
     Extracts tool results from message content.
     
     Looks for content blocks with type="tool_result" and converts them
-    to Kiro API format.
+    to Trae API format.
     
     Args:
         content: Message content (can be a list of content blocks)
     
     Returns:
-        List of tool results in Kiro format
+        List of tool results in Trae format
     """
     tool_results = []
     
@@ -719,7 +719,7 @@ def extract_tool_uses_from_message(
         tool_calls: List of tool calls (OpenAI format)
     
     Returns:
-        List of tool uses in Kiro format
+        List of tool uses in Trae format
     """
     tool_uses = []
     
@@ -846,7 +846,7 @@ def strip_all_tool_content(messages: List[UnifiedMessage]) -> Tuple[List[Unified
     """
     Strips ALL tool-related content from messages, converting it to text representation.
     
-    This is used when no tools are defined in the request. Kiro API rejects
+    This is used when no tools are defined in the request. Trae API rejects
     requests that have toolResults but no tools defined.
     
     Instead of simply removing tool content, this function converts tool_calls
@@ -930,14 +930,14 @@ def ensure_assistant_before_tool_results(messages: List[UnifiedMessage]) -> Tupl
     """
     Ensures that messages with tool_results have a preceding assistant message with tool_calls.
     
-    Kiro API requires that when toolResults are present, there must be a preceding
+    Trae API requires that when toolResults are present, there must be a preceding
     assistantResponseMessage with toolUses. Some clients (like Cline/Roo/Cursor) may send
     truncated conversations where the assistant message is missing.
     
     Since we don't know the original tool name and arguments when the assistant message
     is missing, we cannot create a valid synthetic assistant message. Instead, we convert
     the tool_results to text representation and append to the message content, preserving
-    the context for the model while avoiding Kiro API rejection.
+    the context for the model while avoiding Trae API rejection.
     
     Args:
         messages: List of messages in unified format
@@ -965,7 +965,7 @@ def ensure_assistant_before_tool_results(messages: List[UnifiedMessage]) -> Tupl
             
             if not has_preceding_assistant:
                 # We cannot create a valid synthetic assistant message because we don't know
-                # the original tool name and arguments. Kiro API validates tool names.
+                # the original tool name and arguments. Trae API validates tool names.
                 # Convert tool_results to text to preserve context for the model.
                 logger.debug(
                     f"Converting {len(msg.tool_results)} orphaned tool_results to text "
@@ -1006,7 +1006,7 @@ def merge_adjacent_messages(messages: List[UnifiedMessage]) -> List[UnifiedMessa
     """
     Merges adjacent messages with the same role.
     
-    Kiro API does not accept multiple consecutive messages from the same role.
+    Trae API does not accept multiple consecutive messages from the same role.
     This function merges such messages into one.
     
     Args:
@@ -1090,7 +1090,7 @@ def ensure_first_message_is_user(messages: List[UnifiedMessage]) -> List[Unified
     """
     Ensures that the first message in the conversation is from user role.
     
-    Kiro API requires conversations to start with a user message. If the first
+    Trae API requires conversations to start with a user message. If the first
     message is from assistant (or any other non-user role), we prepend a minimal
     synthetic user message.
     
@@ -1121,7 +1121,7 @@ def ensure_first_message_is_user(messages: List[UnifiedMessage]) -> List[Unified
     if messages[0].role != "user":
         logger.debug(
             f"First message is '{messages[0].role}', prepending synthetic user message "
-            f"(Kiro API requires conversations to start with user)"
+            f"(Trae API requires conversations to start with user)"
         )
         
         # Create minimal synthetic user message (matches LiteLLM behavior)
@@ -1140,7 +1140,7 @@ def normalize_message_roles(messages: List[UnifiedMessage]) -> List[UnifiedMessa
     """
     Normalizes unknown message roles to 'user'.
     
-    Kiro API only supports 'user' and 'assistant' roles in history.
+    Trae API only supports 'user' and 'assistant' roles in history.
     Any other role (e.g., 'developer', 'system') is converted to 'user'
     to maintain compatibility.
     
@@ -1195,12 +1195,12 @@ def ensure_alternating_roles(messages: List[UnifiedMessage]) -> List[UnifiedMess
     """
     Ensures alternating user/assistant roles by inserting synthetic assistant messages.
     
-    Kiro API requires alternating userInputMessage and assistantResponseMessage.
+    Trae API requires alternating userInputMessage and assistantResponseMessage.
     When consecutive user messages are detected, synthetic assistant messages
     with "(empty)" placeholder are inserted between them to maintain alternation.
     
     This fixes multiple unknown roles (converted to user)
-    create consecutive userInputMessage entries that violate Kiro API requirements.
+    create consecutive userInputMessage entries that violate Trae API requirements.
     
     Args:
         messages: List of messages in unified format
@@ -1235,7 +1235,7 @@ def ensure_alternating_roles(messages: List[UnifiedMessage]) -> List[UnifiedMess
         if msg.role == "user" and prev_role == "user":
             synthetic_assistant = UnifiedMessage(
                 role="assistant",
-                content="(empty)"  # Consistent with build_kiro_history() placeholder
+                content="(empty)"  # Consistent with build_trae_history() placeholder
             )
             result.append(synthetic_assistant)
             synthetic_count += 1
@@ -1249,25 +1249,25 @@ def ensure_alternating_roles(messages: List[UnifiedMessage]) -> List[UnifiedMess
 
 
 # ==================================================================================================
-# Kiro History Building
+# Trae History Building
 # ==================================================================================================
 
-def build_kiro_history(messages: List[UnifiedMessage], model_id: str) -> List[Dict[str, Any]]:
+def build_trae_history(messages: List[UnifiedMessage], model_id: str) -> List[Dict[str, Any]]:
     """
-    Builds history array for Kiro API from unified messages.
+    Builds history array for Trae API from unified messages.
     
-    Kiro API expects alternating userInputMessage and assistantResponseMessage.
-    This function converts unified format to Kiro format.
+    Trae API expects alternating userInputMessage and assistantResponseMessage.
+    This function converts unified format to Trae format.
     
     All messages should have 'user' or 'assistant' roles at this point,
     as unknown roles are normalized earlier in the pipeline by normalize_message_roles().
     
     Args:
         messages: List of messages in unified format (with normalized roles)
-        model_id: Internal Kiro model ID
+        model_id: Internal Trae model ID
     
     Returns:
-        List of dictionaries for history field in Kiro API
+        List of dictionaries for history field in Trae API
     """
     history = []
     
@@ -1275,7 +1275,7 @@ def build_kiro_history(messages: List[UnifiedMessage], model_id: str) -> List[Di
         if msg.role == "user":
             content = extract_text_content(msg.content)
             
-            # Fallback for empty content - Kiro API requires non-empty content
+            # Fallback for empty content - Trae API requires non-empty content
             if not content:
                 content = "(empty)"
             
@@ -1287,23 +1287,23 @@ def build_kiro_history(messages: List[UnifiedMessage], model_id: str) -> List[Di
             
             # Process images - extract from message or content
             # IMPORTANT: images go directly into userInputMessage, NOT into userInputMessageContext
-            # This matches the native Kiro IDE format
+            # This matches the native Trae IDE format
             images = msg.images or extract_images_from_content(msg.content)
             if images:
-                kiro_images = convert_images_to_kiro_format(images)
-                if kiro_images:
-                    user_input["images"] = kiro_images
+                trae_images = convert_images_to_trae_format(images)
+                if trae_images:
+                    user_input["images"] = trae_images
             
             # Build userInputMessageContext for tools and toolResults only
             user_input_context: Dict[str, Any] = {}
             
-            # Process tool_results - convert to Kiro format if present
+            # Process tool_results - convert to Trae format if present
             if msg.tool_results:
-                kiro_tool_results = convert_tool_results_to_kiro_format(msg.tool_results)
-                if kiro_tool_results:
-                    user_input_context["toolResults"] = kiro_tool_results
+                trae_tool_results = convert_tool_results_to_trae_format(msg.tool_results)
+                if trae_tool_results:
+                    user_input_context["toolResults"] = trae_tool_results
             else:
-                # Try to extract from content (already in Kiro format)
+                # Try to extract from content (already in Trae format)
                 tool_results = extract_tool_results_from_content(msg.content)
                 if tool_results:
                     user_input_context["toolResults"] = tool_results
@@ -1317,7 +1317,7 @@ def build_kiro_history(messages: List[UnifiedMessage], model_id: str) -> List[Di
         elif msg.role == "assistant":
             content = extract_text_content(msg.content)
             
-            # Fallback for empty content - Kiro API requires non-empty content
+            # Fallback for empty content - Trae API requires non-empty content
             if not content:
                 content = "(empty)"
             
@@ -1337,7 +1337,7 @@ def build_kiro_history(messages: List[UnifiedMessage], model_id: str) -> List[Di
 # Main Payload Building
 # ==================================================================================================
 
-def build_kiro_payload(
+def build_trae_payload(
     messages: List[UnifiedMessage],
     system_prompt: str,
     model_id: str,
@@ -1345,24 +1345,24 @@ def build_kiro_payload(
     conversation_id: str,
     profile_arn: str,
     inject_thinking: bool = True
-) -> KiroPayloadResult:
+) -> TraePayloadResult:
     """
-    Builds complete payload for Kiro API from unified data.
+    Builds complete payload for Trae API from unified data.
     
-    This is the main function that assembles the Kiro API payload from
+    This is the main function that assembles the Trae API payload from
     API-agnostic unified message and tool formats.
     
     Args:
         messages: List of messages in unified format (without system messages)
         system_prompt: Already extracted system prompt
-        model_id: Internal Kiro model ID
+        model_id: Internal Trae model ID
         tools: List of tools in unified format (or None)
         conversation_id: Unique conversation ID
         profile_arn: AWS CodeWhisperer profile ARN
         inject_thinking: Whether to inject thinking tags (default True)
     
     Returns:
-        KiroPayloadResult with payload and tool documentation
+        TraePayloadResult with payload and tool documentation
     
     Raises:
         ValueError: If there are no messages to send
@@ -1370,7 +1370,7 @@ def build_kiro_payload(
     # Process tools with long descriptions
     processed_tools, tool_documentation = process_tools_with_long_descriptions(tools)
     
-    # Validate tool names against Kiro API 64-character limit
+    # Validate tool names against Trae API 64-character limit
     validate_tool_names(processed_tools)
     
     # Add tool documentation to system prompt if present
@@ -1389,20 +1389,20 @@ def build_kiro_payload(
         full_system_prompt = full_system_prompt + truncation_system_addition if full_system_prompt else truncation_system_addition.strip()
     
     # If no tools are defined, strip ALL tool-related content from messages
-    # Kiro API rejects requests with toolResults but no tools
+    # Trae API rejects requests with toolResults but no tools
     if not tools:
         messages_without_tools, had_tool_content = strip_all_tool_content(messages)
         messages_with_assistants = messages_without_tools
         converted_tool_results = had_tool_content
     else:
-        # Ensure assistant messages exist before tool_results (Kiro API requirement)
+        # Ensure assistant messages exist before tool_results (Trae API requirement)
         # Also returns flag if any tool_results were converted (to skip thinking tag injection)
         messages_with_assistants, converted_tool_results = ensure_assistant_before_tool_results(messages)
     
     # Merge adjacent messages with the same role
     merged_messages = merge_adjacent_messages(messages_with_assistants)
     
-    # Ensure first message is from user (Kiro API requirement, fixes issue #60)
+    # Ensure first message is from user (Trae API requirement, fixes issue #60)
     merged_messages = ensure_first_message_is_user(merged_messages)
     
     # Normalize unknown roles to 'user' (fixes issue #64)
@@ -1427,7 +1427,7 @@ def build_kiro_payload(
             original_content = extract_text_content(first_msg.content)
             first_msg.content = f"{full_system_prompt}\n\n{original_content}"
     
-    history = build_kiro_history(history_messages, model_id)
+    history = build_trae_history(history_messages, model_id)
     
     # Current message (the last one)
     current_message = merged_messages[-1]
@@ -1453,30 +1453,30 @@ def build_kiro_payload(
     
     # Process images in current message - extract from message or content
     # IMPORTANT: images go directly into userInputMessage, NOT into userInputMessageContext
-    # This matches the native Kiro IDE format
+    # This matches the native Trae IDE format
     images = current_message.images or extract_images_from_content(current_message.content)
-    kiro_images = None
+    trae_images = None
     if images:
-        kiro_images = convert_images_to_kiro_format(images)
-        if kiro_images:
-            logger.debug(f"Added {len(kiro_images)} image(s) to current message")
+        trae_images = convert_images_to_trae_format(images)
+        if trae_images:
+            logger.debug(f"Added {len(trae_images)} image(s) to current message")
     
     # Build user_input_context for tools and toolResults only (NOT images)
     user_input_context: Dict[str, Any] = {}
     
     # Add tools if present
-    kiro_tools = convert_tools_to_kiro_format(processed_tools)
-    if kiro_tools:
-        user_input_context["tools"] = kiro_tools
+    trae_tools = convert_tools_to_trae_format(processed_tools)
+    if trae_tools:
+        user_input_context["tools"] = trae_tools
     
-    # Process tool_results in current message - convert to Kiro format if present
+    # Process tool_results in current message - convert to Trae format if present
     if current_message.tool_results:
-        # Convert unified format to Kiro format
-        kiro_tool_results = convert_tool_results_to_kiro_format(current_message.tool_results)
-        if kiro_tool_results:
-            user_input_context["toolResults"] = kiro_tool_results
+        # Convert unified format to Trae format
+        trae_tool_results = convert_tool_results_to_trae_format(current_message.tool_results)
+        if trae_tool_results:
+            user_input_context["toolResults"] = trae_tool_results
     else:
-        # Try to extract from content (already in Kiro format)
+        # Try to extract from content (already in Trae format)
         tool_results = extract_tool_results_from_content(current_message.content)
         if tool_results:
             user_input_context["toolResults"] = tool_results
@@ -1493,8 +1493,8 @@ def build_kiro_payload(
     }
     
     # Add images directly to userInputMessage (NOT to userInputMessageContext)
-    if kiro_images:
-        user_input_message["images"] = kiro_images
+    if trae_images:
+        user_input_message["images"] = trae_images
     
     # Add user_input_context if present (contains tools and toolResults only)
     if user_input_context:
@@ -1519,4 +1519,4 @@ def build_kiro_payload(
     if profile_arn:
         payload["profileArn"] = profile_arn
     
-    return KiroPayloadResult(payload=payload, tool_documentation=tool_documentation)
+    return TraePayloadResult(payload=payload, tool_documentation=tool_documentation)

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
-# Kiro Gateway
-# https://github.com/jwadow/kiro-gateway
+# Trae Gateway
+# (Trae Gateway - based on Kiro Gateway)
 # Copyright (C) 2025 Jwadow
 #
 # This program is free software: you can redistribute it and/or modify
@@ -33,7 +33,7 @@ from typing import Any, Dict, List, Optional
 
 from loguru import logger
 
-from kiro.utils import generate_tool_call_id
+from trae.utils import generate_tool_call_id
 
 
 def find_matching_brace(text: str, start_pos: int) -> int:
@@ -420,12 +420,12 @@ class AwsEventStreamParser:
                         self.current_tool_call['_truncation_info'] = truncation_info
                         
                         # Check if recovery is enabled
-                        from kiro.config import TRUNCATION_RECOVERY
+                        from trae.config import TRUNCATION_RECOVERY
                         tool_id = self.current_tool_call.get('id', 'unknown')
                         
-                        # Clear error message: this is Kiro API's fault, not ours
+                        # Clear error message: this is Trae API's fault, not ours
                         logger.error(
-                            f"Tool call truncated by Kiro API: "
+                            f"Tool call truncated by Trae API: "
                             f"tool='{tool_name}', id={tool_id}, size={truncation_info['size_bytes']} bytes, "
                             f"reason={truncation_info['reason']}. "
                             f"{'Model will be notified automatically about truncation.' if TRUNCATION_RECOVERY else 'Set TRUNCATION_RECOVERY=true in .env to auto-notify model about truncation.'}"
@@ -437,7 +437,7 @@ class AwsEventStreamParser:
                     self.current_tool_call['function']['arguments'] = "{}"
             else:
                 # Empty string - use empty object
-                # This is normal behavior for duplicate tool calls from Kiro
+                # This is normal behavior for duplicate tool calls from Trae
                 logger.debug(f"Tool '{tool_name}' has empty arguments string (will be deduplicated)")
                 self.current_tool_call['function']['arguments'] = "{}"
         elif isinstance(args, dict):
@@ -456,7 +456,7 @@ class AwsEventStreamParser:
         """
         Analyzes a malformed JSON string to determine if it was truncated.
         
-        This helps distinguish between upstream issues (Kiro API cutting off
+        This helps distinguish between upstream issues (Trae API cutting off
         large tool call arguments) and actual malformed JSON from the model.
         
         Args:

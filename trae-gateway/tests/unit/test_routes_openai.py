@@ -21,8 +21,8 @@ import json
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
-from kiro.routes_openai import verify_api_key, router
-from kiro.config import PROXY_API_KEY, APP_VERSION
+from trae.routes_openai import verify_api_key, router
+from trae.config import PROXY_API_KEY, APP_VERSION
 
 
 # =============================================================================
@@ -172,7 +172,7 @@ class TestRootEndpoint:
         
         print(f"Result: {response.json()}")
         assert response.status_code == 200
-        assert "Kiro Gateway" in response.json()["message"]
+        assert "Trae Gateway" in response.json()["message"]
     
     def test_root_returns_version(self, test_client):
         """
@@ -338,7 +338,7 @@ class TestModelsEndpoint:
         print(f"Model IDs: {model_ids}")
         
         # At minimum, hidden models should be present
-        # (even if Kiro API cache is empty)
+        # (even if Trae API cache is empty)
         assert len(model_ids) >= 1, "Expected at least one model (hidden models)"
     
     def test_models_format_is_openai_compatible(self, test_client, valid_proxy_api_key):
@@ -891,10 +891,10 @@ class TestHTTPClientSelection:
     requests use shared client for connection pooling.
     """
     
-    @patch('kiro.routes_openai.KiroHttpClient')
+    @patch('trae.routes_openai.TraeHttpClient')
     def test_streaming_uses_per_request_client(
         self,
-        mock_kiro_http_client_class,
+        mock_trae_http_client_class,
         test_client,
         valid_proxy_api_key
     ):
@@ -910,7 +910,7 @@ class TestHTTPClientSelection:
             side_effect=Exception("Network blocked")
         )
         mock_client_instance.close = AsyncMock()
-        mock_kiro_http_client_class.return_value = mock_client_instance
+        mock_trae_http_client_class.return_value = mock_client_instance
         
         print("Action: POST with stream=true...")
         try:
@@ -926,18 +926,18 @@ class TestHTTPClientSelection:
         except Exception:
             pass
         
-        print("Checking: KiroHttpClient(shared_client=None)...")
-        assert mock_kiro_http_client_class.called
-        call_args = mock_kiro_http_client_class.call_args
+        print("Checking: TraeHttpClient(shared_client=None)...")
+        assert mock_trae_http_client_class.called
+        call_args = mock_trae_http_client_class.call_args
         print(f"Call args: {call_args}")
         assert call_args[1]['shared_client'] is None, \
             "Streaming should use per-request client"
         print("✅ Streaming correctly uses per-request client")
     
-    @patch('kiro.routes_openai.KiroHttpClient')
+    @patch('trae.routes_openai.TraeHttpClient')
     def test_non_streaming_uses_shared_client(
         self,
-        mock_kiro_http_client_class,
+        mock_trae_http_client_class,
         test_client,
         valid_proxy_api_key
     ):
@@ -953,7 +953,7 @@ class TestHTTPClientSelection:
             side_effect=Exception("Network blocked")
         )
         mock_client_instance.close = AsyncMock()
-        mock_kiro_http_client_class.return_value = mock_client_instance
+        mock_trae_http_client_class.return_value = mock_client_instance
         
         print("Action: POST with stream=false...")
         try:
@@ -969,9 +969,9 @@ class TestHTTPClientSelection:
         except Exception:
             pass
         
-        print("Checking: KiroHttpClient(shared_client=app.state.http_client)...")
-        assert mock_kiro_http_client_class.called
-        call_args = mock_kiro_http_client_class.call_args
+        print("Checking: TraeHttpClient(shared_client=app.state.http_client)...")
+        assert mock_trae_http_client_class.called
+        call_args = mock_trae_http_client_class.call_args
         print(f"Call args: {call_args}")
         assert call_args[1]['shared_client'] is not None, \
             "Non-streaming should use shared client"
@@ -996,8 +996,8 @@ class TestTruncationRecoveryMessageModification:
         Purpose: Ensure truncation notice is prepended to tool_result.
         """
         print("Setup: Saving truncation info to cache...")
-        from kiro.truncation_state import save_tool_truncation
-        from kiro.models_openai import ChatMessage
+        from trae.truncation_state import save_tool_truncation
+        from trae.models_openai import ChatMessage
         
         tool_call_id = "tooluse_test123"
         save_tool_truncation(tool_call_id, "write_to_file", {"size_bytes": 5000, "reason": "test"})
@@ -1009,9 +1009,9 @@ class TestTruncationRecoveryMessageModification:
         
         print("Action: Processing messages through truncation recovery logic...")
         # Import the function that modifies messages
-        from kiro.routes_openai import router
-        from kiro.truncation_recovery import should_inject_recovery, generate_truncation_tool_result
-        from kiro.truncation_state import get_tool_truncation
+        from trae.routes_openai import router
+        from trae.truncation_recovery import should_inject_recovery, generate_truncation_tool_result
+        from trae.truncation_state import get_tool_truncation
         
         # Simulate the modification logic
         modified_messages = []
@@ -1047,15 +1047,15 @@ class TestTruncationRecoveryMessageModification:
         Purpose: Ensure normal messages pass through unchanged.
         """
         print("Setup: Creating request without truncation info in cache...")
-        from kiro.models_openai import ChatMessage
+        from trae.models_openai import ChatMessage
         
         messages = [
             ChatMessage(role="tool", tool_call_id="tooluse_nonexistent", content="Success")
         ]
         
         print("Action: Processing messages...")
-        from kiro.truncation_recovery import should_inject_recovery
-        from kiro.truncation_state import get_tool_truncation
+        from trae.truncation_recovery import should_inject_recovery
+        from trae.truncation_state import get_tool_truncation
         
         modified_messages = []
         tool_results_modified = 0
@@ -1084,8 +1084,8 @@ class TestTruncationRecoveryMessageModification:
         Purpose: Ensure Pydantic immutability is respected.
         """
         print("Setup: Saving truncation info and creating message...")
-        from kiro.truncation_state import save_tool_truncation
-        from kiro.models_openai import ChatMessage
+        from trae.truncation_state import save_tool_truncation
+        from trae.models_openai import ChatMessage
         
         tool_call_id = "test_immutable"
         save_tool_truncation(tool_call_id, "tool", {"size_bytes": 1000, "reason": "test truncation"})
@@ -1094,8 +1094,8 @@ class TestTruncationRecoveryMessageModification:
         original_content = original_msg.content
         
         print("Action: Processing message...")
-        from kiro.truncation_recovery import should_inject_recovery, generate_truncation_tool_result
-        from kiro.truncation_state import get_tool_truncation
+        from trae.truncation_recovery import should_inject_recovery, generate_truncation_tool_result
+        from trae.truncation_state import get_tool_truncation
         
         if original_msg.role == "tool" and original_msg.tool_call_id and should_inject_recovery():
             truncation_info = get_tool_truncation(original_msg.tool_call_id)
@@ -1137,15 +1137,15 @@ class TestTruncationRecoveryEdgeCases:
         Purpose: Ensure orphaned tool_result doesn't cause errors (Test Case 9.2).
         """
         print("Setup: Creating tool_result without prior truncation...")
-        from kiro.models_openai import ChatMessage
+        from trae.models_openai import ChatMessage
         
         messages = [
             ChatMessage(role="tool", tool_call_id="tooluse_nonexistent_orphan", content="Result")
         ]
         
         print("Action: Processing messages (no truncation info in cache)...")
-        from kiro.truncation_recovery import should_inject_recovery
-        from kiro.truncation_state import get_tool_truncation
+        from trae.truncation_recovery import should_inject_recovery
+        from trae.truncation_state import get_tool_truncation
         
         modified_messages = []
         for msg in messages:
@@ -1168,8 +1168,8 @@ class TestTruncationRecoveryEdgeCases:
         Purpose: Ensure empty content doesn't cause errors (Test Case 9.4).
         """
         print("Setup: Saving truncation info and creating empty tool_result...")
-        from kiro.truncation_state import save_tool_truncation
-        from kiro.models_openai import ChatMessage
+        from trae.truncation_state import save_tool_truncation
+        from trae.models_openai import ChatMessage
         
         tool_call_id = "tooluse_empty_content"
         save_tool_truncation(tool_call_id, "tool", {"size_bytes": 1000, "reason": "test"})
@@ -1179,8 +1179,8 @@ class TestTruncationRecoveryEdgeCases:
         ]
         
         print("Action: Processing message with empty content...")
-        from kiro.truncation_recovery import should_inject_recovery, generate_truncation_tool_result
-        from kiro.truncation_state import get_tool_truncation
+        from trae.truncation_recovery import should_inject_recovery, generate_truncation_tool_result
+        from trae.truncation_state import get_tool_truncation
         
         modified_messages = []
         for msg in messages:
@@ -1213,7 +1213,7 @@ class TestTruncationRecoveryEdgeCases:
         Purpose: Ensure hash stability for long content (Test Case 9.3).
         """
         print("Setup: Creating very long content...")
-        from kiro.truncation_state import save_content_truncation, get_content_truncation
+        from trae.truncation_state import save_content_truncation, get_content_truncation
         
         content_long = "A" * 10000
         content_same_prefix = "A" * 500 + "B" * 9500
@@ -1237,8 +1237,8 @@ class TestTruncationRecoveryEdgeCases:
         Purpose: Ensure disabling recovery doesn't clear cache (Test Case 9.5).
         """
         print("Setup: Enabling recovery and saving truncation...")
-        from kiro.truncation_state import save_tool_truncation, get_cache_stats
-        from kiro.models_openai import ChatMessage
+        from trae.truncation_state import save_tool_truncation, get_cache_stats
+        from trae.models_openai import ChatMessage
         import os
         
         tool_call_id = "tooluse_disabled_recovery"
@@ -1251,12 +1251,12 @@ class TestTruncationRecoveryEdgeCases:
         print("Action: Disabling recovery...")
         with patch.dict(os.environ, {"TRUNCATION_RECOVERY": "false"}):
             from importlib import reload
-            from kiro import config
+            from trae import config
             reload(config)
             
             print("Action: Processing tool_result with recovery disabled...")
-            from kiro.truncation_recovery import should_inject_recovery
-            from kiro.truncation_state import get_tool_truncation
+            from trae.truncation_recovery import should_inject_recovery
+            from trae.truncation_state import get_tool_truncation
             
             messages = [
                 ChatMessage(role="tool", tool_call_id=tool_call_id, content="Result")
@@ -1300,8 +1300,8 @@ class TestContentTruncationRecovery:
         Purpose: Ensure content truncation recovery works (Test Case C.1).
         """
         print("Setup: Saving content truncation info...")
-        from kiro.truncation_state import save_content_truncation
-        from kiro.models_openai import ChatMessage
+        from trae.truncation_state import save_content_truncation
+        from trae.models_openai import ChatMessage
         
         truncated_content = "This is a very long response that was cut off mid-sentence"
         save_content_truncation(truncated_content)
@@ -1312,8 +1312,8 @@ class TestContentTruncationRecovery:
         ]
         
         print("Action: Processing messages through content truncation recovery...")
-        from kiro.truncation_recovery import should_inject_recovery, generate_truncation_user_message
-        from kiro.truncation_state import get_content_truncation
+        from trae.truncation_recovery import should_inject_recovery, generate_truncation_user_message
+        from trae.truncation_state import get_content_truncation
         
         modified_messages = []
         for msg in messages:
@@ -1350,14 +1350,14 @@ class TestContentTruncationRecovery:
         Purpose: Ensure false positives don't occur (Test Case C.3).
         """
         print("Setup: Creating normal assistant message (no truncation)...")
-        from kiro.models_openai import ChatMessage
+        from trae.models_openai import ChatMessage
         
         messages = [
             ChatMessage(role="assistant", content="This is a complete response.")
         ]
         
         print("Action: Processing messages...")
-        from kiro.truncation_state import get_content_truncation
+        from trae.truncation_state import get_content_truncation
         
         modified_messages = []
         for msg in messages:
@@ -1380,7 +1380,7 @@ class TestContentTruncationRecovery:
         Purpose: Ensure long messages can be matched by prefix.
         """
         print("Setup: Creating long content...")
-        from kiro.truncation_state import save_content_truncation, get_content_truncation
+        from trae.truncation_state import save_content_truncation, get_content_truncation
         
         # Original content (what was saved during detection)
         original_content = "A" * 1000

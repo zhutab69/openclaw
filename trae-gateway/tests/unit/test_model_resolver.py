@@ -14,14 +14,14 @@ Tests 5-layer model resolution architecture:
 import pytest
 from dataclasses import FrozenInstanceError
 
-from kiro.model_resolver import (
+from trae.model_resolver import (
     normalize_model_name,
-    get_model_id_for_kiro,
+    get_model_id_for_trae,
     extract_model_family,
     ModelResolver,
     ModelResolution,
 )
-from kiro.cache import ModelInfoCache
+from trae.cache import ModelInfoCache
 
 
 # =============================================================================
@@ -563,9 +563,9 @@ class TestExtractModelFamily:
 
 class TestGetModelIdForKiro:
     """
-    Tests for get_model_id_for_kiro() function.
+    Tests for get_model_id_for_trae() function.
     
-    Checks getting model ID for sending to Kiro API.
+    Checks getting model ID for sending to Trae API.
     """
     
     def test_normalizes_without_hidden_models(self):
@@ -573,8 +573,8 @@ class TestGetModelIdForKiro:
         What it does: Normalizes model without hidden models.
         Goal: Check basic normalization.
         """
-        print("Action: get_model_id_for_kiro('claude-haiku-4-5-20251001', {})...")
-        result = get_model_id_for_kiro("claude-haiku-4-5-20251001", {})
+        print("Action: get_model_id_for_trae('claude-haiku-4-5-20251001', {})...")
+        result = get_model_id_for_trae("claude-haiku-4-5-20251001", {})
         
         print(f"Comparing result: Expected 'claude-haiku-4.5', Got '{result}'")
         assert result == "claude-haiku-4.5"
@@ -586,8 +586,8 @@ class TestGetModelIdForKiro:
         """
         hidden = {"claude-3.7-sonnet": "CLAUDE_3_7_SONNET_20250219_V1_0"}
         
-        print("Action: get_model_id_for_kiro('claude-3.7-sonnet', hidden)...")
-        result = get_model_id_for_kiro("claude-3.7-sonnet", hidden)
+        print("Action: get_model_id_for_trae('claude-3.7-sonnet', hidden)...")
+        result = get_model_id_for_trae("claude-3.7-sonnet", hidden)
         
         print(f"Comparing result: Expected 'CLAUDE_3_7_SONNET_20250219_V1_0', Got '{result}'")
         assert result == "CLAUDE_3_7_SONNET_20250219_V1_0"
@@ -599,8 +599,8 @@ class TestGetModelIdForKiro:
         """
         hidden = {"claude-3.7-sonnet": "CLAUDE_3_7_SONNET_20250219_V1_0"}
         
-        print("Action: get_model_id_for_kiro('claude-3-7-sonnet', hidden)...")
-        result = get_model_id_for_kiro("claude-3-7-sonnet", hidden)
+        print("Action: get_model_id_for_trae('claude-3-7-sonnet', hidden)...")
+        result = get_model_id_for_trae("claude-3-7-sonnet", hidden)
         
         print(f"Comparing result: Expected 'CLAUDE_3_7_SONNET_20250219_V1_0', Got '{result}'")
         assert result == "CLAUDE_3_7_SONNET_20250219_V1_0"
@@ -612,8 +612,8 @@ class TestGetModelIdForKiro:
         """
         hidden = {"claude-3.7-sonnet": "CLAUDE_3_7_SONNET_20250219_V1_0"}
         
-        print("Action: get_model_id_for_kiro('claude-3-7-sonnet-20250219', hidden)...")
-        result = get_model_id_for_kiro("claude-3-7-sonnet-20250219", hidden)
+        print("Action: get_model_id_for_trae('claude-3-7-sonnet-20250219', hidden)...")
+        result = get_model_id_for_trae("claude-3-7-sonnet-20250219", hidden)
         
         print(f"Comparing result: Expected 'CLAUDE_3_7_SONNET_20250219_V1_0', Got '{result}'")
         assert result == "CLAUDE_3_7_SONNET_20250219_V1_0"
@@ -623,8 +623,8 @@ class TestGetModelIdForKiro:
         What it does: Passthrough for unknown models.
         Goal: Check that unknown models pass through normalized.
         """
-        print("Action: get_model_id_for_kiro('claude-unknown-model', {})...")
-        result = get_model_id_for_kiro("claude-unknown-model", {})
+        print("Action: get_model_id_for_trae('claude-unknown-model', {})...")
+        result = get_model_id_for_trae("claude-unknown-model", {})
         
         print(f"Comparing result: Expected 'claude-unknown-model', Got '{result}'")
         assert result == "claude-unknown-model"

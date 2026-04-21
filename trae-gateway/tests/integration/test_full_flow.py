@@ -13,7 +13,7 @@ from datetime import datetime, timezone, timedelta
 from fastapi.testclient import TestClient
 import httpx
 
-from kiro.config import PROXY_API_KEY
+from trae.config import PROXY_API_KEY
 
 
 class TestFullChatCompletionFlow:
@@ -328,7 +328,7 @@ class TestStreamingFlagHandling:
         mock_response.aclose = AsyncMock()
         
         # Mock request_with_retry to return our mock response
-        with patch('kiro.routes_openai.KiroHttpClient') as MockHttpClient:
+        with patch('trae.routes_openai.TraeHttpClient') as MockHttpClient:
             mock_client_instance = AsyncMock()
             mock_client_instance.request_with_retry = AsyncMock(return_value=mock_response)
             mock_client_instance.client = AsyncMock()

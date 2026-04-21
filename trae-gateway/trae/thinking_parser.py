@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
-# Kiro Gateway
-# https://github.com/jwadow/kiro-gateway
+# Trae Gateway
+# (Trae Gateway - based on Kiro Gateway)
 # Copyright (C) 2025 Jwadow
 #
 # This program is free software: you can redistribute it and/or modify
@@ -37,7 +37,7 @@ from dataclasses import dataclass, field
 
 from loguru import logger
 
-from kiro.config import (
+from trae.config import (
     FAKE_REASONING_HANDLING,
     FAKE_REASONING_OPEN_TAGS,
     FAKE_REASONING_INITIAL_BUFFER_SIZE,

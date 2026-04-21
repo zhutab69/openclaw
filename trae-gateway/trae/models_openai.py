@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
-# Kiro Gateway
-# https://github.com/jwadow/kiro-gateway
+# Trae Gateway
+# (Trae Gateway - based on Kiro Gateway)
 # Copyright (C) 2025 Jwadow
 #
 # This program is free software: you can redistribute it and/or modify
@@ -206,7 +206,7 @@ class ChatCompletionUsage(BaseModel):
         prompt_tokens: Number of tokens in request
         completion_tokens: Number of tokens in response
         total_tokens: Total number of tokens
-        credits_used: Credits used (Kiro-specific)
+        credits_used: Credits used (Trae-specific)
     """
     prompt_tokens: int = 0
     completion_tokens: int = 0

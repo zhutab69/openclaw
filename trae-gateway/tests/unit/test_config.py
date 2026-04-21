@@ -36,7 +36,7 @@ class TestLogLevelConfig:
         with patch.object(os, 'getenv', side_effect=mock_getenv):
             # Reload config module with mocked getenv
             import importlib
-            import kiro.config as config_module
+            import trae.config as config_module
             importlib.reload(config_module)
             
             print(f"LOG_LEVEL: {config_module.LOG_LEVEL}")
@@ -45,7 +45,7 @@ class TestLogLevelConfig:
         
         # Restore module with real values
         import importlib
-        import kiro.config as config_module
+        import trae.config as config_module
         importlib.reload(config_module)
     
     def test_log_level_from_environment(self):
@@ -57,7 +57,7 @@ class TestLogLevelConfig:
         
         with patch.dict(os.environ, {"LOG_LEVEL": "DEBUG"}):
             import importlib
-            import kiro.config as config_module
+            import trae.config as config_module
             importlib.reload(config_module)
             
             print(f"LOG_LEVEL: {config_module.LOG_LEVEL}")
@@ -73,7 +73,7 @@ class TestLogLevelConfig:
         
         with patch.dict(os.environ, {"LOG_LEVEL": "warning"}):
             import importlib
-            import kiro.config as config_module
+            import trae.config as config_module
             importlib.reload(config_module)
             
             print(f"LOG_LEVEL: {config_module.LOG_LEVEL}")
@@ -89,7 +89,7 @@ class TestLogLevelConfig:
         
         with patch.dict(os.environ, {"LOG_LEVEL": "TRACE"}):
             import importlib
-            import kiro.config as config_module
+            import trae.config as config_module
             importlib.reload(config_module)
             
             print(f"LOG_LEVEL: {config_module.LOG_LEVEL}")
@@ -104,7 +104,7 @@ class TestLogLevelConfig:
         
         with patch.dict(os.environ, {"LOG_LEVEL": "ERROR"}):
             import importlib
-            import kiro.config as config_module
+            import trae.config as config_module
             importlib.reload(config_module)
             
             print(f"LOG_LEVEL: {config_module.LOG_LEVEL}")
@@ -119,7 +119,7 @@ class TestLogLevelConfig:
         
         with patch.dict(os.environ, {"LOG_LEVEL": "CRITICAL"}):
             import importlib
-            import kiro.config as config_module
+            import trae.config as config_module
             importlib.reload(config_module)
             
             print(f"LOG_LEVEL: {config_module.LOG_LEVEL}")
@@ -141,7 +141,7 @@ class TestToolDescriptionMaxLengthConfig:
                 del os.environ["TOOL_DESCRIPTION_MAX_LENGTH"]
             
             import importlib
-            import kiro.config as config_module
+            import trae.config as config_module
             importlib.reload(config_module)
             
             print(f"TOOL_DESCRIPTION_MAX_LENGTH: {config_module.TOOL_DESCRIPTION_MAX_LENGTH}")
@@ -156,7 +156,7 @@ class TestToolDescriptionMaxLengthConfig:
         
         with patch.dict(os.environ, {"TOOL_DESCRIPTION_MAX_LENGTH": "5000"}):
             import importlib
-            import kiro.config as config_module
+            import trae.config as config_module
             importlib.reload(config_module)
             
             print(f"TOOL_DESCRIPTION_MAX_LENGTH: {config_module.TOOL_DESCRIPTION_MAX_LENGTH}")
@@ -171,7 +171,7 @@ class TestToolDescriptionMaxLengthConfig:
         
         with patch.dict(os.environ, {"TOOL_DESCRIPTION_MAX_LENGTH": "0"}):
             import importlib
-            import kiro.config as config_module
+            import trae.config as config_module
             importlib.reload(config_module)
             
             print(f"TOOL_DESCRIPTION_MAX_LENGTH: {config_module.TOOL_DESCRIPTION_MAX_LENGTH}")
@@ -193,7 +193,7 @@ class TestTimeoutConfigurationWarning:
             "STREAMING_READ_TIMEOUT": "300"
         }):
             import importlib
-            import kiro.config as config_module
+            import trae.config as config_module
             importlib.reload(config_module)
             
             # Call the warning function
@@ -218,7 +218,7 @@ class TestTimeoutConfigurationWarning:
             "STREAMING_READ_TIMEOUT": "300"
         }):
             import importlib
-            import kiro.config as config_module
+            import trae.config as config_module
             importlib.reload(config_module)
             
             # Call the warning function
@@ -242,7 +242,7 @@ class TestTimeoutConfigurationWarning:
             "STREAMING_READ_TIMEOUT": "300"
         }):
             import importlib
-            import kiro.config as config_module
+            import trae.config as config_module
             importlib.reload(config_module)
             
             # Call the warning function
@@ -269,7 +269,7 @@ class TestTimeoutConfigurationWarning:
             "STREAMING_READ_TIMEOUT": "300"
         }):
             import importlib
-            import kiro.config as config_module
+            import trae.config as config_module
             importlib.reload(config_module)
             
             # Call the warning function
@@ -292,7 +292,7 @@ class TestAwsSsoOidcUrlConfig:
         """
         print("Setup: Importing config module...")
         import importlib
-        import kiro.config as config_module
+        import trae.config as config_module
         importlib.reload(config_module)
         
         print("Verification: AWS_SSO_OIDC_URL_TEMPLATE exists...")
@@ -309,7 +309,7 @@ class TestAwsSsoOidcUrlConfig:
         Purpose: Ensure the function formats URL correctly.
         """
         print("Setup: Importing get_aws_sso_oidc_url...")
-        from kiro.config import get_aws_sso_oidc_url
+        from trae.config import get_aws_sso_oidc_url
         
         print("Action: Calling get_aws_sso_oidc_url('us-east-1')...")
         url = get_aws_sso_oidc_url("us-east-1")
@@ -325,7 +325,7 @@ class TestAwsSsoOidcUrlConfig:
         Purpose: Ensure the function works with various AWS regions.
         """
         print("Setup: Importing get_aws_sso_oidc_url...")
-        from kiro.config import get_aws_sso_oidc_url
+        from trae.config import get_aws_sso_oidc_url
         
         test_cases = [
             ("us-east-1", "https://oidc.us-east-1.amazonaws.com/token"),
@@ -356,7 +356,7 @@ class TestServerHostConfig:
                 del os.environ["SERVER_HOST"]
             
             import importlib
-            import kiro.config as config_module
+            import trae.config as config_module
             importlib.reload(config_module)
             
             print(f"SERVER_HOST: {config_module.SERVER_HOST}")
@@ -374,7 +374,7 @@ class TestServerHostConfig:
         
         with patch.dict(os.environ, {"SERVER_HOST": "127.0.0.1"}):
             import importlib
-            import kiro.config as config_module
+            import trae.config as config_module
             importlib.reload(config_module)
             
             print(f"SERVER_HOST: {config_module.SERVER_HOST}")
@@ -390,7 +390,7 @@ class TestServerHostConfig:
         
         with patch.dict(os.environ, {"SERVER_HOST": "192.168.1.100"}):
             import importlib
-            import kiro.config as config_module
+            import trae.config as config_module
             importlib.reload(config_module)
             
             print(f"SERVER_HOST: {config_module.SERVER_HOST}")
@@ -412,7 +412,7 @@ class TestServerPortConfig:
                 del os.environ["SERVER_PORT"]
             
             import importlib
-            import kiro.config as config_module
+            import trae.config as config_module
             importlib.reload(config_module)
             
             print(f"SERVER_PORT: {config_module.SERVER_PORT}")
@@ -430,7 +430,7 @@ class TestServerPortConfig:
         
         with patch.dict(os.environ, {"SERVER_PORT": "9000"}):
             import importlib
-            import kiro.config as config_module
+            import trae.config as config_module
             importlib.reload(config_module)
             
             print(f"SERVER_PORT: {config_module.SERVER_PORT}")
@@ -446,7 +446,7 @@ class TestServerPortConfig:
         
         with patch.dict(os.environ, {"SERVER_PORT": "3000"}):
             import importlib
-            import kiro.config as config_module
+            import trae.config as config_module
             importlib.reload(config_module)
             
             print(f"SERVER_PORT: {config_module.SERVER_PORT}")
@@ -461,7 +461,7 @@ class TestServerPortConfig:
         
         with patch.dict(os.environ, {"SERVER_PORT": "8080"}):
             import importlib
-            import kiro.config as config_module
+            import trae.config as config_module
             importlib.reload(config_module)
             
             print(f"SERVER_PORT: {config_module.SERVER_PORT}")
@@ -471,47 +471,47 @@ class TestServerPortConfig:
 
 
 class TestKiroCliDbFileConfig:
-    """Tests for KIRO_CLI_DB_FILE configuration."""
+    """Tests for TRAE_CLI_DB_FILE configuration."""
     
-    def test_kiro_cli_db_file_config_exists(self):
+    def test_trae_cli_db_file_config_exists(self):
         """
-        What it does: Verifies that KIRO_CLI_DB_FILE constant exists.
+        What it does: Verifies that TRAE_CLI_DB_FILE constant exists.
         Purpose: Ensure the config parameter is defined.
         """
         print("Setup: Importing config module...")
         import importlib
-        import kiro.config as config_module
+        import trae.config as config_module
         importlib.reload(config_module)
         
-        print("Verification: KIRO_CLI_DB_FILE exists...")
-        assert hasattr(config_module, 'KIRO_CLI_DB_FILE')
+        print("Verification: TRAE_CLI_DB_FILE exists...")
+        assert hasattr(config_module, 'TRAE_CLI_DB_FILE')
         
-        print(f"KIRO_CLI_DB_FILE: '{config_module.KIRO_CLI_DB_FILE}'")
+        print(f"TRAE_CLI_DB_FILE: '{config_module.TRAE_CLI_DB_FILE}'")
         # Default should be empty string
-        assert isinstance(config_module.KIRO_CLI_DB_FILE, str)
+        assert isinstance(config_module.TRAE_CLI_DB_FILE, str)
     
-    def test_kiro_cli_db_file_from_environment(self):
+    def test_trae_cli_db_file_from_environment(self):
         """
-        What it does: Verifies loading KIRO_CLI_DB_FILE from environment variable.
+        What it does: Verifies loading TRAE_CLI_DB_FILE from environment variable.
         Purpose: Ensure the value from environment is used and normalized.
         """
         print("Setup: Importing config module...")
         import importlib
-        import kiro.config as config_module
+        import trae.config as config_module
         
-        # Test that KIRO_CLI_DB_FILE is loaded and is a string
-        print(f"KIRO_CLI_DB_FILE: {config_module.KIRO_CLI_DB_FILE}")
-        assert isinstance(config_module.KIRO_CLI_DB_FILE, str)
+        # Test that TRAE_CLI_DB_FILE is loaded and is a string
+        print(f"TRAE_CLI_DB_FILE: {config_module.TRAE_CLI_DB_FILE}")
+        assert isinstance(config_module.TRAE_CLI_DB_FILE, str)
         
         # If value is set (not empty), verify it's a normalized path
-        if config_module.KIRO_CLI_DB_FILE:
+        if config_module.TRAE_CLI_DB_FILE:
             # Path should be normalized (no raw ~ or forward slashes on Windows)
-            assert not config_module.KIRO_CLI_DB_FILE.startswith("~")
+            assert not config_module.TRAE_CLI_DB_FILE.startswith("~")
             # Should be a valid path string (contains path separators or is absolute)
             from pathlib import Path
-            path = Path(config_module.KIRO_CLI_DB_FILE)
+            path = Path(config_module.TRAE_CLI_DB_FILE)
             # Path should be constructable (doesn't raise exception)
-            assert str(path) == config_module.KIRO_CLI_DB_FILE
+            assert str(path) == config_module.TRAE_CLI_DB_FILE
 
 
 class TestFallbackModelsConfig:
@@ -524,7 +524,7 @@ class TestFallbackModelsConfig:
         """
         print("Setup: Importing config module...")
         import importlib
-        import kiro.config as config_module
+        import trae.config as config_module
         importlib.reload(config_module)
         
         print("Verification: FALLBACK_MODELS exists...")
@@ -539,7 +539,7 @@ class TestFallbackModelsConfig:
         Purpose: Ensure fallback list is populated for DNS failure recovery.
         """
         print("Setup: Importing FALLBACK_MODELS...")
-        from kiro.config import FALLBACK_MODELS
+        from trae.config import FALLBACK_MODELS
         
         print(f"FALLBACK_MODELS length: {len(FALLBACK_MODELS)}")
         print(f"Comparing: Expected > 0, Got {len(FALLBACK_MODELS)}")
@@ -551,7 +551,7 @@ class TestFallbackModelsConfig:
         Purpose: Ensure fallback models have correct structure for cache.update().
         """
         print("Setup: Importing FALLBACK_MODELS...")
-        from kiro.config import FALLBACK_MODELS
+        from trae.config import FALLBACK_MODELS
         
         print(f"Action: Checking structure of {len(FALLBACK_MODELS)} models...")
         for i, model in enumerate(FALLBACK_MODELS):
@@ -575,7 +575,7 @@ class TestFallbackModelsConfig:
         Purpose: Ensure fallback list contains expected Claude 4/4.5 models.
         """
         print("Setup: Importing FALLBACK_MODELS...")
-        from kiro.config import FALLBACK_MODELS
+        from trae.config import FALLBACK_MODELS
         
         model_ids = [m["modelId"] for m in FALLBACK_MODELS]
         print(f"Model IDs in fallback list: {model_ids}")
@@ -587,10 +587,10 @@ class TestFallbackModelsConfig:
     def test_fallback_models_use_dot_format(self):
         """
         What it does: Verifies that model IDs use dot format (e.g., claude-4.5).
-        Purpose: Ensure consistency with Kiro API format.
+        Purpose: Ensure consistency with Trae API format.
         """
         print("Setup: Importing FALLBACK_MODELS...")
-        from kiro.config import FALLBACK_MODELS
+        from trae.config import FALLBACK_MODELS
         
         print("Action: Checking model ID format...")
         for model in FALLBACK_MODELS:
@@ -617,9 +617,9 @@ class TestFallbackModelsIntegration:
                  works correctly with fallback models, just like with API models.
         """
         print("Setup: Importing FALLBACK_MODELS and creating cache...")
-        from kiro.config import FALLBACK_MODELS
-        from kiro.cache import ModelInfoCache
-        from kiro.model_resolver import ModelResolver
+        from trae.config import FALLBACK_MODELS
+        from trae.cache import ModelInfoCache
+        from trae.model_resolver import ModelResolver
         
         # Simulate DNS failure scenario - populate cache with fallback models
         cache = ModelInfoCache()
@@ -666,9 +666,9 @@ class TestFallbackModelsIntegration:
         Purpose: Ensure that /v1/models endpoint will show fallback models.
         """
         print("Setup: Importing FALLBACK_MODELS and creating cache...")
-        from kiro.config import FALLBACK_MODELS
-        from kiro.cache import ModelInfoCache
-        from kiro.model_resolver import ModelResolver
+        from trae.config import FALLBACK_MODELS
+        from trae.cache import ModelInfoCache
+        from trae.model_resolver import ModelResolver
         
         cache = ModelInfoCache()
         await cache.update(FALLBACK_MODELS)

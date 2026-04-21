@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
-# Kiro Gateway
-# https://github.com/jwadow/kiro-gateway
+# Trae Gateway
+# (Trae Gateway - based on Kiro Gateway)
 # Copyright (C) 2025 Jwadow
 #
 # This program is free software: you can redistribute it and/or modify
@@ -18,19 +18,19 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 """
-Kiro API error enhancement and user-friendly message formatting.
+Trae API error enhancement and user-friendly message formatting.
 
-This module provides a centralized system for enhancing cryptic Kiro API errors
+This module provides a centralized system for enhancing cryptic Trae API errors
 with clear, actionable, user-friendly messages.
 
 Architecture:
-- KiroErrorReason: Enum of known error reasons from Kiro API
-- KiroErrorInfo: Structured information about an enhanced error
-- enhance_kiro_error(): Analyzes error JSON and returns enhanced message
+- TraeErrorReason: Enum of known error reasons from Trae API
+- TraeErrorInfo: Structured information about an enhanced error
+- enhance_trae_error(): Analyzes error JSON and returns enhanced message
 
 Example:
     >>> error_json = {"message": "Input is too long.", "reason": "CONTENT_LENGTH_EXCEEDS_THRESHOLD"}
-    >>> error_info = enhance_kiro_error(error_json)
+    >>> error_info = enhance_trae_error(error_json)
     >>> print(error_info.user_message)
     "Model context limit reached. Conversation size exceeds model capacity."
 """
@@ -43,42 +43,42 @@ from loguru import logger
 
 
 @dataclass
-class KiroErrorInfo:
+class TraeErrorInfo:
     """
-    Structured information about a Kiro API error.
+    Structured information about a Trae API error.
     
     Contains both the enhanced user-friendly message and the original
     error details for logging and debugging.
     
     Attributes:
-        reason: Error reason code from Kiro API (as string, e.g. "CONTENT_LENGTH_EXCEEDS_THRESHOLD")
+        reason: Error reason code from Trae API (as string, e.g. "CONTENT_LENGTH_EXCEEDS_THRESHOLD")
         user_message: Enhanced, user-friendly message for end users
-        original_message: Original message from Kiro API (for logging)
+        original_message: Original message from Trae API (for logging)
     """
     reason: str
     user_message: str
     original_message: str
 
 
-def enhance_kiro_error(error_json: Dict[str, Any]) -> KiroErrorInfo:
+def enhance_trae_error(error_json: Dict[str, Any]) -> TraeErrorInfo:
     """
-    Enhances Kiro API error with user-friendly message.
+    Enhances Trae API error with user-friendly message.
     
-    Takes raw error JSON from Kiro API and returns structured information
+    Takes raw error JSON from Trae API and returns structured information
     with enhanced, user-friendly messages that help users understand what
     went wrong without technical jargon.
     
     Args:
-        error_json: Parsed JSON from Kiro API error response
+        error_json: Parsed JSON from Trae API error response
                    Expected format: {"message": "...", "reason": "..."}
                    The "reason" field is optional.
     
     Returns:
-        KiroErrorInfo with enhanced message and original details
+        TraeErrorInfo with enhanced message and original details
     
     Example:
         >>> error_json = {"message": "Input is too long.", "reason": "CONTENT_LENGTH_EXCEEDS_THRESHOLD"}
-        >>> error_info = enhance_kiro_error(error_json)
+        >>> error_info = enhance_trae_error(error_json)
         >>> print(error_info.user_message)
         "Model context limit reached. Conversation size exceeds model capacity."
         >>> print(error_info.original_message)
@@ -86,11 +86,11 @@ def enhance_kiro_error(error_json: Dict[str, Any]) -> KiroErrorInfo:
     
     Example (unknown error):
         >>> error_json = {"message": "Something went wrong.", "reason": "UNKNOWN_REASON"}
-        >>> error_info = enhance_kiro_error(error_json)
+        >>> error_info = enhance_trae_error(error_json)
         >>> print(error_info.user_message)
         "Something went wrong. (reason: UNKNOWN_REASON)"
     """
-    # Extract original message and reason from Kiro API response
+    # Extract original message and reason from Trae API response
     # Handle None values explicitly (preserve empty strings)
     original_message = error_json.get("message")
     if original_message is None:
@@ -123,7 +123,7 @@ def enhance_kiro_error(error_json: Dict[str, Any]) -> KiroErrorInfo:
         else:
             user_message = original_message
     
-    return KiroErrorInfo(
+    return TraeErrorInfo(
         reason=reason,
         user_message=user_message,
         original_message=original_message

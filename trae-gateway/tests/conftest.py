@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 """
-Common fixtures and utilities for testing Kiro Gateway.
+Common fixtures and utilities for testing Trae Gateway.
 
 Provides test isolation from external services and global state.
 All tests MUST be completely isolated from the network.
@@ -88,10 +88,10 @@ def valid_proxy_api_key():
     """
     Returns the actual PROXY_API_KEY that the application is using.
     
-    This reads the value from kiro.config, which was loaded when the app
+    This reads the value from trae.config, which was loaded when the app
     was imported. This ensures tests use the same key the app validates against.
     """
-    from kiro.config import PROXY_API_KEY
+    from trae.config import PROXY_API_KEY
     return PROXY_API_KEY
 
 
@@ -122,7 +122,7 @@ def auth_headers(valid_proxy_api_key):
 @pytest.fixture
 def mock_kiro_models_response():
     """
-    Mock successful response from Kiro API for ListAvailableModels.
+    Mock successful response from Trae API for ListAvailableModels.
     """
     return {
         "models": [
@@ -161,7 +161,7 @@ def mock_kiro_models_response():
 @pytest.fixture
 def mock_kiro_streaming_chunks():
     """
-    Returns a list of mock SSE chunks from Kiro API for streaming response.
+    Returns a list of mock SSE chunks from Trae API for streaming response.
     Covers: regular text, tool calls, usage.
     """
     return [
@@ -425,17 +425,17 @@ async def async_test_client(clean_app):
 
 
 # =============================================================================
-# KiroAuthManager Fixtures
+# TraeAuthManager Fixtures
 # =============================================================================
 
 @pytest.fixture
 def mock_auth_manager():
     """
-    Creates a mocked KiroAuthManager for tests.
+    Creates a mocked TraeAuthManager for tests.
     """
-    from kiro.auth import KiroAuthManager
+    from trae.auth import TraeAuthManager
     
-    manager = KiroAuthManager(
+    manager = TraeAuthManager(
         refresh_token="test_refresh_token",
         profile_arn="arn:aws:codewhisperer:us-east-1:123456789:profile/test",
         region="us-east-1"
@@ -453,11 +453,11 @@ def mock_auth_manager():
 @pytest.fixture
 def expired_auth_manager():
     """
-    Creates a KiroAuthManager with an expired token.
+    Creates a TraeAuthManager with an expired token.
     """
-    from kiro.auth import KiroAuthManager
+    from trae.auth import TraeAuthManager
     
-    manager = KiroAuthManager(
+    manager = TraeAuthManager(
         refresh_token="test_refresh_token",
         profile_arn="arn:aws:codewhisperer:us-east-1:123456789:profile/test",
         region="us-east-1"
@@ -514,7 +514,7 @@ def empty_model_cache():
     """
     Creates an empty ModelInfoCache.
     """
-    from kiro.cache import ModelInfoCache
+    from trae.cache import ModelInfoCache
     return ModelInfoCache()
 
 
@@ -523,7 +523,7 @@ async def populated_model_cache(mock_kiro_models_response):
     """
     Creates a ModelInfoCache with pre-populated data.
     """
-    from kiro.cache import ModelInfoCache
+    from trae.cache import ModelInfoCache
     
     cache = ModelInfoCache()
     await cache.update(mock_kiro_models_response["models"])
@@ -755,7 +755,7 @@ def aws_event_parser():
     """
     Creates an AwsEventStreamParser instance for tests.
     """
-    from kiro.parsers import AwsEventStreamParser
+    from trae.parsers import AwsEventStreamParser
     return AwsEventStreamParser()
 
 

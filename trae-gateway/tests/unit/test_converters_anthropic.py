@@ -15,7 +15,7 @@ Tests for Anthropic Messages API to Kiro format conversion:
 import pytest
 from unittest.mock import patch, MagicMock
 
-from kiro.converters_anthropic import (
+from trae.converters_anthropic import (
     convert_anthropic_content_to_text,
     extract_system_prompt,
     extract_tool_results_from_anthropic_content,
@@ -23,10 +23,10 @@ from kiro.converters_anthropic import (
     extract_tool_uses_from_anthropic_content,
     convert_anthropic_messages,
     convert_anthropic_tools,
-    anthropic_to_kiro,
+    anthropic_to_trae,
 )
-from kiro.converters_core import UnifiedMessage, UnifiedTool
-from kiro.models_anthropic import (
+from trae.converters_core import UnifiedMessage, UnifiedTool
+from trae.models_anthropic import (
     AnthropicMessagesRequest,
     AnthropicMessage,
     AnthropicTool,
@@ -1436,12 +1436,12 @@ class TestConvertAnthropicTools:
 
 
 # ==================================================================================================
-# Tests for anthropic_to_kiro
+# Tests for anthropic_to_trae
 # ==================================================================================================
 
 
 class TestAnthropicToKiro:
-    """Tests for anthropic_to_kiro function - main entry point."""
+    """Tests for anthropic_to_trae function - main entry point."""
 
     def test_builds_simple_payload(self):
         """
@@ -1457,11 +1457,11 @@ class TestAnthropicToKiro:
 
         print("Action: Converting to Kiro payload...")
         with patch(
-            "kiro.converters_anthropic.get_model_id_for_kiro",
+            "trae.converters_anthropic.get_model_id_for_trae",
             return_value="claude-sonnet-4.5",
         ):
-            with patch("kiro.converters_core.FAKE_REASONING_ENABLED", False):
-                result = anthropic_to_kiro(request, "conv-123", "arn:aws:test")
+            with patch("trae.converters_core.FAKE_REASONING_ENABLED", False):
+                result = anthropic_to_trae(request, "conv-123", "arn:aws:test")
 
         print(f"Result: {result}")
         assert "conversationState" in result
@@ -1485,11 +1485,11 @@ class TestAnthropicToKiro:
 
         print("Action: Converting to Kiro payload...")
         with patch(
-            "kiro.converters_anthropic.get_model_id_for_kiro",
+            "trae.converters_anthropic.get_model_id_for_trae",
             return_value="claude-sonnet-4.5",
         ):
-            with patch("kiro.converters_core.FAKE_REASONING_ENABLED", False):
-                result = anthropic_to_kiro(request, "conv-123", "arn:aws:test")
+            with patch("trae.converters_core.FAKE_REASONING_ENABLED", False):
+                result = anthropic_to_trae(request, "conv-123", "arn:aws:test")
 
         print(f"Result: {result}")
         current_content = result["conversationState"]["currentMessage"][
@@ -1522,11 +1522,11 @@ class TestAnthropicToKiro:
 
         print("Action: Converting to Kiro payload...")
         with patch(
-            "kiro.converters_anthropic.get_model_id_for_kiro",
+            "trae.converters_anthropic.get_model_id_for_trae",
             return_value="claude-sonnet-4.5",
         ):
-            with patch("kiro.converters_core.FAKE_REASONING_ENABLED", False):
-                result = anthropic_to_kiro(request, "conv-123", "arn:aws:test")
+            with patch("trae.converters_core.FAKE_REASONING_ENABLED", False):
+                result = anthropic_to_trae(request, "conv-123", "arn:aws:test")
 
         print(f"Result: {result}")
         context = result["conversationState"]["currentMessage"]["userInputMessage"].get(
@@ -1555,11 +1555,11 @@ class TestAnthropicToKiro:
 
         print("Action: Converting to Kiro payload...")
         with patch(
-            "kiro.converters_anthropic.get_model_id_for_kiro",
+            "trae.converters_anthropic.get_model_id_for_trae",
             return_value="claude-sonnet-4.5",
         ):
-            with patch("kiro.converters_core.FAKE_REASONING_ENABLED", False):
-                result = anthropic_to_kiro(request, "conv-123", "arn:aws:test")
+            with patch("trae.converters_core.FAKE_REASONING_ENABLED", False):
+                result = anthropic_to_trae(request, "conv-123", "arn:aws:test")
 
         print(f"Result: {result}")
         history = result["conversationState"].get("history", [])
@@ -1617,11 +1617,11 @@ class TestAnthropicToKiro:
 
         print("Action: Converting to Kiro payload...")
         with patch(
-            "kiro.converters_anthropic.get_model_id_for_kiro",
+            "trae.converters_anthropic.get_model_id_for_trae",
             return_value="claude-sonnet-4.5",
         ):
-            with patch("kiro.converters_core.FAKE_REASONING_ENABLED", False):
-                result = anthropic_to_kiro(request, "conv-123", "arn:aws:test")
+            with patch("trae.converters_core.FAKE_REASONING_ENABLED", False):
+                result = anthropic_to_trae(request, "conv-123", "arn:aws:test")
 
         print(f"Result: {result}")
 
@@ -1642,7 +1642,7 @@ class TestAnthropicToKiro:
         Purpose: Ensure Pydantic validation works correctly (min_length=1).
 
         Note: AnthropicMessagesRequest has min_length=1 validation on messages field,
-        so empty messages are rejected at the Pydantic level, not at anthropic_to_kiro.
+        so empty messages are rejected at the Pydantic level, not at anthropic_to_trae.
         """
         from pydantic import ValidationError
 
@@ -1672,12 +1672,12 @@ class TestAnthropicToKiro:
 
         print("Action: Converting to Kiro payload with fake reasoning...")
         with patch(
-            "kiro.converters_anthropic.get_model_id_for_kiro",
+            "trae.converters_anthropic.get_model_id_for_trae",
             return_value="claude-sonnet-4.5",
         ):
-            with patch("kiro.converters_core.FAKE_REASONING_ENABLED", True):
-                with patch("kiro.converters_core.FAKE_REASONING_MAX_TOKENS", 4000):
-                    result = anthropic_to_kiro(request, "conv-123", "arn:aws:test")
+            with patch("trae.converters_core.FAKE_REASONING_ENABLED", True):
+                with patch("trae.converters_core.FAKE_REASONING_MAX_TOKENS", 4000):
+                    result = anthropic_to_trae(request, "conv-123", "arn:aws:test")
 
         print(f"Result: {result}")
         current_content = result["conversationState"]["currentMessage"][
@@ -1722,12 +1722,12 @@ class TestAnthropicToKiro:
 
         print("Action: Converting to Kiro payload...")
         with patch(
-            "kiro.converters_anthropic.get_model_id_for_kiro",
+            "trae.converters_anthropic.get_model_id_for_trae",
             return_value="claude-sonnet-4.5",
         ):
-            with patch("kiro.converters_core.FAKE_REASONING_ENABLED", True):
-                with patch("kiro.converters_core.FAKE_REASONING_MAX_TOKENS", 4000):
-                    result = anthropic_to_kiro(request, "conv-123", "arn:aws:test")
+            with patch("trae.converters_core.FAKE_REASONING_ENABLED", True):
+                with patch("trae.converters_core.FAKE_REASONING_MAX_TOKENS", 4000):
+                    result = anthropic_to_trae(request, "conv-123", "arn:aws:test")
 
         print(f"Result: {result}")
         current_content = result["conversationState"]["currentMessage"][

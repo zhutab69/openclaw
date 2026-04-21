@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
-# Kiro Gateway
-# https://github.com/jwadow/kiro-gateway
+# Trae Gateway
+# (Trae Gateway - based on Kiro Gateway)
 # Copyright (C) 2025 Jwadow
 #
 # This program is free software: you can redistribute it and/or modify
@@ -18,7 +18,7 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 """
-Debug logging middleware for Kiro Gateway.
+Debug logging middleware for Trae Gateway.
 
 This middleware initializes debug logging BEFORE Pydantic validation,
 which allows capturing validation errors (422) in debug logs.
@@ -30,7 +30,7 @@ The middleware:
 4. Passes the request to the next handler
 
 Flush/discard operations are handled by:
-- Route handlers (for successful requests and Kiro API errors)
+- Route handlers (for successful requests and Trae API errors)
 - Exception handlers (for validation errors and other exceptions)
 """
 
@@ -39,7 +39,7 @@ from starlette.requests import Request
 from starlette.responses import Response
 from loguru import logger
 
-from kiro.config import DEBUG_MODE
+from trae.config import DEBUG_MODE
 
 
 # API endpoints that should have debug logging enabled
@@ -63,7 +63,7 @@ class DebugLoggerMiddleware(BaseHTTPMiddleware):
     Lifecycle:
     - prepare_new_request(): Called here (before validation)
     - log_request_body(): Called here (raw body from client)
-    - log_kiro_request_body(): Called in route handlers (transformed payload)
+    - log_trae_request_body(): Called in route handlers (transformed payload)
     - flush_on_error() / discard_buffers(): Called in routes or exception handlers
     """
     
@@ -88,7 +88,7 @@ class DebugLoggerMiddleware(BaseHTTPMiddleware):
         
         # Import here to avoid circular imports and allow graceful degradation
         try:
-            from kiro.debug_logger import debug_logger
+            from trae.debug_logger import debug_logger
         except ImportError:
             logger.warning("debug_logger not available, skipping debug logging")
             return await call_next(request)
@@ -108,7 +108,7 @@ class DebugLoggerMiddleware(BaseHTTPMiddleware):
         
         # Continue to validation and route handler
         # flush_on_error() or discard_buffers() will be called by:
-        # - Route handlers (for successful requests and Kiro API errors)
+        # - Route handlers (for successful requests and Trae API errors)
         # - validation_exception_handler (for 422 validation errors)
         # - Generic exception handlers (for other errors)
         response = await call_next(request)

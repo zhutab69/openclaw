@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
-# Kiro Gateway
-# https://github.com/jwadow/kiro-gateway
+# Trae Gateway
+# (Trae Gateway - based on Kiro Gateway)
 # Copyright (C) 2025 Jwadow
 #
 # This program is free software: you can redistribute it and/or modify
@@ -18,14 +18,14 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 """
-Streaming logic for converting Kiro stream to OpenAI format.
+Streaming logic for converting Trae stream to OpenAI format.
 
 Contains generators for:
 - Converting AWS SSE to OpenAI SSE
 - Forming streaming chunks
 - Processing tool calls in stream
 
-Uses streaming_core.py for parsing Kiro stream into unified KiroEvent objects.
+Uses streaming_core.py for parsing Trae stream into unified TraeEvent objects.
 """
 
 import json
@@ -36,52 +36,52 @@ import httpx
 from fastapi import HTTPException
 from loguru import logger
 
-from kiro.parsers import parse_bracket_tool_calls, deduplicate_tool_calls
-from kiro.utils import generate_completion_id
-from kiro.config import (
+from trae.parsers import parse_bracket_tool_calls, deduplicate_tool_calls
+from trae.utils import generate_completion_id
+from trae.config import (
     FIRST_TOKEN_TIMEOUT,
     FIRST_TOKEN_MAX_RETRIES,
     FAKE_REASONING_HANDLING,
 )
-from kiro.tokenizer import count_tokens, count_message_tokens, count_tools_tokens
+from trae.tokenizer import count_tokens, count_message_tokens, count_tools_tokens
 
 # Import from streaming_core - reuse shared parsing logic
-from kiro.streaming_core import (
-    parse_kiro_stream,
+from trae.streaming_core import (
+    parse_trae_stream,
     FirstTokenTimeoutError,
-    KiroEvent,
+    TraeEvent,
     calculate_tokens_from_context_usage,
     stream_with_first_token_retry as stream_with_first_token_retry_core,
 )
 
 if TYPE_CHECKING:
-    from kiro.auth import KiroAuthManager
-    from kiro.cache import ModelInfoCache
+    from trae.auth import TraeAuthManager
+    from trae.cache import ModelInfoCache
 
 # Import debug_logger for logging
 try:
-    from kiro.debug_logger import debug_logger
+    from trae.debug_logger import debug_logger
 except ImportError:
     debug_logger = None
 
 
 # Re-export FirstTokenTimeoutError for backward compatibility
-__all__ = ['FirstTokenTimeoutError', 'stream_kiro_to_openai', 'stream_with_first_token_retry', 'collect_stream_response']
+__all__ = ['FirstTokenTimeoutError', 'stream_trae_to_openai', 'stream_with_first_token_retry', 'collect_stream_response']
 
 
-async def stream_kiro_to_openai_internal(
+async def stream_trae_to_openai_internal(
     client: httpx.AsyncClient,
     response: httpx.Response,
     model: str,
     model_cache: "ModelInfoCache",
-    auth_manager: "KiroAuthManager",
+    auth_manager: "TraeAuthManager",
     first_token_timeout: float = FIRST_TOKEN_TIMEOUT,
     request_messages: Optional[list] = None,
     request_tools: Optional[list] = None,
     conversation_id: Optional[str] = None
 ) -> AsyncGenerator[str, None]:
     """
-    Internal generator for converting Kiro stream to OpenAI format.
+    Internal generator for converting Trae stream to OpenAI format.
     
     Parses AWS SSE stream and converts events to OpenAI chat.completion.chunk.
     Supports tool calls and usage calculation.
@@ -108,7 +108,7 @@ async def stream_kiro_to_openai_internal(
         FirstTokenTimeoutError: If first token not received within timeout
     
     Example:
-        >>> async for chunk in stream_kiro_to_openai_internal(client, response, "claude-sonnet-4", cache, auth):
+        >>> async for chunk in stream_trae_to_openai_internal(client, response, "claude-sonnet-4", cache, auth):
         ...     print(chunk)
         data: {"id":"chatcmpl-...","object":"chat.completion.chunk",...}
         
@@ -127,9 +127,9 @@ async def stream_kiro_to_openai_internal(
     tool_calls_from_stream = []
     
     try:
-        # Use streaming_core.parse_kiro_stream for unified event parsing
+        # Use streaming_core.parse_trae_stream for unified event parsing
         # This handles AWS SSE parsing, first token timeout, and thinking parser
-        async for event in parse_kiro_stream(response, first_token_timeout):
+        async for event in parse_trae_stream(response, first_token_timeout):
             if event.type == "content" and event.content:
                 # Accumulate content for bracket tool call detection
                 full_content += event.content
@@ -212,9 +212,9 @@ async def stream_kiro_to_openai_internal(
         )
         
         if content_was_truncated:
-            from kiro.config import TRUNCATION_RECOVERY
+            from trae.config import TRUNCATION_RECOVERY
             logger.error(
-                f"Content truncated by Kiro API: stream ended without completion signals, "
+                f"Content truncated by Trae API: stream ended without completion signals, "
                 f"length={len(full_content)} chars. "
                 f"{'Model will be notified automatically about truncation.' if TRUNCATION_RECOVERY else 'Set TRUNCATION_RECOVERY=true in .env to auto-notify model about truncation.'}"
             )
@@ -225,13 +225,13 @@ async def stream_kiro_to_openai_internal(
         # Count completion_tokens (output) using tiktoken
         completion_tokens = count_tokens(full_content + full_thinking_content)
         
-        # Calculate total_tokens based on context_usage_percentage from Kiro API
+        # Calculate total_tokens based on context_usage_percentage from Trae API
         # context_usage shows TOTAL percentage of context usage (input + output)
         prompt_tokens, total_tokens, prompt_source, total_source = calculate_tokens_from_context_usage(
             context_usage_percentage, completion_tokens, model_cache, model
         )
         
-        # Fallback: Kiro API didn't return context_usage, use tiktoken
+        # Fallback: Trae API didn't return context_usage, use tiktoken
         # Count prompt_tokens from original messages
         # IMPORTANT: Don't apply correction coefficient for prompt_tokens,
         # as it was calibrated for completion_tokens
@@ -284,8 +284,8 @@ async def stream_kiro_to_openai_internal(
             yield f"data: {json.dumps(tool_calls_chunk, ensure_ascii=False)}\n\n"
         
         # Save truncation info for recovery (tracked by stable identifiers)
-        from kiro.truncation_recovery import should_inject_recovery
-        from kiro.truncation_state import save_tool_truncation, save_content_truncation
+        from trae.truncation_recovery import should_inject_recovery
+        from trae.truncation_state import save_tool_truncation, save_content_truncation
         
         if should_inject_recovery():
             # Save tool truncations (tracked by tool_call_id)
@@ -368,19 +368,19 @@ async def stream_kiro_to_openai_internal(
             logger.debug("Streaming completed successfully")
 
 
-async def stream_kiro_to_openai(
+async def stream_trae_to_openai(
     client: httpx.AsyncClient,
     response: httpx.Response,
     model: str,
     model_cache: "ModelInfoCache",
-    auth_manager: "KiroAuthManager",
+    auth_manager: "TraeAuthManager",
     request_messages: Optional[list] = None,
     request_tools: Optional[list] = None
 ) -> AsyncGenerator[str, None]:
     """
-    Generator for converting Kiro stream to OpenAI format.
+    Generator for converting Trae stream to OpenAI format.
     
-    This is a wrapper over stream_kiro_to_openai_internal that does NOT retry.
+    This is a wrapper over stream_trae_to_openai_internal that does NOT retry.
     Retry logic is implemented in stream_with_first_token_retry.
     
     Args:
@@ -395,7 +395,7 @@ async def stream_kiro_to_openai(
     Yields:
         Strings in SSE format: "data: {...}\\n\\n" or "data: [DONE]\\n\\n"
     """
-    async for chunk in stream_kiro_to_openai_internal(
+    async for chunk in stream_trae_to_openai_internal(
         client, response, model, model_cache, auth_manager,
         request_messages=request_messages,
         request_tools=request_tools
@@ -408,7 +408,7 @@ async def stream_with_first_token_retry(
     client: httpx.AsyncClient,
     model: str,
     model_cache: "ModelInfoCache",
-    auth_manager: "KiroAuthManager",
+    auth_manager: "TraeAuthManager",
     max_retries: int = FIRST_TOKEN_MAX_RETRIES,
     first_token_timeout: float = FIRST_TOKEN_TIMEOUT,
     request_messages: Optional[list] = None,
@@ -464,7 +464,7 @@ async def stream_with_first_token_retry(
     
     async def stream_processor(response: httpx.Response) -> AsyncGenerator[str, None]:
         """Process response and yield OpenAI SSE chunks."""
-        async for chunk in stream_kiro_to_openai_internal(
+        async for chunk in stream_trae_to_openai_internal(
             client,
             response,
             model,
@@ -492,7 +492,7 @@ async def collect_stream_response(
     response: httpx.Response,
     model: str,
     model_cache: "ModelInfoCache",
-    auth_manager: "KiroAuthManager",
+    auth_manager: "TraeAuthManager",
     request_messages: Optional[list] = None,
     request_tools: Optional[list] = None
 ) -> dict:
@@ -520,7 +520,7 @@ async def collect_stream_response(
     tool_calls = []
     completion_id = generate_completion_id()
     
-    async for chunk_str in stream_kiro_to_openai(
+    async for chunk_str in stream_trae_to_openai(
         client,
         response,
         model,

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
-# Kiro Gateway
-# https://github.com/jwadow/kiro-gateway
+# Trae Gateway
+# (Trae Gateway - based on Kiro Gateway)
 # Copyright (C) 2025 Jwadow
 #
 # This program is free software: you can redistribute it and/or modify
@@ -18,7 +18,7 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 """
-Converters for transforming OpenAI format to Kiro format.
+Converters for transforming OpenAI format to Trae format.
 
 This module is an adapter layer that converts OpenAI-specific formats
 to the unified format used by converters_core.py.
@@ -26,24 +26,24 @@ to the unified format used by converters_core.py.
 Contains functions for:
 - Converting OpenAI messages to unified format
 - Converting OpenAI tools to unified format
-- Building Kiro payload from OpenAI requests
+- Building Trae payload from OpenAI requests
 """
 
 from typing import Any, Dict, List, Optional, Tuple
 
 from loguru import logger
 
-from kiro.config import HIDDEN_MODELS
-from kiro.model_resolver import get_model_id_for_kiro
-from kiro.models_openai import ChatMessage, ChatCompletionRequest, Tool
+from trae.config import HIDDEN_MODELS
+from trae.model_resolver import get_model_id_for_trae
+from trae.models_openai import ChatMessage, ChatCompletionRequest, Tool
 
 # Import from core - reuse shared logic
-from kiro.converters_core import (
+from trae.converters_core import (
     extract_text_content,
     extract_images_from_content,
     UnifiedMessage,
     UnifiedTool,
-    build_kiro_payload as core_build_kiro_payload,
+    build_trae_payload as core_build_trae_payload,
 )
 
 
@@ -296,16 +296,16 @@ def convert_openai_tools_to_unified(tools: Optional[List[Tool]]) -> Optional[Lis
 # Main Entry Point
 # ==================================================================================================
 
-def build_kiro_payload(
+def build_trae_payload(
     request_data: ChatCompletionRequest,
     conversation_id: str,
     profile_arn: str
 ) -> dict:
     """
-    Builds complete payload for Kiro API from OpenAI request.
+    Builds complete payload for Trae API from OpenAI request.
     
-    This is the main entry point for OpenAI → Kiro conversion.
-    Uses the core build_kiro_payload function with OpenAI-specific adapters.
+    This is the main entry point for OpenAI → Trae conversion.
+    Uses the core build_trae_payload function with OpenAI-specific adapters.
     
     Args:
         request_data: Request in OpenAI format
@@ -313,7 +313,7 @@ def build_kiro_payload(
         profile_arn: AWS CodeWhisperer profile ARN
     
     Returns:
-        Payload dictionary for POST request to Kiro API
+        Payload dictionary for POST request to Trae API
     
     Raises:
         ValueError: If there are no messages to send
@@ -324,9 +324,9 @@ def build_kiro_payload(
     # Convert tools to unified format
     unified_tools = convert_openai_tools_to_unified(request_data.tools)
     
-    # Get model ID for Kiro API (normalizes + resolves hidden models)
-    # Pass-through principle: we normalize and send to Kiro, Kiro decides if valid
-    model_id = get_model_id_for_kiro(request_data.model, HIDDEN_MODELS)
+    # Get model ID for Trae API (normalizes + resolves hidden models)
+    # Pass-through principle: we normalize and send to Trae, Trae decides if valid
+    model_id = get_model_id_for_trae(request_data.model, HIDDEN_MODELS)
     
     logger.debug(
         f"Converting OpenAI request: model={request_data.model} -> {model_id}, "
@@ -335,7 +335,7 @@ def build_kiro_payload(
     )
     
     # Use core function to build payload
-    result = core_build_kiro_payload(
+    result = core_build_trae_payload(
         messages=unified_messages,
         system_prompt=system_prompt,
         model_id=model_id,

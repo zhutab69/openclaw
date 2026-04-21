@@ -18,8 +18,8 @@ import json
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
-from kiro.routes_anthropic import verify_anthropic_api_key, router
-from kiro.config import PROXY_API_KEY
+from trae.routes_anthropic import verify_anthropic_api_key, router
+from trae.config import PROXY_API_KEY
 
 
 # =============================================================================
@@ -724,8 +724,8 @@ class TestMessagesOptionalParams:
         mock_response = MagicMock()
         mock_response.status_code = 200
         
-        with patch('kiro.routes_anthropic.stream_kiro_to_anthropic', mock_stream), \
-             patch('kiro.http_client.KiroHttpClient.request_with_retry', return_value=mock_response):
+        with patch('trae.routes_anthropic.stream_trae_to_anthropic', mock_stream), \
+             patch('trae.http_client.TraeHttpClient.request_with_retry', return_value=mock_response):
             response = test_client.post(
                 "/v1/messages",
                 headers={"x-api-key": valid_proxy_api_key},
@@ -995,10 +995,10 @@ class TestAnthropicHTTPClientSelection:
     requests use shared client for connection pooling.
     """
     
-    @patch('kiro.routes_anthropic.KiroHttpClient')
+    @patch('trae.routes_anthropic.TraeHttpClient')
     def test_streaming_uses_per_request_client(
         self,
-        mock_kiro_http_client_class,
+        mock_trae_http_client_class,
         test_client,
         valid_proxy_api_key
     ):
@@ -1014,7 +1014,7 @@ class TestAnthropicHTTPClientSelection:
             side_effect=Exception("Network blocked")
         )
         mock_client_instance.close = AsyncMock()
-        mock_kiro_http_client_class.return_value = mock_client_instance
+        mock_trae_http_client_class.return_value = mock_client_instance
         
         print("Action: POST /v1/messages with stream=true...")
         try:
@@ -1031,18 +1031,18 @@ class TestAnthropicHTTPClientSelection:
         except Exception:
             pass
         
-        print("Checking: KiroHttpClient(shared_client=None)...")
-        assert mock_kiro_http_client_class.called
-        call_args = mock_kiro_http_client_class.call_args
+        print("Checking: TraeHttpClient(shared_client=None)...")
+        assert mock_trae_http_client_class.called
+        call_args = mock_trae_http_client_class.call_args
         print(f"Call args: {call_args}")
         assert call_args[1]['shared_client'] is None, \
             "Streaming should use per-request client"
         print("✅ Anthropic streaming correctly uses per-request client")
     
-    @patch('kiro.routes_anthropic.KiroHttpClient')
+    @patch('trae.routes_anthropic.TraeHttpClient')
     def test_non_streaming_uses_shared_client(
         self,
-        mock_kiro_http_client_class,
+        mock_trae_http_client_class,
         test_client,
         valid_proxy_api_key
     ):
@@ -1058,7 +1058,7 @@ class TestAnthropicHTTPClientSelection:
             side_effect=Exception("Network blocked")
         )
         mock_client_instance.close = AsyncMock()
-        mock_kiro_http_client_class.return_value = mock_client_instance
+        mock_trae_http_client_class.return_value = mock_client_instance
         
         print("Action: POST /v1/messages with stream=false...")
         try:
@@ -1075,9 +1075,9 @@ class TestAnthropicHTTPClientSelection:
         except Exception:
             pass
         
-        print("Checking: KiroHttpClient(shared_client=app.state.http_client)...")
-        assert mock_kiro_http_client_class.called
-        call_args = mock_kiro_http_client_class.call_args
+        print("Checking: TraeHttpClient(shared_client=app.state.http_client)...")
+        assert mock_trae_http_client_class.called
+        call_args = mock_trae_http_client_class.call_args
         print(f"Call args: {call_args}")
         assert call_args[1]['shared_client'] is not None, \
             "Non-streaming should use shared client"
@@ -1110,8 +1110,8 @@ class TestTruncationRecoveryMessageModification:
         Purpose: Ensure truncation notice is prepended to tool_result.
         """
         print("Setup: Saving truncation info to cache...")
-        from kiro.truncation_state import save_tool_truncation
-        from kiro.models_anthropic import AnthropicMessage
+        from trae.truncation_state import save_tool_truncation
+        from trae.models_anthropic import AnthropicMessage
         
         tool_use_id = "tooluse_test_dict"
         save_tool_truncation(tool_use_id, "write_to_file", {"size_bytes": 5000, "reason": "test"})
@@ -1127,8 +1127,8 @@ class TestTruncationRecoveryMessageModification:
         ]
         
         print("Action: Processing messages through truncation recovery logic...")
-        from kiro.truncation_recovery import should_inject_recovery, generate_truncation_tool_result
-        from kiro.truncation_state import get_tool_truncation
+        from trae.truncation_recovery import should_inject_recovery, generate_truncation_tool_result
+        from trae.truncation_state import get_tool_truncation
         
         modified_messages = []
         for msg in messages:
@@ -1187,8 +1187,8 @@ class TestTruncationRecoveryMessageModification:
         Purpose: Ensure truncation notice works with Pydantic ToolResultContentBlock.
         """
         print("Setup: Saving truncation info to cache...")
-        from kiro.truncation_state import save_tool_truncation
-        from kiro.models_anthropic import AnthropicMessage, ToolResultContentBlock
+        from trae.truncation_state import save_tool_truncation
+        from trae.models_anthropic import AnthropicMessage, ToolResultContentBlock
         
         tool_use_id = "tooluse_test_pydantic"
         save_tool_truncation(tool_use_id, "write_to_file", {"size_bytes": 5000, "reason": "test"})
@@ -1205,8 +1205,8 @@ class TestTruncationRecoveryMessageModification:
         ]
         
         print("Action: Processing messages through truncation recovery logic...")
-        from kiro.truncation_recovery import should_inject_recovery, generate_truncation_tool_result
-        from kiro.truncation_state import get_tool_truncation
+        from trae.truncation_recovery import should_inject_recovery, generate_truncation_tool_result
+        from trae.truncation_state import get_tool_truncation
         
         modified_messages = []
         for msg in messages:
@@ -1265,8 +1265,8 @@ class TestTruncationRecoveryMessageModification:
         Purpose: Ensure selective modification of content blocks.
         """
         print("Setup: Saving truncation info to cache...")
-        from kiro.truncation_state import save_tool_truncation
-        from kiro.models_anthropic import AnthropicMessage
+        from trae.truncation_state import save_tool_truncation
+        from trae.models_anthropic import AnthropicMessage
         
         tool_use_id = "tooluse_test_mixed"
         save_tool_truncation(tool_use_id, "write_to_file", {"size_bytes": 5000, "reason": "test"})
@@ -1283,8 +1283,8 @@ class TestTruncationRecoveryMessageModification:
         ]
         
         print("Action: Processing messages through truncation recovery logic...")
-        from kiro.truncation_recovery import should_inject_recovery, generate_truncation_tool_result
-        from kiro.truncation_state import get_tool_truncation
+        from trae.truncation_recovery import should_inject_recovery, generate_truncation_tool_result
+        from trae.truncation_state import get_tool_truncation
         
         modified_messages = []
         for msg in messages:
@@ -1348,7 +1348,7 @@ class TestTruncationRecoveryMessageModification:
         Purpose: Ensure normal messages pass through unchanged.
         """
         print("Setup: Creating request without truncation info in cache...")
-        from kiro.models_anthropic import AnthropicMessage
+        from trae.models_anthropic import AnthropicMessage
         
         messages = [
             AnthropicMessage(
@@ -1360,8 +1360,8 @@ class TestTruncationRecoveryMessageModification:
         ]
         
         print("Action: Processing messages...")
-        from kiro.truncation_recovery import should_inject_recovery
-        from kiro.truncation_state import get_tool_truncation
+        from trae.truncation_recovery import should_inject_recovery
+        from trae.truncation_state import get_tool_truncation
         
         modified_messages = []
         tool_results_modified = 0
@@ -1405,8 +1405,8 @@ class TestTruncationRecoveryMessageModification:
         Purpose: Ensure Pydantic immutability is respected.
         """
         print("Setup: Saving truncation info and creating message...")
-        from kiro.truncation_state import save_tool_truncation
-        from kiro.models_anthropic import AnthropicMessage
+        from trae.truncation_state import save_tool_truncation
+        from trae.models_anthropic import AnthropicMessage
         
         tool_use_id = "test_immutable_anthropic"
         save_tool_truncation(tool_use_id, "tool", {"size_bytes": 1000, "reason": "test truncation"})
@@ -1420,8 +1420,8 @@ class TestTruncationRecoveryMessageModification:
         original_content = self._get_block_value(original_msg.content[0], "content")
         
         print("Action: Processing message...")
-        from kiro.truncation_recovery import should_inject_recovery, generate_truncation_tool_result
-        from kiro.truncation_state import get_tool_truncation
+        from trae.truncation_recovery import should_inject_recovery, generate_truncation_tool_result
+        from trae.truncation_state import get_tool_truncation
         
         if original_msg.role == "user" and original_msg.content and isinstance(original_msg.content, list):
             modified_content_blocks = []
@@ -1495,8 +1495,8 @@ class TestContentTruncationRecovery:
         Purpose: Ensure content truncation recovery works for Anthropic API (Test Case C.2).
         """
         print("Setup: Saving content truncation info...")
-        from kiro.truncation_state import save_content_truncation
-        from kiro.models_anthropic import AnthropicMessage
+        from trae.truncation_state import save_content_truncation
+        from trae.models_anthropic import AnthropicMessage
         
         # For Anthropic, content can be string or list of blocks
         truncated_content_text = "This is a very long response that was cut off mid-sentence"
@@ -1508,8 +1508,8 @@ class TestContentTruncationRecovery:
         ]
         
         print("Action: Processing messages through content truncation recovery...")
-        from kiro.truncation_recovery import should_inject_recovery, generate_truncation_user_message
-        from kiro.truncation_state import get_content_truncation
+        from trae.truncation_recovery import should_inject_recovery, generate_truncation_user_message
+        from trae.truncation_state import get_content_truncation
         
         modified_messages = []
         for msg in messages:
@@ -1556,14 +1556,14 @@ class TestContentTruncationRecovery:
         Purpose: Ensure false positives don't occur.
         """
         print("Setup: Creating normal assistant message (no truncation)...")
-        from kiro.models_anthropic import AnthropicMessage
+        from trae.models_anthropic import AnthropicMessage
         
         messages = [
             AnthropicMessage(role="assistant", content=[{"type": "text", "text": "This is a complete response."}])
         ]
         
         print("Action: Processing messages...")
-        from kiro.truncation_state import get_content_truncation
+        from trae.truncation_state import get_content_truncation
         
         modified_messages = []
         for msg in messages:

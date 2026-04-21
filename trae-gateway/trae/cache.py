@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
-# Kiro Gateway
-# https://github.com/jwadow/kiro-gateway
+# Trae Gateway
+# (Trae Gateway - based on Kiro Gateway)
 # Copyright (C) 2025 Jwadow
 #
 # This program is free software: you can redistribute it and/or modify
@@ -18,7 +18,7 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 """
-Model metadata cache for Kiro Gateway.
+Model metadata cache for Trae Gateway.
 
 Thread-safe storage for available model information
 with TTL and lazy loading support.
@@ -30,7 +30,7 @@ from typing import Any, Dict, List, Optional
 
 from loguru import logger
 
-from kiro.config import MODEL_CACHE_TTL, DEFAULT_MAX_INPUT_TOKENS
+from trae.config import MODEL_CACHE_TTL, DEFAULT_MAX_INPUT_TOKENS
 
 
 class ModelInfoCache:
@@ -107,13 +107,13 @@ class ModelInfoCache:
         """
         Add a hidden model to the cache.
         
-        Hidden models are not returned by Kiro /ListAvailableModels API
+        Hidden models are not returned by Trae /ListAvailableModels API
         but are still functional. They are added to the cache so they
         appear in our /v1/models endpoint.
         
         Args:
             display_name: Model name to display (e.g., "claude-3.7-sonnet")
-            internal_id: Internal Kiro ID (e.g., "CLAUDE_3_7_SONNET_20250219_V1_0")
+            internal_id: Internal Trae ID (e.g., "CLAUDE_3_7_SONNET_20250219_V1_0")
         """
         if display_name not in self._cache:
             self._cache[display_name] = {

@@ -15,7 +15,7 @@ Comprehensive tests for all OpenAI-compatible API models:
 import pytest
 from pydantic import ValidationError
 
-from kiro.models_openai import (
+from trae.models_openai import (
     # Model listing
     OpenAIModel,
     ModelList,

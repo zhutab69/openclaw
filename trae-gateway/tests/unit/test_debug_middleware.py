@@ -22,8 +22,8 @@ class TestDebugLoggerMiddlewareEndpointFiltering:
         """
         print("Setup: Creating mock request for /health...")
         
-        with patch('kiro.debug_middleware.DEBUG_MODE', 'all'):
-            from kiro.debug_middleware import DebugLoggerMiddleware
+        with patch('trae.debug_middleware.DEBUG_MODE', 'all'):
+            from trae.debug_middleware import DebugLoggerMiddleware
             
             middleware = DebugLoggerMiddleware(app=MagicMock())
             
@@ -36,7 +36,7 @@ class TestDebugLoggerMiddlewareEndpointFiltering:
             mock_call_next = AsyncMock(return_value=mock_response)
             
             # Mock debug_logger at the source module
-            with patch('kiro.debug_logger.debug_logger') as mock_logger:
+            with patch('trae.debug_logger.debug_logger') as mock_logger:
                 print("Action: Calling dispatch for /health...")
                 response = await middleware.dispatch(mock_request, mock_call_next)
                 
@@ -57,8 +57,8 @@ class TestDebugLoggerMiddlewareEndpointFiltering:
         """
         print("Setup: Creating mock request for /docs...")
         
-        with patch('kiro.debug_middleware.DEBUG_MODE', 'all'):
-            from kiro.debug_middleware import DebugLoggerMiddleware
+        with patch('trae.debug_middleware.DEBUG_MODE', 'all'):
+            from trae.debug_middleware import DebugLoggerMiddleware
             
             middleware = DebugLoggerMiddleware(app=MagicMock())
             
@@ -68,7 +68,7 @@ class TestDebugLoggerMiddlewareEndpointFiltering:
             mock_response = MagicMock(spec=Response)
             mock_call_next = AsyncMock(return_value=mock_response)
             
-            with patch('kiro.debug_logger.debug_logger') as mock_logger:
+            with patch('trae.debug_logger.debug_logger') as mock_logger:
                 print("Action: Calling dispatch for /docs...")
                 response = await middleware.dispatch(mock_request, mock_call_next)
                 
@@ -83,8 +83,8 @@ class TestDebugLoggerMiddlewareEndpointFiltering:
         """
         print("Setup: Creating mock request for /...")
         
-        with patch('kiro.debug_middleware.DEBUG_MODE', 'all'):
-            from kiro.debug_middleware import DebugLoggerMiddleware
+        with patch('trae.debug_middleware.DEBUG_MODE', 'all'):
+            from trae.debug_middleware import DebugLoggerMiddleware
             
             middleware = DebugLoggerMiddleware(app=MagicMock())
             
@@ -94,7 +94,7 @@ class TestDebugLoggerMiddlewareEndpointFiltering:
             mock_response = MagicMock(spec=Response)
             mock_call_next = AsyncMock(return_value=mock_response)
             
-            with patch('kiro.debug_logger.debug_logger') as mock_logger:
+            with patch('trae.debug_logger.debug_logger') as mock_logger:
                 print("Action: Calling dispatch for /...")
                 await middleware.dispatch(mock_request, mock_call_next)
                 
@@ -109,8 +109,8 @@ class TestDebugLoggerMiddlewareEndpointFiltering:
         """
         print("Setup: Creating mock request for /v1/chat/completions...")
         
-        with patch('kiro.debug_middleware.DEBUG_MODE', 'all'):
-            from kiro.debug_middleware import DebugLoggerMiddleware
+        with patch('trae.debug_middleware.DEBUG_MODE', 'all'):
+            from trae.debug_middleware import DebugLoggerMiddleware
             
             middleware = DebugLoggerMiddleware(app=MagicMock())
             
@@ -121,7 +121,7 @@ class TestDebugLoggerMiddlewareEndpointFiltering:
             mock_response = MagicMock(spec=Response)
             mock_call_next = AsyncMock(return_value=mock_response)
             
-            with patch('kiro.debug_logger.debug_logger') as mock_logger:
+            with patch('trae.debug_logger.debug_logger') as mock_logger:
                 print("Action: Calling dispatch for /v1/chat/completions...")
                 await middleware.dispatch(mock_request, mock_call_next)
                 
@@ -139,8 +139,8 @@ class TestDebugLoggerMiddlewareEndpointFiltering:
         """
         print("Setup: Creating mock request for /v1/messages...")
         
-        with patch('kiro.debug_middleware.DEBUG_MODE', 'all'):
-            from kiro.debug_middleware import DebugLoggerMiddleware
+        with patch('trae.debug_middleware.DEBUG_MODE', 'all'):
+            from trae.debug_middleware import DebugLoggerMiddleware
             
             middleware = DebugLoggerMiddleware(app=MagicMock())
             
@@ -151,7 +151,7 @@ class TestDebugLoggerMiddlewareEndpointFiltering:
             mock_response = MagicMock(spec=Response)
             mock_call_next = AsyncMock(return_value=mock_response)
             
-            with patch('kiro.debug_logger.debug_logger') as mock_logger:
+            with patch('trae.debug_logger.debug_logger') as mock_logger:
                 print("Action: Calling dispatch for /v1/messages...")
                 await middleware.dispatch(mock_request, mock_call_next)
                 
@@ -170,8 +170,8 @@ class TestDebugLoggerMiddlewareModeHandling:
         """
         print("Setup: DEBUG_MODE=off...")
         
-        with patch('kiro.debug_middleware.DEBUG_MODE', 'off'):
-            from kiro.debug_middleware import DebugLoggerMiddleware
+        with patch('trae.debug_middleware.DEBUG_MODE', 'off'):
+            from trae.debug_middleware import DebugLoggerMiddleware
             
             middleware = DebugLoggerMiddleware(app=MagicMock())
             
@@ -181,7 +181,7 @@ class TestDebugLoggerMiddlewareModeHandling:
             mock_response = MagicMock(spec=Response)
             mock_call_next = AsyncMock(return_value=mock_response)
             
-            with patch('kiro.debug_logger.debug_logger') as mock_logger:
+            with patch('trae.debug_logger.debug_logger') as mock_logger:
                 print("Action: Calling dispatch with DEBUG_MODE=off...")
                 response = await middleware.dispatch(mock_request, mock_call_next)
                 
@@ -199,8 +199,8 @@ class TestDebugLoggerMiddlewareModeHandling:
         """
         print("Setup: DEBUG_MODE=errors...")
         
-        with patch('kiro.debug_middleware.DEBUG_MODE', 'errors'):
-            from kiro.debug_middleware import DebugLoggerMiddleware
+        with patch('trae.debug_middleware.DEBUG_MODE', 'errors'):
+            from trae.debug_middleware import DebugLoggerMiddleware
             
             middleware = DebugLoggerMiddleware(app=MagicMock())
             
@@ -211,7 +211,7 @@ class TestDebugLoggerMiddlewareModeHandling:
             mock_response = MagicMock(spec=Response)
             mock_call_next = AsyncMock(return_value=mock_response)
             
-            with patch('kiro.debug_logger.debug_logger') as mock_logger:
+            with patch('trae.debug_logger.debug_logger') as mock_logger:
                 print("Action: Calling dispatch with DEBUG_MODE=errors...")
                 await middleware.dispatch(mock_request, mock_call_next)
                 
@@ -226,8 +226,8 @@ class TestDebugLoggerMiddlewareModeHandling:
         """
         print("Setup: DEBUG_MODE=all...")
         
-        with patch('kiro.debug_middleware.DEBUG_MODE', 'all'):
-            from kiro.debug_middleware import DebugLoggerMiddleware
+        with patch('trae.debug_middleware.DEBUG_MODE', 'all'):
+            from trae.debug_middleware import DebugLoggerMiddleware
             
             middleware = DebugLoggerMiddleware(app=MagicMock())
             
@@ -238,7 +238,7 @@ class TestDebugLoggerMiddlewareModeHandling:
             mock_response = MagicMock(spec=Response)
             mock_call_next = AsyncMock(return_value=mock_response)
             
-            with patch('kiro.debug_logger.debug_logger') as mock_logger:
+            with patch('trae.debug_logger.debug_logger') as mock_logger:
                 print("Action: Calling dispatch with DEBUG_MODE=all...")
                 await middleware.dispatch(mock_request, mock_call_next)
                 
@@ -257,8 +257,8 @@ class TestDebugLoggerMiddlewareErrorHandling:
         """
         print("Setup: Simulating body read error...")
         
-        with patch('kiro.debug_middleware.DEBUG_MODE', 'all'):
-            from kiro.debug_middleware import DebugLoggerMiddleware
+        with patch('trae.debug_middleware.DEBUG_MODE', 'all'):
+            from trae.debug_middleware import DebugLoggerMiddleware
             
             middleware = DebugLoggerMiddleware(app=MagicMock())
             
@@ -269,7 +269,7 @@ class TestDebugLoggerMiddlewareErrorHandling:
             mock_response = MagicMock(spec=Response)
             mock_call_next = AsyncMock(return_value=mock_response)
             
-            with patch('kiro.debug_logger.debug_logger') as mock_logger:
+            with patch('trae.debug_logger.debug_logger') as mock_logger:
                 print("Action: Calling dispatch with body read error...")
                 response = await middleware.dispatch(mock_request, mock_call_next)
                 
@@ -290,8 +290,8 @@ class TestDebugLoggerMiddlewareErrorHandling:
         """
         print("Setup: Creating request with empty body...")
         
-        with patch('kiro.debug_middleware.DEBUG_MODE', 'all'):
-            from kiro.debug_middleware import DebugLoggerMiddleware
+        with patch('trae.debug_middleware.DEBUG_MODE', 'all'):
+            from trae.debug_middleware import DebugLoggerMiddleware
             
             middleware = DebugLoggerMiddleware(app=MagicMock())
             
@@ -302,7 +302,7 @@ class TestDebugLoggerMiddlewareErrorHandling:
             mock_response = MagicMock(spec=Response)
             mock_call_next = AsyncMock(return_value=mock_response)
             
-            with patch('kiro.debug_logger.debug_logger') as mock_logger:
+            with patch('trae.debug_logger.debug_logger') as mock_logger:
                 print("Action: Calling dispatch with empty body...")
                 await middleware.dispatch(mock_request, mock_call_next)
                 
@@ -324,8 +324,8 @@ class TestDebugLoggerMiddlewareResponsePassthrough:
         """
         print("Setup: Creating mock response...")
         
-        with patch('kiro.debug_middleware.DEBUG_MODE', 'all'):
-            from kiro.debug_middleware import DebugLoggerMiddleware
+        with patch('trae.debug_middleware.DEBUG_MODE', 'all'):
+            from trae.debug_middleware import DebugLoggerMiddleware
             
             middleware = DebugLoggerMiddleware(app=MagicMock())
             
@@ -337,7 +337,7 @@ class TestDebugLoggerMiddlewareResponsePassthrough:
             expected_response.status_code = 200
             mock_call_next = AsyncMock(return_value=expected_response)
             
-            with patch('kiro.debug_logger.debug_logger'):
+            with patch('trae.debug_logger.debug_logger'):
                 print("Action: Calling dispatch...")
                 actual_response = await middleware.dispatch(mock_request, mock_call_next)
                 
@@ -355,7 +355,7 @@ class TestLoggedEndpointsConstant:
         Purpose: Ensure OpenAI endpoint is included in logging.
         """
         print("Checking LOGGED_ENDPOINTS...")
-        from kiro.debug_middleware import LOGGED_ENDPOINTS
+        from trae.debug_middleware import LOGGED_ENDPOINTS
         
         print(f"LOGGED_ENDPOINTS contents: {LOGGED_ENDPOINTS}")
         assert "/v1/chat/completions" in LOGGED_ENDPOINTS
@@ -366,7 +366,7 @@ class TestLoggedEndpointsConstant:
         Purpose: Ensure Anthropic endpoint is included in logging.
         """
         print("Checking LOGGED_ENDPOINTS...")
-        from kiro.debug_middleware import LOGGED_ENDPOINTS
+        from trae.debug_middleware import LOGGED_ENDPOINTS
         
         print(f"LOGGED_ENDPOINTS contents: {LOGGED_ENDPOINTS}")
         assert "/v1/messages" in LOGGED_ENDPOINTS
@@ -377,7 +377,7 @@ class TestLoggedEndpointsConstant:
         Purpose: Ensure the constant is immutable.
         """
         print("Checking LOGGED_ENDPOINTS type...")
-        from kiro.debug_middleware import LOGGED_ENDPOINTS
+        from trae.debug_middleware import LOGGED_ENDPOINTS
         
         print(f"LOGGED_ENDPOINTS type: {type(LOGGED_ENDPOINTS)}")
         assert isinstance(LOGGED_ENDPOINTS, frozenset)

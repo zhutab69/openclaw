@@ -5,10 +5,10 @@
 Unit tests for streaming_core module.
 
 Tests for:
-- KiroEvent dataclass
+- TraeEvent dataclass
 - StreamResult dataclass
 - FirstTokenTimeoutError exception
-- parse_kiro_stream() function
+- parse_trae_stream() function
 - collect_stream_to_result() function
 - calculate_tokens_from_context_usage() function
 """
@@ -18,11 +18,11 @@ import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 from dataclasses import asdict
 
-from kiro.streaming_core import (
-    KiroEvent,
+from trae.streaming_core import (
+    TraeEvent,
     StreamResult,
     FirstTokenTimeoutError,
-    parse_kiro_stream,
+    parse_trae_stream,
     collect_stream_to_result,
     calculate_tokens_from_context_usage,
     stream_with_first_token_retry,
@@ -61,19 +61,19 @@ def mock_parser():
 
 
 # ==================================================================================================
-# Tests for KiroEvent dataclass
+# Tests for TraeEvent dataclass
 # ==================================================================================================
 
-class TestKiroEvent:
-    """Tests for KiroEvent dataclass."""
+class TestTraeEvent:
+    """Tests for TraeEvent dataclass."""
     
     def test_creates_content_event(self):
         """
         What it does: Creates a content event with text.
-        Goal: Verify KiroEvent can represent content events.
+        Goal: Verify TraeEvent can represent content events.
         """
         print("Action: Creating content event...")
-        event = KiroEvent(type="content", content="Hello, world!")
+        event = TraeEvent(type="content", content="Hello, world!")
         
         print(f"Comparing type: Expected 'content', Got '{event.type}'")
         assert event.type == "content"
@@ -86,10 +86,10 @@ class TestKiroEvent:
     def test_creates_thinking_event(self):
         """
         What it does: Creates a thinking event with reasoning content.
-        Goal: Verify KiroEvent can represent thinking events.
+        Goal: Verify TraeEvent can represent thinking events.
         """
         print("Action: Creating thinking event...")
-        event = KiroEvent(
+        event = TraeEvent(
             type="thinking",
             thinking_content="Let me think...",
             is_first_thinking_chunk=True,
@@ -107,7 +107,7 @@ class TestKiroEvent:
     def test_creates_tool_use_event(self):
         """
         What it does: Creates a tool_use event with tool data.
-        Goal: Verify KiroEvent can represent tool use events.
+        Goal: Verify TraeEvent can represent tool use events.
         """
         print("Action: Creating tool_use event...")
         tool_data = {
@@ -115,7 +115,7 @@ class TestKiroEvent:
             "type": "function",
             "function": {"name": "get_weather", "arguments": '{"city": "Moscow"}'}
         }
-        event = KiroEvent(type="tool_use", tool_use=tool_data)
+        event = TraeEvent(type="tool_use", tool_use=tool_data)
         
         print(f"Comparing type: Expected 'tool_use', Got '{event.type}'")
         assert event.type == "tool_use"
@@ -126,11 +126,11 @@ class TestKiroEvent:
     def test_creates_usage_event(self):
         """
         What it does: Creates a usage event with metering data.
-        Goal: Verify KiroEvent can represent usage events.
+        Goal: Verify TraeEvent can represent usage events.
         """
         print("Action: Creating usage event...")
         usage_data = {"credits": 0.001}
-        event = KiroEvent(type="usage", usage=usage_data)
+        event = TraeEvent(type="usage", usage=usage_data)
         
         print(f"Comparing type: Expected 'usage', Got '{event.type}'")
         assert event.type == "usage"
@@ -141,10 +141,10 @@ class TestKiroEvent:
     def test_creates_context_usage_event(self):
         """
         What it does: Creates a context_usage event with percentage.
-        Goal: Verify KiroEvent can represent context usage events.
+        Goal: Verify TraeEvent can represent context usage events.
         """
         print("Action: Creating context_usage event...")
-        event = KiroEvent(type="context_usage", context_usage_percentage=5.5)
+        event = TraeEvent(type="context_usage", context_usage_percentage=5.5)
         
         print(f"Comparing type: Expected 'context_usage', Got '{event.type}'")
         assert event.type == "context_usage"
@@ -158,7 +158,7 @@ class TestKiroEvent:
         Goal: Ensure all optional fields default to None/False.
         """
         print("Action: Creating minimal event...")
-        event = KiroEvent(type="content")
+        event = TraeEvent(type="content")
         
         print("Checking default values...")
         assert event.content is None
@@ -305,11 +305,11 @@ class TestFirstTokenTimeoutError:
 
 
 # ==================================================================================================
-# Tests for parse_kiro_stream()
+# Tests for parse_trae_stream()
 # ==================================================================================================
 
 class TestParseKiroStream:
-    """Tests for parse_kiro_stream() function."""
+    """Tests for parse_trae_stream() function."""
     
     @pytest.mark.asyncio
     async def test_parses_content_events(self, mock_response, mock_parser):
@@ -331,9 +331,9 @@ class TestParseKiroStream:
         print("Action: Parsing stream...")
         events = []
         
-        with patch('kiro.streaming_core.AwsEventStreamParser', return_value=mock_parser):
-            with patch('kiro.streaming_core.FAKE_REASONING_ENABLED', False):
-                async for event in parse_kiro_stream(mock_response, first_token_timeout=30):
+        with patch('trae.streaming_core.AwsEventStreamParser', return_value=mock_parser):
+            with patch('trae.streaming_core.FAKE_REASONING_ENABLED', False):
+                async for event in parse_trae_stream(mock_response, first_token_timeout=30):
                     events.append(event)
         
         print(f"Received {len(events)} events")
@@ -364,9 +364,9 @@ class TestParseKiroStream:
         print("Action: Parsing stream...")
         events = []
         
-        with patch('kiro.streaming_core.AwsEventStreamParser', return_value=mock_parser):
-            with patch('kiro.streaming_core.FAKE_REASONING_ENABLED', False):
-                async for event in parse_kiro_stream(mock_response, first_token_timeout=30):
+        with patch('trae.streaming_core.AwsEventStreamParser', return_value=mock_parser):
+            with patch('trae.streaming_core.FAKE_REASONING_ENABLED', False):
+                async for event in parse_trae_stream(mock_response, first_token_timeout=30):
                     events.append(event)
         
         print(f"Received {len(events)} events")
@@ -395,9 +395,9 @@ class TestParseKiroStream:
         print("Action: Parsing stream...")
         events = []
         
-        with patch('kiro.streaming_core.AwsEventStreamParser', return_value=mock_parser):
-            with patch('kiro.streaming_core.FAKE_REASONING_ENABLED', False):
-                async for event in parse_kiro_stream(mock_response, first_token_timeout=30):
+        with patch('trae.streaming_core.AwsEventStreamParser', return_value=mock_parser):
+            with patch('trae.streaming_core.FAKE_REASONING_ENABLED', False):
+                async for event in parse_trae_stream(mock_response, first_token_timeout=30):
                     events.append(event)
         
         print(f"Received {len(events)} events")
@@ -427,9 +427,9 @@ class TestParseKiroStream:
         print("Action: Parsing stream...")
         events = []
         
-        with patch('kiro.streaming_core.AwsEventStreamParser', return_value=mock_parser):
-            with patch('kiro.streaming_core.FAKE_REASONING_ENABLED', False):
-                async for event in parse_kiro_stream(mock_response, first_token_timeout=30):
+        with patch('trae.streaming_core.AwsEventStreamParser', return_value=mock_parser):
+            with patch('trae.streaming_core.FAKE_REASONING_ENABLED', False):
+                async for event in parse_trae_stream(mock_response, first_token_timeout=30):
                     events.append(event)
         
         print(f"Received {len(events)} events")
@@ -457,9 +457,9 @@ class TestParseKiroStream:
         
         print("Action: Parsing stream with timeout...")
         
-        with patch('kiro.streaming_core.asyncio.wait_for', side_effect=mock_wait_for_timeout):
+        with patch('trae.streaming_core.asyncio.wait_for', side_effect=mock_wait_for_timeout):
             with pytest.raises(FirstTokenTimeoutError) as exc_info:
-                async for event in parse_kiro_stream(mock_response, first_token_timeout=30):
+                async for event in parse_trae_stream(mock_response, first_token_timeout=30):
                     pass
         
         print(f"Caught exception: {exc_info.value}")
@@ -487,8 +487,8 @@ class TestParseKiroStream:
         print("Action: Parsing empty stream...")
         events = []
         
-        with patch('kiro.streaming_core.asyncio.wait_for', side_effect=mock_wait_for_empty):
-            async for event in parse_kiro_stream(mock_response, first_token_timeout=30):
+        with patch('trae.streaming_core.asyncio.wait_for', side_effect=mock_wait_for_empty):
+            async for event in parse_trae_stream(mock_response, first_token_timeout=30):
                 events.append(event)
         
         print(f"Received {len(events)} events")
@@ -514,10 +514,10 @@ class TestParseKiroStream:
         events = []
         generator_exit_raised = False
         
-        with patch('kiro.streaming_core.AwsEventStreamParser', return_value=mock_parser):
-            with patch('kiro.streaming_core.FAKE_REASONING_ENABLED', False):
+        with patch('trae.streaming_core.AwsEventStreamParser', return_value=mock_parser):
+            with patch('trae.streaming_core.FAKE_REASONING_ENABLED', False):
                 try:
-                    async for event in parse_kiro_stream(mock_response, first_token_timeout=30):
+                    async for event in parse_trae_stream(mock_response, first_token_timeout=30):
                         events.append(event)
                 except GeneratorExit:
                     generator_exit_raised = True
@@ -538,7 +538,7 @@ class TestProcessChunk:
     async def test_processes_content_event(self, mock_parser):
         """
         What it does: Processes content event from chunk.
-        Goal: Verify content is converted to KiroEvent.
+        Goal: Verify content is converted to TraeEvent.
         """
         print("Setup: Mock parser with content event...")
         mock_parser.feed.return_value = [{"type": "content", "data": "Hello"}]
@@ -558,7 +558,7 @@ class TestProcessChunk:
     async def test_processes_usage_event(self, mock_parser):
         """
         What it does: Processes usage event from chunk.
-        Goal: Verify usage is converted to KiroEvent.
+        Goal: Verify usage is converted to TraeEvent.
         """
         print("Setup: Mock parser with usage event...")
         mock_parser.feed.return_value = [{"type": "usage", "data": {"credits": 0.001}}]
@@ -578,7 +578,7 @@ class TestProcessChunk:
     async def test_processes_context_usage_event(self, mock_parser):
         """
         What it does: Processes context_usage event from chunk.
-        Goal: Verify context usage is converted to KiroEvent.
+        Goal: Verify context usage is converted to TraeEvent.
         """
         print("Setup: Mock parser with context_usage event...")
         mock_parser.feed.return_value = [{"type": "context_usage", "data": 7.5}]
@@ -704,9 +704,9 @@ class TestCollectStreamToResult:
         
         print("Action: Collecting stream...")
         
-        with patch('kiro.streaming_core.AwsEventStreamParser', return_value=mock_parser):
-            with patch('kiro.streaming_core.FAKE_REASONING_ENABLED', False):
-                with patch('kiro.streaming_core.parse_bracket_tool_calls', return_value=[]):
+        with patch('trae.streaming_core.AwsEventStreamParser', return_value=mock_parser):
+            with patch('trae.streaming_core.FAKE_REASONING_ENABLED', False):
+                with patch('trae.streaming_core.parse_bracket_tool_calls', return_value=[]):
                     result = await collect_stream_to_result(mock_response, first_token_timeout=30)
         
         print(f"Collected content: '{result.content}'")
@@ -732,9 +732,9 @@ class TestCollectStreamToResult:
         
         print("Action: Collecting stream...")
         
-        with patch('kiro.streaming_core.AwsEventStreamParser', return_value=mock_parser):
-            with patch('kiro.streaming_core.FAKE_REASONING_ENABLED', False):
-                with patch('kiro.streaming_core.parse_bracket_tool_calls', return_value=[]):
+        with patch('trae.streaming_core.AwsEventStreamParser', return_value=mock_parser):
+            with patch('trae.streaming_core.FAKE_REASONING_ENABLED', False):
+                with patch('trae.streaming_core.parse_bracket_tool_calls', return_value=[]):
                     result = await collect_stream_to_result(mock_response, first_token_timeout=30)
         
         print(f"Collected tool calls: {len(result.tool_calls)}")
@@ -762,9 +762,9 @@ class TestCollectStreamToResult:
         
         print("Action: Collecting stream...")
         
-        with patch('kiro.streaming_core.AwsEventStreamParser', return_value=mock_parser):
-            with patch('kiro.streaming_core.FAKE_REASONING_ENABLED', False):
-                with patch('kiro.streaming_core.parse_bracket_tool_calls', return_value=[]):
+        with patch('trae.streaming_core.AwsEventStreamParser', return_value=mock_parser):
+            with patch('trae.streaming_core.FAKE_REASONING_ENABLED', False):
+                with patch('trae.streaming_core.parse_bracket_tool_calls', return_value=[]):
                     result = await collect_stream_to_result(mock_response, first_token_timeout=30)
         
         print(f"Collected usage: {result.usage}")
@@ -791,9 +791,9 @@ class TestCollectStreamToResult:
         
         print("Action: Collecting stream...")
         
-        with patch('kiro.streaming_core.AwsEventStreamParser', return_value=mock_parser):
-            with patch('kiro.streaming_core.FAKE_REASONING_ENABLED', False):
-                with patch('kiro.streaming_core.parse_bracket_tool_calls', return_value=[]):
+        with patch('trae.streaming_core.AwsEventStreamParser', return_value=mock_parser):
+            with patch('trae.streaming_core.FAKE_REASONING_ENABLED', False):
+                with patch('trae.streaming_core.parse_bracket_tool_calls', return_value=[]):
                     result = await collect_stream_to_result(mock_response, first_token_timeout=30)
         
         print(f"Collected context_usage_percentage: {result.context_usage_percentage}")
@@ -818,18 +818,18 @@ class TestCollectStreamToResult:
         
         # Create mock events that include thinking
         mock_events = [
-            KiroEvent(type="thinking", thinking_content="Let me think..."),
-            KiroEvent(type="content", content="Here is my answer")
+            TraeEvent(type="thinking", thinking_content="Let me think..."),
+            TraeEvent(type="content", content="Here is my answer")
         ]
         
-        async def mock_parse_kiro_stream(*args, **kwargs):
+        async def mock_parse_trae_stream(*args, **kwargs):
             for event in mock_events:
                 yield event
         
         print("Action: Collecting stream with thinking...")
         
-        with patch('kiro.streaming_core.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_core.parse_bracket_tool_calls', return_value=[]):
+        with patch('trae.streaming_core.parse_trae_stream', mock_parse_trae_stream):
+            with patch('trae.streaming_core.parse_bracket_tool_calls', return_value=[]):
                 result = await collect_stream_to_result(mock_response, first_token_timeout=30)
         
         print(f"Collected thinking_content: '{result.thinking_content}'")
@@ -862,10 +862,10 @@ class TestCollectStreamToResult:
         
         print("Action: Collecting stream with duplicates...")
         
-        with patch('kiro.streaming_core.AwsEventStreamParser', return_value=mock_parser):
-            with patch('kiro.streaming_core.FAKE_REASONING_ENABLED', False):
-                with patch('kiro.streaming_core.parse_bracket_tool_calls', return_value=bracket_tool_calls):
-                    with patch('kiro.streaming_core.deduplicate_tool_calls') as mock_dedup:
+        with patch('trae.streaming_core.AwsEventStreamParser', return_value=mock_parser):
+            with patch('trae.streaming_core.FAKE_REASONING_ENABLED', False):
+                with patch('trae.streaming_core.parse_bracket_tool_calls', return_value=bracket_tool_calls):
+                    with patch('trae.streaming_core.deduplicate_tool_calls') as mock_dedup:
                         mock_dedup.return_value = [
                             {"id": "call_1", "function": {"name": "func1", "arguments": "{}"}},
                             {"id": "call_2", "function": {"name": "func2", "arguments": "{}"}}
@@ -1063,9 +1063,9 @@ class TestThinkingParserIntegration:
         print("Action: Parsing stream with fake reasoning enabled...")
         events = []
         
-        with patch('kiro.streaming_core.AwsEventStreamParser', return_value=mock_parser):
-            with patch('kiro.streaming_core.FAKE_REASONING_ENABLED', True):
-                with patch('kiro.streaming_core.ThinkingParser') as mock_thinking_parser_class:
+        with patch('trae.streaming_core.AwsEventStreamParser', return_value=mock_parser):
+            with patch('trae.streaming_core.FAKE_REASONING_ENABLED', True):
+                with patch('trae.streaming_core.ThinkingParser') as mock_thinking_parser_class:
                     mock_thinking_parser = MagicMock()
                     mock_thinking_parser.feed.return_value = MagicMock(
                         thinking_content=None,
@@ -1082,7 +1082,7 @@ class TestThinkingParserIntegration:
                     mock_thinking_parser.found_thinking_block = False
                     mock_thinking_parser_class.return_value = mock_thinking_parser
                     
-                    async for event in parse_kiro_stream(mock_response, first_token_timeout=30):
+                    async for event in parse_trae_stream(mock_response, first_token_timeout=30):
                         events.append(event)
                     
                     # Verify ThinkingParser was instantiated
@@ -1108,10 +1108,10 @@ class TestThinkingParserIntegration:
         print("Action: Parsing stream with fake reasoning disabled...")
         events = []
         
-        with patch('kiro.streaming_core.AwsEventStreamParser', return_value=mock_parser):
-            with patch('kiro.streaming_core.FAKE_REASONING_ENABLED', False):
-                with patch('kiro.streaming_core.ThinkingParser') as mock_thinking_parser_class:
-                    async for event in parse_kiro_stream(mock_response, first_token_timeout=30):
+        with patch('trae.streaming_core.AwsEventStreamParser', return_value=mock_parser):
+            with patch('trae.streaming_core.FAKE_REASONING_ENABLED', False):
+                with patch('trae.streaming_core.ThinkingParser') as mock_thinking_parser_class:
+                    async for event in parse_trae_stream(mock_response, first_token_timeout=30):
                         events.append(event)
                     
                     # Verify ThinkingParser was NOT instantiated
@@ -1137,10 +1137,10 @@ class TestThinkingParserIntegration:
         print("Action: Parsing stream with thinking parser disabled via parameter...")
         events = []
         
-        with patch('kiro.streaming_core.AwsEventStreamParser', return_value=mock_parser):
-            with patch('kiro.streaming_core.FAKE_REASONING_ENABLED', True):
-                with patch('kiro.streaming_core.ThinkingParser') as mock_thinking_parser_class:
-                    async for event in parse_kiro_stream(
+        with patch('trae.streaming_core.AwsEventStreamParser', return_value=mock_parser):
+            with patch('trae.streaming_core.FAKE_REASONING_ENABLED', True):
+                with patch('trae.streaming_core.ThinkingParser') as mock_thinking_parser_class:
+                    async for event in parse_trae_stream(
                         mock_response,
                         first_token_timeout=30,
                         enable_thinking_parser=False
@@ -1178,9 +1178,9 @@ class TestStreamingCoreErrorHandling:
         
         print("Action: Parsing stream with timeout...")
         
-        with patch('kiro.streaming_core.asyncio.wait_for', side_effect=mock_wait_for_timeout):
+        with patch('trae.streaming_core.asyncio.wait_for', side_effect=mock_wait_for_timeout):
             with pytest.raises(FirstTokenTimeoutError):
-                async for event in parse_kiro_stream(mock_response, first_token_timeout=30):
+                async for event in parse_trae_stream(mock_response, first_token_timeout=30):
                     pass
         
         print("✓ FirstTokenTimeoutError propagated correctly")
@@ -1202,10 +1202,10 @@ class TestStreamingCoreErrorHandling:
         
         print("Action: Parsing stream with GeneratorExit...")
         
-        with patch('kiro.streaming_core.AwsEventStreamParser', return_value=mock_parser):
-            with patch('kiro.streaming_core.FAKE_REASONING_ENABLED', False):
+        with patch('trae.streaming_core.AwsEventStreamParser', return_value=mock_parser):
+            with patch('trae.streaming_core.FAKE_REASONING_ENABLED', False):
                 with pytest.raises(GeneratorExit):
-                    async for event in parse_kiro_stream(mock_response, first_token_timeout=30):
+                    async for event in parse_trae_stream(mock_response, first_token_timeout=30):
                         pass
         
         print("✓ GeneratorExit propagated correctly")
@@ -1227,10 +1227,10 @@ class TestStreamingCoreErrorHandling:
         
         print("Action: Parsing stream with RuntimeError...")
         
-        with patch('kiro.streaming_core.AwsEventStreamParser', return_value=mock_parser):
-            with patch('kiro.streaming_core.FAKE_REASONING_ENABLED', False):
+        with patch('trae.streaming_core.AwsEventStreamParser', return_value=mock_parser):
+            with patch('trae.streaming_core.FAKE_REASONING_ENABLED', False):
                 with pytest.raises(RuntimeError) as exc_info:
-                    async for event in parse_kiro_stream(mock_response, first_token_timeout=30):
+                    async for event in parse_trae_stream(mock_response, first_token_timeout=30):
                         pass
         
         print(f"Caught exception: {exc_info.value}")

@@ -15,25 +15,25 @@ import os
 import pytest
 from unittest.mock import patch
 
-from kiro.converters_core import (
+from trae.converters_core import (
     extract_text_content,
     extract_images_from_content,
-    convert_images_to_kiro_format,
+    convert_images_to_trae_format,
     merge_adjacent_messages,
     ensure_first_message_is_user,
     normalize_message_roles,
     ensure_alternating_roles,
     ensure_assistant_before_tool_results,
     strip_all_tool_content,
-    build_kiro_history,
-    build_kiro_payload,
+    build_trae_history,
+    build_trae_payload,
     process_tools_with_long_descriptions,
     inject_thinking_tags,
     extract_tool_results_from_content,
     extract_tool_uses_from_message,
     sanitize_json_schema,
-    convert_tools_to_kiro_format,
-    convert_tool_results_to_kiro_format,
+    convert_tools_to_trae_format,
+    convert_tool_results_to_trae_format,
     tool_calls_to_text,
     tool_results_to_text,
     UnifiedMessage,
@@ -178,7 +178,7 @@ class TestExtractTextContent:
         Pydantic TextContentBlock objects weren't being handled, causing MCP tool
         results to return "(empty result)" instead of actual data.
         """
-        from kiro.models_anthropic import TextContentBlock
+        from trae.models_anthropic import TextContentBlock
         
         print("Setup: Pydantic TextContentBlock...")
         content = [
@@ -197,7 +197,7 @@ class TestExtractTextContent:
         What it does: Verifies extraction from multiple Pydantic TextContentBlock objects.
         Purpose: Ensure multiple Pydantic models are concatenated correctly.
         """
-        from kiro.models_anthropic import TextContentBlock
+        from trae.models_anthropic import TextContentBlock
         
         print("Setup: Multiple Pydantic TextContentBlocks...")
         content = [
@@ -221,7 +221,7 @@ class TestExtractTextContent:
         This simulates real-world scenarios where some content is parsed as dict
         and some as Pydantic models.
         """
-        from kiro.models_anthropic import TextContentBlock
+        from trae.models_anthropic import TextContentBlock
         
         print("Setup: Mixed dict and Pydantic content...")
         content = [
@@ -242,7 +242,7 @@ class TestExtractTextContent:
         What it does: Verifies handling of Pydantic TextContentBlock with empty text.
         Purpose: Ensure empty text in Pydantic models doesn't cause errors.
         """
-        from kiro.models_anthropic import TextContentBlock
+        from trae.models_anthropic import TextContentBlock
         
         print("Setup: Pydantic TextContentBlock with empty text...")
         content = [
@@ -263,7 +263,7 @@ class TestExtractTextContent:
         
         This simulates MCP tool results that contain both text and tool_use blocks.
         """
-        from kiro.models_anthropic import TextContentBlock, ToolUseContentBlock
+        from trae.models_anthropic import TextContentBlock, ToolUseContentBlock
         
         print("Setup: Mixed Pydantic content with text and tool_use...")
         content = [
@@ -454,7 +454,7 @@ class TestExtractImagesFromContent:
         What it does: Verifies URL-based images are skipped with warning.
         Purpose: Ensure URL images don't crash but are logged as unsupported.
         
-        URL-based images require fetching and are not supported by Kiro API directly.
+        URL-based images require fetching and are not supported by Trae API directly.
         """
         print("Setup: URL-based image content...")
         content = [
@@ -538,7 +538,7 @@ class TestExtractImagesFromContent:
         This is the critical test for Issue #30 - the original bug was that
         Pydantic ImageContentBlock objects weren't being handled.
         """
-        from kiro.models_anthropic import ImageContentBlock, Base64ImageSource
+        from trae.models_anthropic import ImageContentBlock, Base64ImageSource
         
         print("Setup: Pydantic ImageContentBlock...")
         content = [
@@ -570,7 +570,7 @@ class TestExtractImagesFromContent:
         What it does: Verifies handling of Pydantic URLImageSource objects.
         Purpose: Ensure Pydantic URL sources are skipped with warning.
         """
-        from kiro.models_anthropic import ImageContentBlock, URLImageSource
+        from trae.models_anthropic import ImageContentBlock, URLImageSource
         
         print("Setup: Pydantic ImageContentBlock with URL source...")
         content = [
@@ -717,14 +717,14 @@ class TestExtractImagesFromContent:
 
 
 # ==================================================================================================
-# Tests for convert_images_to_kiro_format
+# Tests for convert_images_to_trae_format
 # ==================================================================================================
 
 class TestConvertImagesToKiroFormat:
     """
-    Tests for convert_images_to_kiro_format function.
+    Tests for convert_images_to_trae_format function.
     
-    This function converts unified images to Kiro API format.
+    This function converts unified images to Trae API format.
     
     Unified format: [{"media_type": "image/jpeg", "data": "base64..."}]
     Kiro format: [{"format": "jpeg", "source": {"bytes": "base64..."}}]
@@ -739,7 +739,7 @@ class TestConvertImagesToKiroFormat:
         images = [{"media_type": "image/jpeg", "data": TEST_IMAGE_BASE64}]
         
         print("Action: Converting to Kiro format...")
-        result = convert_images_to_kiro_format(images)
+        result = convert_images_to_trae_format(images)
         
         print(f"Result: {result}")
         print(f"Comparing count: Expected 1, Got {len(result)}")
@@ -764,7 +764,7 @@ class TestConvertImagesToKiroFormat:
         ]
         
         print("Action: Converting to Kiro format...")
-        result = convert_images_to_kiro_format(images)
+        result = convert_images_to_trae_format(images)
         
         print(f"Result: {result}")
         print(f"Comparing count: Expected 3, Got {len(result)}")
@@ -783,7 +783,7 @@ class TestConvertImagesToKiroFormat:
         print("Setup: None images...")
         
         print("Action: Converting to Kiro format...")
-        result = convert_images_to_kiro_format(None)
+        result = convert_images_to_trae_format(None)
         
         print(f"Comparing result: Expected [], Got {result}")
         assert result == []
@@ -796,7 +796,7 @@ class TestConvertImagesToKiroFormat:
         print("Setup: Empty images list...")
         
         print("Action: Converting to Kiro format...")
-        result = convert_images_to_kiro_format([])
+        result = convert_images_to_trae_format([])
         
         print(f"Comparing result: Expected [], Got {result}")
         assert result == []
@@ -813,7 +813,7 @@ class TestConvertImagesToKiroFormat:
         ]
         
         print("Action: Converting to Kiro format...")
-        result = convert_images_to_kiro_format(images)
+        result = convert_images_to_trae_format(images)
         
         print(f"Result: {result}")
         print(f"Comparing count: Expected 1, Got {len(result)}")
@@ -834,7 +834,7 @@ class TestConvertImagesToKiroFormat:
         ]
         
         print("Action: Converting to Kiro format...")
-        result = convert_images_to_kiro_format(images)
+        result = convert_images_to_trae_format(images)
         
         print(f"Result formats: {[r['format'] for r in result]}")
         assert result[0]["format"] == "jpeg"
@@ -851,7 +851,7 @@ class TestConvertImagesToKiroFormat:
         images = [{"media_type": "jpeg", "data": "data"}]
         
         print("Action: Converting to Kiro format...")
-        result = convert_images_to_kiro_format(images)
+        result = convert_images_to_trae_format(images)
         
         print(f"Result: {result}")
         assert len(result) == 1
@@ -866,7 +866,7 @@ class TestConvertImagesToKiroFormat:
         images = [{"data": "some_data"}]  # No media_type
         
         print("Action: Converting to Kiro format...")
-        result = convert_images_to_kiro_format(images)
+        result = convert_images_to_trae_format(images)
         
         print(f"Result: {result}")
         assert len(result) == 1
@@ -882,7 +882,7 @@ class TestConvertImagesToKiroFormat:
         images = [{"media_type": "image/png", "data": large_data}]
         
         print("Action: Converting to Kiro format...")
-        result = convert_images_to_kiro_format(images)
+        result = convert_images_to_trae_format(images)
         
         print(f"Result data length: {len(result[0]['source']['bytes'])}")
         assert len(result[0]["source"]["bytes"]) == 100000
@@ -894,17 +894,17 @@ class TestConvertImagesToKiroFormat:
     def test_strips_data_url_prefix_jpeg(self):
         """
         What it does: Verifies that data URL prefix is stripped from JPEG image data.
-        Purpose: Ensure Kiro API receives pure base64 without the data URL prefix (Issue #32 fix).
+        Purpose: Ensure Trae API receives pure base64 without the data URL prefix (Issue #32 fix).
         
         Some clients send the full data URL in the data field instead of pure base64.
-        Kiro API expects pure base64 without the "data:image/jpeg;base64," prefix.
+        Trae API expects pure base64 without the "data:image/jpeg;base64," prefix.
         """
         print("Setup: Image with data URL prefix (JPEG)...")
         pure_base64 = "/9j/4AAQSkZJRg=="  # Sample JPEG base64
         images = [{"media_type": "image/jpeg", "data": f"data:image/jpeg;base64,{pure_base64}"}]
         
         print("Action: Converting to Kiro format...")
-        result = convert_images_to_kiro_format(images)
+        result = convert_images_to_trae_format(images)
         
         print(f"Result: {result}")
         print(f"Comparing bytes: Expected '{pure_base64}', Got '{result[0]['source']['bytes']}'")
@@ -921,7 +921,7 @@ class TestConvertImagesToKiroFormat:
         images = [{"media_type": "image/png", "data": f"data:image/png;base64,{pure_base64}"}]
         
         print("Action: Converting to Kiro format...")
-        result = convert_images_to_kiro_format(images)
+        result = convert_images_to_trae_format(images)
         
         print(f"Result: {result}")
         print(f"Comparing bytes: Expected pure base64, Got '{result[0]['source']['bytes'][:50]}...'")
@@ -942,7 +942,7 @@ class TestConvertImagesToKiroFormat:
         images = [{"media_type": "image/jpeg", "data": f"data:image/gif;base64,{pure_base64}"}]
         
         print("Action: Converting to Kiro format...")
-        result = convert_images_to_kiro_format(images)
+        result = convert_images_to_trae_format(images)
         
         print(f"Result: {result}")
         print("Checking that media_type from data URL is used...")
@@ -962,7 +962,7 @@ class TestConvertImagesToKiroFormat:
         images = [{"media_type": "image/jpeg", "data": malformed_data}]
         
         print("Action: Converting to Kiro format (should handle gracefully)...")
-        result = convert_images_to_kiro_format(images)
+        result = convert_images_to_trae_format(images)
         
         print(f"Result: {result}")
         # The function should still produce output, using the malformed data as-is
@@ -984,7 +984,7 @@ class TestConvertImagesToKiroFormat:
         images = [{"media_type": "image/jpeg", "data": pure_base64}]
         
         print("Action: Converting to Kiro format...")
-        result = convert_images_to_kiro_format(images)
+        result = convert_images_to_trae_format(images)
         
         print(f"Result: {result}")
         print("Checking that pure base64 is preserved unchanged...")
@@ -1001,7 +1001,7 @@ class TestConvertImagesToKiroFormat:
         images = [{"media_type": "image/webp", "data": f"data:image/webp;base64,{pure_base64}"}]
         
         print("Action: Converting to Kiro format...")
-        result = convert_images_to_kiro_format(images)
+        result = convert_images_to_trae_format(images)
         
         print(f"Result: {result}")
         assert result[0]["source"]["bytes"] == pure_base64
@@ -1014,13 +1014,13 @@ class TestConvertImagesToKiroFormat:
         
         Note: The function strips the prefix but doesn't re-check for empty data after stripping.
         This means an image with "data:image/jpeg;base64," will result in empty bytes.
-        This is acceptable behavior as Kiro API will handle the validation.
+        This is acceptable behavior as Trae API will handle the validation.
         """
         print("Setup: Data URL with empty base64 part...")
         images = [{"media_type": "image/jpeg", "data": "data:image/jpeg;base64,"}]
         
         print("Action: Converting to Kiro format...")
-        result = convert_images_to_kiro_format(images)
+        result = convert_images_to_trae_format(images)
         
         print(f"Result: {result}")
         print("Checking that image is converted (with empty bytes)...")
@@ -1277,7 +1277,7 @@ class TestEnsureFirstMessageIsUser:
     """
     Tests for ensure_first_message_is_user function.
     
-    This function ensures that conversations start with a user message, as required by Kiro API.
+    This function ensures that conversations start with a user message, as required by Trae API.
     If the first message is from assistant (or any non-user role), a minimal synthetic user
     message is prepended. This fixes issue #60 where conversations starting with assistant
     messages cause "Improperly formed request" errors.
@@ -1468,7 +1468,7 @@ class TestNormalizeMessageRoles:
     Tests for normalize_message_roles function.
     
     This function converts all unknown roles (developer, system, moderator, etc.)
-    to 'user' role to maintain Kiro API compatibility. This is part of the fix
+    to 'user' role to maintain Trae API compatibility. This is part of the fix
     for Issue #64 where Codex App sends 'developer' role messages.
     """
     
@@ -1476,7 +1476,7 @@ class TestNormalizeMessageRoles:
         """
         What it does: Verifies conversion of 'developer' role to 'user'.
         Purpose: Fix for Issue #64 - Codex App uses 'developer' role which must be
-                 converted to 'user' to maintain Kiro API compatibility.
+                 converted to 'user' to maintain Trae API compatibility.
         """
         print("Setup: Message with 'developer' role (Codex App)...")
         messages = [
@@ -1673,7 +1673,7 @@ class TestEnsureAlternatingRoles:
     def test_inserts_synthetic_assistant_between_two_consecutive_users(self):
         """
         What it does: Verifies insertion of synthetic assistant between two user messages.
-        Purpose: Ensure Kiro API requirement of alternating roles is maintained.
+        Purpose: Ensure Trae API requirement of alternating roles is maintained.
         """
         print("Setup: Two consecutive user messages...")
         messages = [
@@ -1971,7 +1971,7 @@ class TestEnsureAssistantBeforeToolResults:
     This function handles the case when clients (like Cline/Roo/Cursor) send truncated
     conversations with tool_results but without the preceding assistant message
     that contains the tool_calls. Since we don't know the original tool name,
-    we strip the orphaned tool_results to avoid Kiro API rejection.
+    we strip the orphaned tool_results to avoid Trae API rejection.
     """
     
     def test_returns_empty_list_for_empty_input(self):
@@ -2546,7 +2546,7 @@ class TestSanitizeJsonSchema:
     """
     Tests for sanitize_json_schema function.
     
-    This function cleans JSON Schema from fields that Kiro API doesn't accept:
+    This function cleans JSON Schema from fields that Trae API doesn't accept:
     - Empty required arrays []
     - additionalProperties
     """
@@ -2583,7 +2583,7 @@ class TestSanitizeJsonSchema:
         Purpose: Ensure required: [] is removed from schema.
         
         This is a critical test for a bug where tools with required: []
-        caused a 400 "Improperly formed request" error from Kiro API.
+        caused a 400 "Improperly formed request" error from Trae API.
         """
         print("Setup: Schema with empty required...")
         schema = {
@@ -2626,7 +2626,7 @@ class TestSanitizeJsonSchema:
         What it does: Verifies removal of additionalProperties.
         Purpose: Ensure additionalProperties is removed from schema.
         
-        Kiro API doesn't support additionalProperties in JSON Schema.
+        Trae API doesn't support additionalProperties in JSON Schema.
         """
         print("Setup: Schema with additionalProperties...")
         schema = {
@@ -2832,14 +2832,14 @@ class TestExtractToolResults:
 
 
 # ==================================================================================================
-# Tests for convert_tool_results_to_kiro_format
+# Tests for convert_tool_results_to_trae_format
 # ==================================================================================================
 
 class TestConvertToolResultsToKiroFormat:
     """
-    Tests for convert_tool_results_to_kiro_format function.
+    Tests for convert_tool_results_to_trae_format function.
     
-    This function converts unified tool results format (snake_case) to Kiro API format (camelCase).
+    This function converts unified tool results format (snake_case) to Trae API format (camelCase).
     
     Unified format: {"type": "tool_result", "tool_use_id": "...", "content": "..."}
     Kiro format: {"content": [{"text": "..."}], "status": "success", "toolUseId": "..."}
@@ -2859,7 +2859,7 @@ class TestConvertToolResultsToKiroFormat:
         ]
         
         print("Action: Converting to Kiro format...")
-        result = convert_tool_results_to_kiro_format(tool_results)
+        result = convert_tool_results_to_trae_format(tool_results)
         
         print(f"Result: {result}")
         print("Checking structure...")
@@ -2890,7 +2890,7 @@ class TestConvertToolResultsToKiroFormat:
         ]
         
         print("Action: Converting to Kiro format...")
-        result = convert_tool_results_to_kiro_format(tool_results)
+        result = convert_tool_results_to_trae_format(tool_results)
         
         print(f"Result: {result}")
         print(f"Comparing count: Expected 3, Got {len(result)}")
@@ -2914,7 +2914,7 @@ class TestConvertToolResultsToKiroFormat:
         print("Setup: Empty list...")
         
         print("Action: Converting to Kiro format...")
-        result = convert_tool_results_to_kiro_format([])
+        result = convert_tool_results_to_trae_format([])
         
         print(f"Comparing result: Expected [], Got {result}")
         assert result == []
@@ -2922,7 +2922,7 @@ class TestConvertToolResultsToKiroFormat:
     def test_replaces_empty_content_with_placeholder(self):
         """
         What it does: Verifies empty content is replaced with placeholder.
-        Purpose: Ensure Kiro API receives non-empty content (required by API).
+        Purpose: Ensure Trae API receives non-empty content (required by API).
         """
         print("Setup: Tool result with empty content...")
         tool_results = [
@@ -2930,7 +2930,7 @@ class TestConvertToolResultsToKiroFormat:
         ]
         
         print("Action: Converting to Kiro format...")
-        result = convert_tool_results_to_kiro_format(tool_results)
+        result = convert_tool_results_to_trae_format(tool_results)
         
         print(f"Result: {result}")
         print("Checking that empty content is replaced with placeholder...")
@@ -2939,7 +2939,7 @@ class TestConvertToolResultsToKiroFormat:
     def test_replaces_none_content_with_placeholder(self):
         """
         What it does: Verifies None content is replaced with placeholder.
-        Purpose: Ensure Kiro API receives non-empty content when content is None.
+        Purpose: Ensure Trae API receives non-empty content when content is None.
         """
         print("Setup: Tool result with None content...")
         tool_results = [
@@ -2947,7 +2947,7 @@ class TestConvertToolResultsToKiroFormat:
         ]
         
         print("Action: Converting to Kiro format...")
-        result = convert_tool_results_to_kiro_format(tool_results)
+        result = convert_tool_results_to_trae_format(tool_results)
         
         print(f"Result: {result}")
         print("Checking that None content is replaced with placeholder...")
@@ -2964,7 +2964,7 @@ class TestConvertToolResultsToKiroFormat:
         ]
         
         print("Action: Converting to Kiro format...")
-        result = convert_tool_results_to_kiro_format(tool_results)
+        result = convert_tool_results_to_trae_format(tool_results)
         
         print(f"Result: {result}")
         print("Checking that missing content is replaced with placeholder...")
@@ -2981,7 +2981,7 @@ class TestConvertToolResultsToKiroFormat:
         ]
         
         print("Action: Converting to Kiro format...")
-        result = convert_tool_results_to_kiro_format(tool_results)
+        result = convert_tool_results_to_trae_format(tool_results)
         
         print(f"Result: {result}")
         print("Checking that missing tool_use_id becomes empty string...")
@@ -3006,7 +3006,7 @@ class TestConvertToolResultsToKiroFormat:
         ]
         
         print("Action: Converting to Kiro format...")
-        result = convert_tool_results_to_kiro_format(tool_results)
+        result = convert_tool_results_to_trae_format(tool_results)
         
         print(f"Result: {result}")
         print("Checking that list content is extracted correctly...")
@@ -3024,7 +3024,7 @@ class TestConvertToolResultsToKiroFormat:
         ]
         
         print("Action: Converting to Kiro format...")
-        result = convert_tool_results_to_kiro_format(tool_results)
+        result = convert_tool_results_to_trae_format(tool_results)
         
         print(f"Result content length: {len(result[0]['content'][0]['text'])}")
         print("Checking that long content is preserved...")
@@ -3034,7 +3034,7 @@ class TestConvertToolResultsToKiroFormat:
     def test_all_results_have_success_status(self):
         """
         What it does: Verifies all results have status="success".
-        Purpose: Ensure Kiro API receives correct status field.
+        Purpose: Ensure Trae API receives correct status field.
         """
         print("Setup: Multiple tool results...")
         tool_results = [
@@ -3043,7 +3043,7 @@ class TestConvertToolResultsToKiroFormat:
         ]
         
         print("Action: Converting to Kiro format...")
-        result = convert_tool_results_to_kiro_format(tool_results)
+        result = convert_tool_results_to_trae_format(tool_results)
         
         print("Checking all statuses...")
         for i, r in enumerate(result):
@@ -3061,7 +3061,7 @@ class TestConvertToolResultsToKiroFormat:
         ]
         
         print("Action: Converting to Kiro format...")
-        result = convert_tool_results_to_kiro_format(tool_results)
+        result = convert_tool_results_to_trae_format(tool_results)
         
         print(f"Result: {result}")
         print("Checking that Unicode content is preserved...")
@@ -3203,7 +3203,7 @@ class TestProcessToolsWithLongDescriptions:
         )]
         
         print("Action: Processing tools...")
-        with patch('kiro.converters_core.TOOL_DESCRIPTION_MAX_LENGTH', 10000):
+        with patch('trae.converters_core.TOOL_DESCRIPTION_MAX_LENGTH', 10000):
             processed, doc = process_tools_with_long_descriptions(tools)
         
         print(f"Comparing description: Expected 'Get weather for a location', Got '{processed[0].description}'")
@@ -3225,7 +3225,7 @@ class TestProcessToolsWithLongDescriptions:
         )]
         
         print("Action: Processing tools with limit 10000...")
-        with patch('kiro.converters_core.TOOL_DESCRIPTION_MAX_LENGTH', 10000):
+        with patch('trae.converters_core.TOOL_DESCRIPTION_MAX_LENGTH', 10000):
             processed, doc = process_tools_with_long_descriptions(tools)
         
         print("Checking reference in description...")
@@ -3251,7 +3251,7 @@ class TestProcessToolsWithLongDescriptions:
         ]
         
         print("Action: Processing tools...")
-        with patch('kiro.converters_core.TOOL_DESCRIPTION_MAX_LENGTH', 10000):
+        with patch('trae.converters_core.TOOL_DESCRIPTION_MAX_LENGTH', 10000):
             processed, doc = process_tools_with_long_descriptions(tools)
         
         print(f"Checking tools count: Expected 2, Got {len(processed)}")
@@ -3275,7 +3275,7 @@ class TestProcessToolsWithLongDescriptions:
         tools = [UnifiedTool(name="test_tool", description=long_desc, input_schema={})]
         
         print("Action: Processing tools with limit 0...")
-        with patch('kiro.converters_core.TOOL_DESCRIPTION_MAX_LENGTH', 0):
+        with patch('trae.converters_core.TOOL_DESCRIPTION_MAX_LENGTH', 0):
             processed, doc = process_tools_with_long_descriptions(tools)
         
         print("Checking that description is unchanged...")
@@ -3295,7 +3295,7 @@ class TestProcessToolsWithLongDescriptions:
         ]
         
         print("Action: Processing tools...")
-        with patch('kiro.converters_core.TOOL_DESCRIPTION_MAX_LENGTH', 10000):
+        with patch('trae.converters_core.TOOL_DESCRIPTION_MAX_LENGTH', 10000):
             processed, doc = process_tools_with_long_descriptions(tools)
         
         print("Checking all three tools...")
@@ -3317,7 +3317,7 @@ class TestProcessToolsWithLongDescriptions:
         tools = [UnifiedTool(name="empty_desc_tool", description="", input_schema={})]
         
         print("Action: Processing tools...")
-        with patch('kiro.converters_core.TOOL_DESCRIPTION_MAX_LENGTH', 10000):
+        with patch('trae.converters_core.TOOL_DESCRIPTION_MAX_LENGTH', 10000):
             processed, doc = process_tools_with_long_descriptions(tools)
         
         print("Checking that empty description remains empty...")
@@ -3333,7 +3333,7 @@ class TestProcessToolsWithLongDescriptions:
         tools = [UnifiedTool(name="none_desc_tool", description=None, input_schema={})]
         
         print("Action: Processing tools...")
-        with patch('kiro.converters_core.TOOL_DESCRIPTION_MAX_LENGTH', 10000):
+        with patch('trae.converters_core.TOOL_DESCRIPTION_MAX_LENGTH', 10000):
             processed, doc = process_tools_with_long_descriptions(tools)
         
         print("Checking that None description is handled correctly...")
@@ -3362,7 +3362,7 @@ class TestProcessToolsWithLongDescriptions:
         )]
         
         print("Action: Processing tools...")
-        with patch('kiro.converters_core.TOOL_DESCRIPTION_MAX_LENGTH', 10000):
+        with patch('trae.converters_core.TOOL_DESCRIPTION_MAX_LENGTH', 10000):
             processed, doc = process_tools_with_long_descriptions(tools)
         
         print("Checking input_schema preservation...")
@@ -3370,11 +3370,11 @@ class TestProcessToolsWithLongDescriptions:
 
 
 # ==================================================================================================
-# Tests for convert_tools_to_kiro_format
+# Tests for convert_tools_to_trae_format
 # ==================================================================================================
 
 class TestConvertToolsToKiroFormat:
-    """Tests for convert_tools_to_kiro_format function."""
+    """Tests for convert_tools_to_trae_format function."""
     
     def test_returns_empty_list_for_none(self):
         """
@@ -3384,7 +3384,7 @@ class TestConvertToolsToKiroFormat:
         print("Setup: None tools...")
         
         print("Action: Converting tools...")
-        result = convert_tools_to_kiro_format(None)
+        result = convert_tools_to_trae_format(None)
         
         print(f"Comparing result: Expected [], Got {result}")
         assert result == []
@@ -3397,14 +3397,14 @@ class TestConvertToolsToKiroFormat:
         print("Setup: Empty tools list...")
         
         print("Action: Converting tools...")
-        result = convert_tools_to_kiro_format([])
+        result = convert_tools_to_trae_format([])
         
         print(f"Comparing result: Expected [], Got {result}")
         assert result == []
     
-    def test_converts_tool_to_kiro_format(self):
+    def test_converts_tool_to_trae_format(self):
         """
-        What it does: Verifies conversion of tool to Kiro format.
+        What it does: Verifies conversion of tool to Trae format.
         Purpose: Ensure toolSpecification structure is correct.
         """
         print("Setup: Tool...")
@@ -3415,7 +3415,7 @@ class TestConvertToolsToKiroFormat:
         )]
         
         print("Action: Converting tools...")
-        result = convert_tools_to_kiro_format(tools)
+        result = convert_tools_to_trae_format(tools)
         
         print(f"Result: {result}")
         assert len(result) == 1
@@ -3435,7 +3435,7 @@ class TestConvertToolsToKiroFormat:
         tools = [UnifiedTool(name="focus_chain", description="", input_schema={})]
         
         print("Action: Converting tools...")
-        result = convert_tools_to_kiro_format(tools)
+        result = convert_tools_to_trae_format(tools)
         
         print(f"Result: {result}")
         spec = result[0]["toolSpecification"]
@@ -3450,7 +3450,7 @@ class TestConvertToolsToKiroFormat:
         tools = [UnifiedTool(name="test_tool", description=None, input_schema={})]
         
         print("Action: Converting tools...")
-        result = convert_tools_to_kiro_format(tools)
+        result = convert_tools_to_trae_format(tools)
         
         print(f"Result: {result}")
         spec = result[0]["toolSpecification"]
@@ -3474,7 +3474,7 @@ class TestConvertToolsToKiroFormat:
         )]
         
         print("Action: Converting tools...")
-        result = convert_tools_to_kiro_format(tools)
+        result = convert_tools_to_trae_format(tools)
         
         print(f"Result: {result}")
         schema = result[0]["toolSpecification"]["inputSchema"]["json"]
@@ -3502,7 +3502,7 @@ class TestInjectThinkingTags:
         content = "Hello, world!"
         
         print("Action: Inject thinking tags with FAKE_REASONING_ENABLED=False...")
-        with patch('kiro.converters_core.FAKE_REASONING_ENABLED', False):
+        with patch('trae.converters_core.FAKE_REASONING_ENABLED', False):
             result = inject_thinking_tags(content)
         
         print(f"Comparing result: Expected 'Hello, world!', Got '{result}'")
@@ -3517,8 +3517,8 @@ class TestInjectThinkingTags:
         content = "What is 2+2?"
         
         print("Action: Inject thinking tags with FAKE_REASONING_ENABLED=True...")
-        with patch('kiro.converters_core.FAKE_REASONING_ENABLED', True):
-            with patch('kiro.converters_core.FAKE_REASONING_MAX_TOKENS', 4000):
+        with patch('trae.converters_core.FAKE_REASONING_ENABLED', True):
+            with patch('trae.converters_core.FAKE_REASONING_MAX_TOKENS', 4000):
                 result = inject_thinking_tags(content)
         
         print(f"Result: {result[:200]}...")
@@ -3540,8 +3540,8 @@ class TestInjectThinkingTags:
         content = "Analyze this code"
         
         print("Action: Inject thinking tags...")
-        with patch('kiro.converters_core.FAKE_REASONING_ENABLED', True):
-            with patch('kiro.converters_core.FAKE_REASONING_MAX_TOKENS', 8000):
+        with patch('trae.converters_core.FAKE_REASONING_ENABLED', True):
+            with patch('trae.converters_core.FAKE_REASONING_MAX_TOKENS', 8000):
                 result = inject_thinking_tags(content)
         
         print(f"Result length: {len(result)} chars")
@@ -3558,8 +3558,8 @@ class TestInjectThinkingTags:
         content = "Test"
         
         print("Action: Inject thinking tags...")
-        with patch('kiro.converters_core.FAKE_REASONING_ENABLED', True):
-            with patch('kiro.converters_core.FAKE_REASONING_MAX_TOKENS', 4000):
+        with patch('trae.converters_core.FAKE_REASONING_ENABLED', True):
+            with patch('trae.converters_core.FAKE_REASONING_MAX_TOKENS', 4000):
                 result = inject_thinking_tags(content)
         
         print("Checking for English directive...")
@@ -3574,8 +3574,8 @@ class TestInjectThinkingTags:
         content = "Test"
         
         print("Action: Inject thinking tags with FAKE_REASONING_MAX_TOKENS=16000...")
-        with patch('kiro.converters_core.FAKE_REASONING_ENABLED', True):
-            with patch('kiro.converters_core.FAKE_REASONING_MAX_TOKENS', 16000):
+        with patch('trae.converters_core.FAKE_REASONING_ENABLED', True):
+            with patch('trae.converters_core.FAKE_REASONING_MAX_TOKENS', 16000):
                 result = inject_thinking_tags(content)
         
         print(f"Result: {result[:300]}...")
@@ -3591,8 +3591,8 @@ class TestInjectThinkingTags:
         content = ""
         
         print("Action: Inject thinking tags...")
-        with patch('kiro.converters_core.FAKE_REASONING_ENABLED', True):
-            with patch('kiro.converters_core.FAKE_REASONING_MAX_TOKENS', 4000):
+        with patch('trae.converters_core.FAKE_REASONING_ENABLED', True):
+            with patch('trae.converters_core.FAKE_REASONING_MAX_TOKENS', 4000):
                 result = inject_thinking_tags(content)
         
         print(f"Result length: {len(result)} chars")
@@ -3609,8 +3609,8 @@ class TestInjectThinkingTags:
         content = "Line 1\nLine 2\nLine 3"
         
         print("Action: Inject thinking tags...")
-        with patch('kiro.converters_core.FAKE_REASONING_ENABLED', True):
-            with patch('kiro.converters_core.FAKE_REASONING_MAX_TOKENS', 4000):
+        with patch('trae.converters_core.FAKE_REASONING_ENABLED', True):
+            with patch('trae.converters_core.FAKE_REASONING_MAX_TOKENS', 4000):
                 result = inject_thinking_tags(content)
         
         print("Checking that multiline content is preserved...")
@@ -3625,8 +3625,8 @@ class TestInjectThinkingTags:
         content = "Check this <code>example</code> and {json: 'value'}"
         
         print("Action: Inject thinking tags...")
-        with patch('kiro.converters_core.FAKE_REASONING_ENABLED', True):
-            with patch('kiro.converters_core.FAKE_REASONING_MAX_TOKENS', 4000):
+        with patch('trae.converters_core.FAKE_REASONING_ENABLED', True):
+            with patch('trae.converters_core.FAKE_REASONING_MAX_TOKENS', 4000):
                 result = inject_thinking_tags(content)
         
         print("Checking that special characters are preserved...")
@@ -3642,8 +3642,8 @@ class TestInjectThinkingTags:
         content = "Test"
         
         print("Action: Inject thinking tags...")
-        with patch('kiro.converters_core.FAKE_REASONING_ENABLED', True):
-            with patch('kiro.converters_core.FAKE_REASONING_MAX_TOKENS', 4000):
+        with patch('trae.converters_core.FAKE_REASONING_ENABLED', True):
+            with patch('trae.converters_core.FAKE_REASONING_MAX_TOKENS', 4000):
                 result = inject_thinking_tags(content)
         
         print("Checking for systematic approach keywords...")
@@ -3658,8 +3658,8 @@ class TestInjectThinkingTags:
         content = "Test"
         
         print("Action: Inject thinking tags...")
-        with patch('kiro.converters_core.FAKE_REASONING_ENABLED', True):
-            with patch('kiro.converters_core.FAKE_REASONING_MAX_TOKENS', 4000):
+        with patch('trae.converters_core.FAKE_REASONING_ENABLED', True):
+            with patch('trae.converters_core.FAKE_REASONING_MAX_TOKENS', 4000):
                 result = inject_thinking_tags(content)
         
         print("Checking for understanding step...")
@@ -3674,8 +3674,8 @@ class TestInjectThinkingTags:
         content = "Test"
         
         print("Action: Inject thinking tags...")
-        with patch('kiro.converters_core.FAKE_REASONING_ENABLED', True):
-            with patch('kiro.converters_core.FAKE_REASONING_MAX_TOKENS', 4000):
+        with patch('trae.converters_core.FAKE_REASONING_ENABLED', True):
+            with patch('trae.converters_core.FAKE_REASONING_MAX_TOKENS', 4000):
                 result = inject_thinking_tags(content)
         
         print("Checking for verification step...")
@@ -3690,8 +3690,8 @@ class TestInjectThinkingTags:
         content = "Test"
         
         print("Action: Inject thinking tags...")
-        with patch('kiro.converters_core.FAKE_REASONING_ENABLED', True):
-            with patch('kiro.converters_core.FAKE_REASONING_MAX_TOKENS', 4000):
+        with patch('trae.converters_core.FAKE_REASONING_ENABLED', True):
+            with patch('trae.converters_core.FAKE_REASONING_MAX_TOKENS', 4000):
                 result = inject_thinking_tags(content)
         
         print("Checking for quality emphasis...")
@@ -3706,8 +3706,8 @@ class TestInjectThinkingTags:
         content = "USER_CONTENT_HERE"
         
         print("Action: Inject thinking tags...")
-        with patch('kiro.converters_core.FAKE_REASONING_ENABLED', True):
-            with patch('kiro.converters_core.FAKE_REASONING_MAX_TOKENS', 4000):
+        with patch('trae.converters_core.FAKE_REASONING_ENABLED', True):
+            with patch('trae.converters_core.FAKE_REASONING_MAX_TOKENS', 4000):
                 result = inject_thinking_tags(content)
         
         print("Checking tag order...")
@@ -3724,11 +3724,11 @@ class TestInjectThinkingTags:
 
 
 # ==================================================================================================
-# Tests for build_kiro_history
+# Tests for build_trae_history
 # ==================================================================================================
 
 class TestBuildKiroHistory:
-    """Tests for build_kiro_history function using UnifiedMessage."""
+    """Tests for build_trae_history function using UnifiedMessage."""
     
     def test_builds_user_message(self):
         """
@@ -3739,7 +3739,7 @@ class TestBuildKiroHistory:
         messages = [UnifiedMessage(role="user", content="Hello")]
         
         print("Action: Building history...")
-        result = build_kiro_history(messages, "claude-sonnet-4")
+        result = build_trae_history(messages, "claude-sonnet-4")
         
         print(f"Result: {result}")
         assert len(result) == 1
@@ -3756,7 +3756,7 @@ class TestBuildKiroHistory:
         messages = [UnifiedMessage(role="assistant", content="Hi there")]
         
         print("Action: Building history...")
-        result = build_kiro_history(messages, "claude-sonnet-4")
+        result = build_trae_history(messages, "claude-sonnet-4")
         
         print(f"Result: {result}")
         assert len(result) == 1
@@ -3765,8 +3765,8 @@ class TestBuildKiroHistory:
     
     def test_expects_normalized_roles_only(self):
         """
-        What it does: Verifies build_kiro_history only handles user/assistant roles.
-        Purpose: After normalize_message_roles(), build_kiro_history should never
+        What it does: Verifies build_trae_history only handles user/assistant roles.
+        Purpose: After normalize_message_roles(), build_trae_history should never
                  see unknown roles. This test confirms it only processes normalized roles.
         """
         print("Setup: Messages with normalized roles (user/assistant only)...")
@@ -3776,7 +3776,7 @@ class TestBuildKiroHistory:
         ]
         
         print("Action: Building history...")
-        result = build_kiro_history(messages, "claude-sonnet-4")
+        result = build_trae_history(messages, "claude-sonnet-4")
         
         print(f"Comparing length: Expected 2, Got {len(result)}")
         assert len(result) == 2
@@ -3800,7 +3800,7 @@ class TestBuildKiroHistory:
         ]
         
         print("Action: Building history...")
-        result = build_kiro_history(messages, "claude-sonnet-4")
+        result = build_trae_history(messages, "claude-sonnet-4")
         
         print(f"Result: {result}")
         assert len(result) == 3
@@ -3816,7 +3816,7 @@ class TestBuildKiroHistory:
         print("Setup: Empty list...")
         
         print("Action: Building history...")
-        result = build_kiro_history([], "claude-sonnet-4")
+        result = build_trae_history([], "claude-sonnet-4")
         
         print(f"Comparing result: Expected [], Got {result}")
         assert result == []
@@ -3838,7 +3838,7 @@ class TestBuildKiroHistory:
         ]
         
         print("Action: Building history...")
-        result = build_kiro_history(messages, "claude-sonnet-4")
+        result = build_trae_history(messages, "claude-sonnet-4")
         
         print(f"Result: {result}")
         assert len(result) == 1
@@ -3868,7 +3868,7 @@ class TestBuildKiroHistory:
         ]
         
         print("Action: Building history...")
-        result = build_kiro_history(messages, "claude-sonnet-4")
+        result = build_trae_history(messages, "claude-sonnet-4")
         
         print(f"Result: {result}")
         assert len(result) == 1
@@ -3879,7 +3879,7 @@ class TestBuildKiroHistory:
     def test_adds_empty_placeholder_for_empty_user_content(self):
         """
         What it does: Verifies that "(empty)" placeholder is added for user messages with empty content.
-        Purpose: Ensure Kiro API receives non-empty content in history.
+        Purpose: Ensure Trae API receives non-empty content in history.
         
         This is a fallback test for issue #20 - ensures any edge case with empty content
         is handled even if strip_all_tool_content didn't add a placeholder.
@@ -3888,7 +3888,7 @@ class TestBuildKiroHistory:
         messages = [UnifiedMessage(role="user", content="")]
         
         print("Action: Building history...")
-        result = build_kiro_history(messages, "claude-sonnet-4")
+        result = build_trae_history(messages, "claude-sonnet-4")
         
         print(f"Result: {result}")
         print(f"Content: '{result[0]['userInputMessage']['content']}'")
@@ -3898,7 +3898,7 @@ class TestBuildKiroHistory:
     def test_adds_empty_placeholder_for_empty_assistant_content(self):
         """
         What it does: Verifies that "(empty)" placeholder is added for assistant messages with empty content.
-        Purpose: Ensure Kiro API receives non-empty content in history.
+        Purpose: Ensure Trae API receives non-empty content in history.
         
         This is a fallback test for issue #20 - ensures any edge case with empty content
         is handled even if strip_all_tool_content didn't add a placeholder.
@@ -3907,7 +3907,7 @@ class TestBuildKiroHistory:
         messages = [UnifiedMessage(role="assistant", content="")]
         
         print("Action: Building history...")
-        result = build_kiro_history(messages, "claude-sonnet-4")
+        result = build_trae_history(messages, "claude-sonnet-4")
         
         print(f"Result: {result}")
         print(f"Content: '{result[0]['assistantResponseMessage']['content']}'")
@@ -3917,13 +3917,13 @@ class TestBuildKiroHistory:
     def test_adds_empty_placeholder_for_none_user_content(self):
         """
         What it does: Verifies that "(empty)" placeholder is added for user messages with None content.
-        Purpose: Ensure Kiro API receives non-empty content when content is None.
+        Purpose: Ensure Trae API receives non-empty content when content is None.
         """
         print("Setup: User message with None content...")
         messages = [UnifiedMessage(role="user", content=None)]
         
         print("Action: Building history...")
-        result = build_kiro_history(messages, "claude-sonnet-4")
+        result = build_trae_history(messages, "claude-sonnet-4")
         
         print(f"Result: {result}")
         print(f"Content: '{result[0]['userInputMessage']['content']}'")
@@ -3933,13 +3933,13 @@ class TestBuildKiroHistory:
     def test_adds_empty_placeholder_for_none_assistant_content(self):
         """
         What it does: Verifies that "(empty)" placeholder is added for assistant messages with None content.
-        Purpose: Ensure Kiro API receives non-empty content when content is None.
+        Purpose: Ensure Trae API receives non-empty content when content is None.
         """
         print("Setup: Assistant message with None content...")
         messages = [UnifiedMessage(role="assistant", content=None)]
         
         print("Action: Building history...")
-        result = build_kiro_history(messages, "claude-sonnet-4")
+        result = build_trae_history(messages, "claude-sonnet-4")
         
         print(f"Result: {result}")
         print(f"Content: '{result[0]['assistantResponseMessage']['content']}'")
@@ -3958,7 +3958,7 @@ class TestBuildKiroHistory:
         ]
         
         print("Action: Building history...")
-        result = build_kiro_history(messages, "claude-sonnet-4")
+        result = build_trae_history(messages, "claude-sonnet-4")
         
         print(f"Result: {result}")
         print("Checking that original content is preserved...")
@@ -3981,7 +3981,7 @@ class TestBuildKiroHistory:
         ]
         
         print("Action: Building history...")
-        result = build_kiro_history(messages, "claude-sonnet-4")
+        result = build_trae_history(messages, "claude-sonnet-4")
         
         print(f"Result: {result}")
         print("Checking each message...")
@@ -4016,7 +4016,7 @@ class TestBuildKiroHistory:
         ]
         
         print("Action: Building history...")
-        result = build_kiro_history(messages, "claude-sonnet-4")
+        result = build_trae_history(messages, "claude-sonnet-4")
         
         print(f"Result: {result}")
         assert len(result) == 1
@@ -4052,7 +4052,7 @@ class TestBuildKiroHistory:
         ]
         
         print("Action: Building history...")
-        result = build_kiro_history(messages, "claude-sonnet-4")
+        result = build_trae_history(messages, "claude-sonnet-4")
         
         print(f"Result: {result}")
         user_msg = result[0]["userInputMessage"]
@@ -4089,7 +4089,7 @@ class TestBuildKiroHistory:
         ]
         
         print("Action: Building history...")
-        result = build_kiro_history(messages, "claude-sonnet-4")
+        result = build_trae_history(messages, "claude-sonnet-4")
         
         print(f"Result: {result}")
         user_msg = result[0]["userInputMessage"]
@@ -4120,7 +4120,7 @@ class TestBuildKiroHistory:
         ]
         
         print("Action: Building history...")
-        result = build_kiro_history(messages, "claude-sonnet-4")
+        result = build_trae_history(messages, "claude-sonnet-4")
         
         print(f"Result: {result}")
         user_msg = result[0]["userInputMessage"]
@@ -4148,7 +4148,7 @@ class TestBuildKiroHistory:
         ]
         
         print("Action: Building history...")
-        result = build_kiro_history(messages, "claude-sonnet-4")
+        result = build_trae_history(messages, "claude-sonnet-4")
         
         print(f"Result: {result}")
         user_msg = result[0]["userInputMessage"]
@@ -4174,7 +4174,7 @@ class TestBuildKiroHistory:
         ]
         
         print("Action: Building history...")
-        result = build_kiro_history(messages, "claude-sonnet-4")
+        result = build_trae_history(messages, "claude-sonnet-4")
         
         print(f"Result: {result}")
         user_msg = result[0]["userInputMessage"]
@@ -4195,7 +4195,7 @@ class TestStripAllToolContent:
     
     This function strips ALL tool-related content (tool_calls and tool_results)
     from messages. It is used when no tools are defined in the request, because
-    Kiro API rejects requests that have toolResults but no tools defined.
+    Trae API rejects requests that have toolResults but no tools defined.
     
     This is a critical function for handling clients like Cline/Roo/Cursor that may
     send tool-related content even when tools are not available.
@@ -4559,7 +4559,7 @@ class TestStripAllToolContent:
     def test_adds_tool_text_for_empty_content_with_tool_calls(self):
         """
         What it does: Verifies that tool_calls are converted to text when content is empty.
-        Purpose: Ensure Kiro API receives non-empty content for messages that only had tool_calls.
+        Purpose: Ensure Trae API receives non-empty content for messages that only had tool_calls.
         
         This is a critical test for issue #20 - OpenCode compaction returns 400 error
         because messages with only tool_calls become empty after stripping.
@@ -4593,7 +4593,7 @@ class TestStripAllToolContent:
     def test_adds_tool_text_for_empty_content_with_tool_results(self):
         """
         What it does: Verifies that tool_results are converted to text when content is empty.
-        Purpose: Ensure Kiro API receives non-empty content for messages that only had tool_results.
+        Purpose: Ensure Trae API receives non-empty content for messages that only had tool_results.
         
         This is a critical test for issue #20 - OpenCode compaction returns 400 error
         because messages with only tool_results become empty after stripping.
@@ -5310,24 +5310,24 @@ class TestToolResultsToText:
 
 
 # ==================================================================================================
-# Tests for build_kiro_payload with Issue #20 Scenario
+# Tests for build_trae_payload with Issue #20 Scenario
 # ==================================================================================================
 
 class TestBuildKiroPayloadIssue20:
     """
-    Tests for build_kiro_payload function specifically for Issue #20 scenario.
+    Tests for build_trae_payload function specifically for Issue #20 scenario.
     
     Issue #20: OpenCode compaction returns 400 "Improperly formed request"
     because it sends tool_calls/tool_results in history but WITHOUT tools definitions.
     
-    Kiro API requires tools definitions if toolUses/toolResults are present.
+    Trae API requires tools definitions if toolUses/toolResults are present.
     The fix converts tool content to text representation when no tools are defined.
     """
     
     def test_compaction_without_tools_converts_tool_content_to_text(self):
         """
         What it does: Simulates OpenCode compaction scenario - messages with tool content but no tools.
-        Purpose: Ensure build_kiro_payload doesn't crash and converts tool content to text.
+        Purpose: Ensure build_trae_payload doesn't crash and converts tool content to text.
         
         This is THE critical test for issue #20. If this test passes but the fix is removed,
         the actual API call would fail with 400 error.
@@ -5357,8 +5357,8 @@ class TestBuildKiroPayloadIssue20:
             UnifiedMessage(role="user", content="Summarize what we did")
         ]
         
-        print("Action: Building Kiro payload WITHOUT tools (compaction scenario)...")
-        result = build_kiro_payload(
+        print("Action: Building Trae payload WITHOUT tools (compaction scenario)...")
+        result = build_trae_payload(
             messages=messages,
             system_prompt="You are a helpful assistant.",
             model_id="claude-sonnet-4",
@@ -5424,8 +5424,8 @@ class TestBuildKiroPayloadIssue20:
             UnifiedMessage(role="user", content="What was in that result?")
         ]
         
-        print("Action: Building Kiro payload without tools...")
-        result = build_kiro_payload(
+        print("Action: Building Trae payload without tools...")
+        result = build_trae_payload(
             messages=messages,
             system_prompt="",
             model_id="claude-sonnet-4",
@@ -5495,8 +5495,8 @@ class TestBuildKiroPayloadIssue20:
             input_schema={"type": "object", "properties": {}}
         )]
         
-        print("Action: Building Kiro payload WITH tools...")
-        result = build_kiro_payload(
+        print("Action: Building Trae payload WITH tools...")
+        result = build_trae_payload(
             messages=messages,
             system_prompt="",
             model_id="claude-sonnet-4",
@@ -5540,8 +5540,8 @@ class TestBuildKiroPayloadIssue20:
             UnifiedMessage(role="user", content="Continue")
         ]
         
-        print("Action: Building Kiro payload with empty tools list...")
-        result = build_kiro_payload(
+        print("Action: Building Trae payload with empty tools list...")
+        result = build_trae_payload(
             messages=messages,
             system_prompt="",
             model_id="claude-sonnet-4",
@@ -5564,17 +5564,17 @@ class TestBuildKiroPayloadIssue20:
 
 
 # ==================================================================================================
-# Tests for build_kiro_payload with Images (Issue #30)
+# Tests for build_trae_payload with Images (Issue #30)
 # ==================================================================================================
 
 class TestBuildKiroPayloadImages:
     """
-    Tests for build_kiro_payload function with image content.
+    Tests for build_trae_payload function with image content.
     
     Issue #30: 422 Validation Error when sending image content blocks.
     The fix adds support for image content blocks in messages.
     
-    These tests verify that images are correctly included in the Kiro payload.
+    These tests verify that images are correctly included in the Trae payload.
     """
     
     def test_includes_images_in_current_message(self):
@@ -5593,8 +5593,8 @@ class TestBuildKiroPayloadImages:
             )
         ]
         
-        print("Action: Building Kiro payload...")
-        result = build_kiro_payload(
+        print("Action: Building Trae payload...")
+        result = build_trae_payload(
             messages=messages,
             system_prompt="You are a helpful assistant.",
             model_id="claude-sonnet-4",
@@ -5640,8 +5640,8 @@ class TestBuildKiroPayloadImages:
             )
         ]
         
-        print("Action: Building Kiro payload...")
-        result = build_kiro_payload(
+        print("Action: Building Trae payload...")
+        result = build_trae_payload(
             messages=messages,
             system_prompt="",
             model_id="claude-sonnet-4",
@@ -5678,8 +5678,8 @@ class TestBuildKiroPayloadImages:
             UnifiedMessage(role="user", content="What color is the cat?")
         ]
         
-        print("Action: Building Kiro payload...")
-        result = build_kiro_payload(
+        print("Action: Building Trae payload...")
+        result = build_trae_payload(
             messages=messages,
             system_prompt="",
             model_id="claude-sonnet-4",
@@ -5724,8 +5724,8 @@ class TestBuildKiroPayloadImages:
             input_schema={"type": "object", "properties": {}}
         )]
         
-        print("Action: Building Kiro payload with tools...")
-        result = build_kiro_payload(
+        print("Action: Building Trae payload with tools...")
+        result = build_trae_payload(
             messages=messages,
             system_prompt="",
             model_id="claude-sonnet-4",
@@ -5787,8 +5787,8 @@ class TestBuildKiroPayloadImages:
             input_schema={"type": "object", "properties": {}}
         )]
         
-        print("Action: Building Kiro payload...")
-        result = build_kiro_payload(
+        print("Action: Building Trae payload...")
+        result = build_trae_payload(
             messages=messages,
             system_prompt="",
             model_id="claude-sonnet-4",
@@ -5825,8 +5825,8 @@ class TestBuildKiroPayloadImages:
             UnifiedMessage(role="user", content="Hello, no images here")
         ]
         
-        print("Action: Building Kiro payload...")
-        result = build_kiro_payload(
+        print("Action: Building Trae payload...")
+        result = build_trae_payload(
             messages=messages,
             system_prompt="",
             model_id="claude-sonnet-4",
@@ -5860,8 +5860,8 @@ class TestBuildKiroPayloadImages:
             )
         ]
         
-        print("Action: Building Kiro payload...")
-        result = build_kiro_payload(
+        print("Action: Building Trae payload...")
+        result = build_trae_payload(
             messages=messages,
             system_prompt="",
             model_id="claude-sonnet-4",
@@ -5892,10 +5892,10 @@ class TestBuildKiroPayloadImages:
             )
         ]
         
-        print("Action: Building Kiro payload with thinking injection...")
-        with patch('kiro.converters_core.FAKE_REASONING_ENABLED', True):
-            with patch('kiro.converters_core.FAKE_REASONING_MAX_TOKENS', 4000):
-                result = build_kiro_payload(
+        print("Action: Building Trae payload with thinking injection...")
+        with patch('trae.converters_core.FAKE_REASONING_ENABLED', True):
+            with patch('trae.converters_core.FAKE_REASONING_MAX_TOKENS', 4000):
+                result = build_trae_payload(
                     messages=messages,
                     system_prompt="",
                     model_id="claude-sonnet-4",
@@ -5925,7 +5925,7 @@ class TestValidateToolNames:
     """
     Tests for validate_tool_names function.
     
-    This function validates tool names against Kiro API 64-character limit.
+    This function validates tool names against Trae API 64-character limit.
     Issue #41: 400 Improperly formed request with long tool names from MCP servers.
     """
     
@@ -5939,7 +5939,7 @@ class TestValidateToolNames:
         
         print("Action: Validating tool names...")
         try:
-            from kiro.converters_core import validate_tool_names
+            from trae.converters_core import validate_tool_names
             validate_tool_names(tools)
             print("Validation passed - OK")
         except ValueError as e:
@@ -5958,7 +5958,7 @@ class TestValidateToolNames:
         print(f"Tool name length: {len(name_64)}")
         print("Action: Validating tool names...")
         try:
-            from kiro.converters_core import validate_tool_names
+            from trae.converters_core import validate_tool_names
             validate_tool_names(tools)
             print("Validation passed - OK")
         except ValueError as e:
@@ -5977,13 +5977,13 @@ class TestValidateToolNames:
         print(f"Tool name length: {len(name_65)}")
         print("Action: Validating tool names (should raise ValueError)...")
         try:
-            from kiro.converters_core import validate_tool_names
+            from trae.converters_core import validate_tool_names
             validate_tool_names(tools)
             print("ERROR: Validation passed but should have failed")
             raise AssertionError("65-character names should be rejected")
         except ValueError as e:
             print(f"Validation correctly rejected: {str(e)[:100]}...")
-            assert "exceed Kiro API limit" in str(e)
+            assert "exceed Trae API limit" in str(e)
             assert name_65 in str(e)
     
     def test_rejects_very_long_tool_names(self):
@@ -5998,12 +5998,12 @@ class TestValidateToolNames:
         print(f"Tool name length: {len(name_100)}")
         print("Action: Validating tool names (should raise ValueError)...")
         try:
-            from kiro.converters_core import validate_tool_names
+            from trae.converters_core import validate_tool_names
             validate_tool_names(tools)
             raise AssertionError("Very long names should be rejected")
         except ValueError as e:
             print(f"Validation correctly rejected: {str(e)[:100]}...")
-            assert "exceed Kiro API limit" in str(e)
+            assert "exceed Trae API limit" in str(e)
             assert "100 characters" in str(e)
     
     def test_rejects_multiple_long_names(self):
@@ -6020,7 +6020,7 @@ class TestValidateToolNames:
         
         print("Action: Validating tool names (should raise ValueError)...")
         try:
-            from kiro.converters_core import validate_tool_names
+            from trae.converters_core import validate_tool_names
             validate_tool_names(tools)
             raise AssertionError("Should reject multiple long names")
         except ValueError as e:
@@ -6040,7 +6040,7 @@ class TestValidateToolNames:
         
         print("Action: Validating None...")
         try:
-            from kiro.converters_core import validate_tool_names
+            from trae.converters_core import validate_tool_names
             validate_tool_names(None)
             print("Validation passed - OK")
         except Exception as e:
@@ -6056,7 +6056,7 @@ class TestValidateToolNames:
         
         print("Action: Validating empty list...")
         try:
-            from kiro.converters_core import validate_tool_names
+            from trae.converters_core import validate_tool_names
             validate_tool_names([])
             print("Validation passed - OK")
         except Exception as e:
@@ -6073,7 +6073,7 @@ class TestValidateToolNames:
         
         print("Action: Validating tool names (should raise ValueError)...")
         try:
-            from kiro.converters_core import validate_tool_names
+            from trae.converters_core import validate_tool_names
             validate_tool_names(tools)
             raise AssertionError("Should reject long name")
         except ValueError as e:
@@ -6101,7 +6101,7 @@ class TestValidateToolNames:
         
         print("Action: Validating real MCP tool names (should raise ValueError)...")
         try:
-            from kiro.converters_core import validate_tool_names
+            from trae.converters_core import validate_tool_names
             validate_tool_names(tools)
             raise AssertionError("Should reject real MCP tool names")
         except ValueError as e:
@@ -6141,10 +6141,10 @@ class TestGetTruncationRecoverySystemAddition:
         print("Action: Getting truncation recovery system addition...")
         with patch.dict(os.environ, {"TRUNCATION_RECOVERY": "true"}):
             from importlib import reload
-            from kiro import config
+            from trae import config
             reload(config)
             
-            from kiro.converters_core import get_truncation_recovery_system_addition
+            from trae.converters_core import get_truncation_recovery_system_addition
             addition = get_truncation_recovery_system_addition()
             print(f"Addition length: {len(addition)} chars")
         
@@ -6173,10 +6173,10 @@ class TestGetTruncationRecoverySystemAddition:
         print("Action: Getting truncation recovery system addition...")
         with patch.dict(os.environ, {"TRUNCATION_RECOVERY": "false"}):
             from importlib import reload
-            from kiro import config
+            from trae import config
             reload(config)
             
-            from kiro.converters_core import get_truncation_recovery_system_addition
+            from trae.converters_core import get_truncation_recovery_system_addition
             addition = get_truncation_recovery_system_addition()
             print(f"Addition: '{addition}'")
         
@@ -6193,10 +6193,10 @@ class TestGetTruncationRecoverySystemAddition:
         print("Action: Getting truncation recovery system addition...")
         with patch.dict(os.environ, {"TRUNCATION_RECOVERY": "true"}):
             from importlib import reload
-            from kiro import config
+            from trae import config
             reload(config)
             
-            from kiro.converters_core import get_truncation_recovery_system_addition
+            from trae.converters_core import get_truncation_recovery_system_addition
             addition = get_truncation_recovery_system_addition()
         
         print("Checking that addition starts with separator...")

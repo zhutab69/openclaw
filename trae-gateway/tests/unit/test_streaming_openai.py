@@ -5,8 +5,8 @@
 Unit tests for streaming_openai module.
 
 Tests for:
-- stream_kiro_to_openai() generator
-- stream_kiro_to_openai_internal() generator
+- stream_trae_to_openai() generator
+- stream_trae_to_openai_internal() generator
 - stream_with_first_token_retry() function
 - collect_stream_response() function
 """
@@ -16,14 +16,14 @@ import json
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from kiro.streaming_openai import (
-    stream_kiro_to_openai,
-    stream_kiro_to_openai_internal,
+from trae.streaming_openai import (
+    stream_trae_to_openai,
+    stream_trae_to_openai_internal,
     stream_with_first_token_retry,
     collect_stream_response,
     FirstTokenTimeoutError,
 )
-from kiro.streaming_core import KiroEvent
+from trae.streaming_core import TraeEvent
 
 
 # ==================================================================================================
@@ -40,7 +40,7 @@ def mock_model_cache():
 
 @pytest.fixture
 def mock_auth_manager():
-    """Mock for KiroAuthManager."""
+    """Mock for TraeAuthManager."""
     manager = MagicMock()
     return manager
 
@@ -62,11 +62,11 @@ def mock_response():
 
 
 # ==================================================================================================
-# Tests for stream_kiro_to_openai()
+# Tests for stream_trae_to_openai()
 # ==================================================================================================
 
 class TestStreamKiroToOpenai:
-    """Tests for stream_kiro_to_openai() generator."""
+    """Tests for stream_trae_to_openai() generator."""
     
     @pytest.mark.asyncio
     async def test_yields_content_chunks(self, mock_http_client, mock_response, mock_model_cache, mock_auth_manager):
@@ -76,16 +76,16 @@ class TestStreamKiroToOpenai:
         """
         print("Setup: Mock stream with content events...")
         
-        async def mock_parse_kiro_stream(*args, **kwargs):
-            yield KiroEvent(type="content", content="Hello")
-            yield KiroEvent(type="content", content=" World")
+        async def mock_parse_trae_stream(*args, **kwargs):
+            yield TraeEvent(type="content", content="Hello")
+            yield TraeEvent(type="content", content=" World")
         
         print("Action: Streaming to OpenAI format...")
         chunks = []
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
-                async for chunk in stream_kiro_to_openai(
+        with patch('trae.streaming_openai.parse_trae_stream', mock_parse_trae_stream):
+            with patch('trae.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+                async for chunk in stream_trae_to_openai(
                     mock_http_client, mock_response, "claude-sonnet-4",
                     mock_model_cache, mock_auth_manager
                 ):
@@ -106,15 +106,15 @@ class TestStreamKiroToOpenai:
         """
         print("Setup: Mock stream with content...")
         
-        async def mock_parse_kiro_stream(*args, **kwargs):
-            yield KiroEvent(type="content", content="Hello")
+        async def mock_parse_trae_stream(*args, **kwargs):
+            yield TraeEvent(type="content", content="Hello")
         
         print("Action: Streaming to OpenAI format...")
         chunks = []
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
-                async for chunk in stream_kiro_to_openai(
+        with patch('trae.streaming_openai.parse_trae_stream', mock_parse_trae_stream):
+            with patch('trae.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+                async for chunk in stream_trae_to_openai(
                     mock_http_client, mock_response, "claude-sonnet-4",
                     mock_model_cache, mock_auth_manager
                 ):
@@ -135,15 +135,15 @@ class TestStreamKiroToOpenai:
         """
         print("Setup: Mock stream with content...")
         
-        async def mock_parse_kiro_stream(*args, **kwargs):
-            yield KiroEvent(type="content", content="Hello")
+        async def mock_parse_trae_stream(*args, **kwargs):
+            yield TraeEvent(type="content", content="Hello")
         
         print("Action: Streaming to OpenAI format...")
         chunks = []
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
-                async for chunk in stream_kiro_to_openai(
+        with patch('trae.streaming_openai.parse_trae_stream', mock_parse_trae_stream):
+            with patch('trae.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+                async for chunk in stream_trae_to_openai(
                     mock_http_client, mock_response, "claude-sonnet-4",
                     mock_model_cache, mock_auth_manager
                 ):
@@ -163,16 +163,16 @@ class TestStreamKiroToOpenai:
         """
         print("Setup: Mock stream with content...")
         
-        async def mock_parse_kiro_stream(*args, **kwargs):
-            yield KiroEvent(type="content", content="Hello")
-            yield KiroEvent(type="context_usage", context_usage_percentage=5.0)
+        async def mock_parse_trae_stream(*args, **kwargs):
+            yield TraeEvent(type="content", content="Hello")
+            yield TraeEvent(type="context_usage", context_usage_percentage=5.0)
         
         print("Action: Streaming to OpenAI format...")
         chunks = []
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
-                async for chunk in stream_kiro_to_openai(
+        with patch('trae.streaming_openai.parse_trae_stream', mock_parse_trae_stream):
+            with patch('trae.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+                async for chunk in stream_trae_to_openai(
                     mock_http_client, mock_response, "claude-sonnet-4",
                     mock_model_cache, mock_auth_manager
                 ):
@@ -199,16 +199,16 @@ class TestStreamKiroToOpenai:
             "function": {"name": "get_weather", "arguments": '{"city": "Moscow"}'}
         }
         
-        async def mock_parse_kiro_stream(*args, **kwargs):
-            yield KiroEvent(type="content", content="Let me check")
-            yield KiroEvent(type="tool_use", tool_use=tool_use_data)
+        async def mock_parse_trae_stream(*args, **kwargs):
+            yield TraeEvent(type="content", content="Let me check")
+            yield TraeEvent(type="tool_use", tool_use=tool_use_data)
         
         print("Action: Streaming to OpenAI format...")
         chunks = []
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
-                async for chunk in stream_kiro_to_openai(
+        with patch('trae.streaming_openai.parse_trae_stream', mock_parse_trae_stream):
+            with patch('trae.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+                async for chunk in stream_trae_to_openai(
                     mock_http_client, mock_response, "claude-sonnet-4",
                     mock_model_cache, mock_auth_manager
                 ):
@@ -230,12 +230,12 @@ class TestStreamKiroToOpenai:
         """
         print("Setup: Mock stream with multiple tool calls...")
         
-        async def mock_parse_kiro_stream(*args, **kwargs):
-            yield KiroEvent(type="tool_use", tool_use={
+        async def mock_parse_trae_stream(*args, **kwargs):
+            yield TraeEvent(type="tool_use", tool_use={
                 "id": "call_1", "type": "function",
                 "function": {"name": "func1", "arguments": "{}"}
             })
-            yield KiroEvent(type="tool_use", tool_use={
+            yield TraeEvent(type="tool_use", tool_use={
                 "id": "call_2", "type": "function",
                 "function": {"name": "func2", "arguments": "{}"}
             })
@@ -243,9 +243,9 @@ class TestStreamKiroToOpenai:
         print("Action: Streaming to OpenAI format...")
         chunks = []
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
-                async for chunk in stream_kiro_to_openai(
+        with patch('trae.streaming_openai.parse_trae_stream', mock_parse_trae_stream):
+            with patch('trae.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+                async for chunk in stream_trae_to_openai(
                     mock_http_client, mock_response, "claude-sonnet-4",
                     mock_model_cache, mock_auth_manager
                 ):
@@ -279,8 +279,8 @@ class TestStreamKiroToOpenai:
         """
         print("Setup: Mock stream with tool call...")
         
-        async def mock_parse_kiro_stream(*args, **kwargs):
-            yield KiroEvent(type="tool_use", tool_use={
+        async def mock_parse_trae_stream(*args, **kwargs):
+            yield TraeEvent(type="tool_use", tool_use={
                 "id": "call_1", "type": "function",
                 "function": {"name": "func1", "arguments": "{}"}
             })
@@ -288,9 +288,9 @@ class TestStreamKiroToOpenai:
         print("Action: Streaming to OpenAI format...")
         chunks = []
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
-                async for chunk in stream_kiro_to_openai(
+        with patch('trae.streaming_openai.parse_trae_stream', mock_parse_trae_stream):
+            with patch('trae.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+                async for chunk in stream_trae_to_openai(
                     mock_http_client, mock_response, "claude-sonnet-4",
                     mock_model_cache, mock_auth_manager
                 ):
@@ -311,15 +311,15 @@ class TestStreamKiroToOpenai:
         """
         print("Setup: Mock stream without tool calls...")
         
-        async def mock_parse_kiro_stream(*args, **kwargs):
-            yield KiroEvent(type="content", content="Hello")
+        async def mock_parse_trae_stream(*args, **kwargs):
+            yield TraeEvent(type="content", content="Hello")
         
         print("Action: Streaming to OpenAI format...")
         chunks = []
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
-                async for chunk in stream_kiro_to_openai(
+        with patch('trae.streaming_openai.parse_trae_stream', mock_parse_trae_stream):
+            with patch('trae.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+                async for chunk in stream_trae_to_openai(
                     mock_http_client, mock_response, "claude-sonnet-4",
                     mock_model_cache, mock_auth_manager
                 ):
@@ -340,14 +340,14 @@ class TestStreamKiroToOpenai:
         """
         print("Setup: Mock stream...")
         
-        async def mock_parse_kiro_stream(*args, **kwargs):
-            yield KiroEvent(type="content", content="Hello")
+        async def mock_parse_trae_stream(*args, **kwargs):
+            yield TraeEvent(type="content", content="Hello")
         
         print("Action: Streaming to OpenAI format...")
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
-                async for chunk in stream_kiro_to_openai(
+        with patch('trae.streaming_openai.parse_trae_stream', mock_parse_trae_stream):
+            with patch('trae.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+                async for chunk in stream_trae_to_openai(
                     mock_http_client, mock_response, "claude-sonnet-4",
                     mock_model_cache, mock_auth_manager
                 ):
@@ -365,16 +365,16 @@ class TestStreamKiroToOpenai:
         """
         print("Setup: Mock stream that raises error...")
         
-        async def mock_parse_kiro_stream(*args, **kwargs):
-            yield KiroEvent(type="content", content="Hello")
+        async def mock_parse_trae_stream(*args, **kwargs):
+            yield TraeEvent(type="content", content="Hello")
             raise RuntimeError("Test error")
         
         print("Action: Streaming to OpenAI format with error...")
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+        with patch('trae.streaming_openai.parse_trae_stream', mock_parse_trae_stream):
+            with patch('trae.streaming_openai.parse_bracket_tool_calls', return_value=[]):
                 try:
-                    async for chunk in stream_kiro_to_openai(
+                    async for chunk in stream_trae_to_openai(
                         mock_http_client, mock_response, "claude-sonnet-4",
                         mock_model_cache, mock_auth_manager
                     ):
@@ -402,17 +402,17 @@ class TestStreamingOpenaiThinkingContent:
         """
         print("Setup: Mock stream with thinking content...")
         
-        async def mock_parse_kiro_stream(*args, **kwargs):
-            yield KiroEvent(type="thinking", thinking_content="Let me think...")
-            yield KiroEvent(type="content", content="Here is my answer")
+        async def mock_parse_trae_stream(*args, **kwargs):
+            yield TraeEvent(type="thinking", thinking_content="Let me think...")
+            yield TraeEvent(type="content", content="Here is my answer")
         
         print("Action: Streaming to OpenAI format with reasoning mode...")
         chunks = []
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
-                with patch('kiro.streaming_openai.FAKE_REASONING_HANDLING', 'as_reasoning_content'):
-                    async for chunk in stream_kiro_to_openai(
+        with patch('trae.streaming_openai.parse_trae_stream', mock_parse_trae_stream):
+            with patch('trae.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+                with patch('trae.streaming_openai.FAKE_REASONING_HANDLING', 'as_reasoning_content'):
+                    async for chunk in stream_trae_to_openai(
                         mock_http_client, mock_response, "claude-sonnet-4",
                         mock_model_cache, mock_auth_manager
                     ):
@@ -434,17 +434,17 @@ class TestStreamingOpenaiThinkingContent:
         """
         print("Setup: Mock stream with thinking content...")
         
-        async def mock_parse_kiro_stream(*args, **kwargs):
-            yield KiroEvent(type="thinking", thinking_content="Let me think...")
-            yield KiroEvent(type="content", content="Here is my answer")
+        async def mock_parse_trae_stream(*args, **kwargs):
+            yield TraeEvent(type="thinking", thinking_content="Let me think...")
+            yield TraeEvent(type="content", content="Here is my answer")
         
         print("Action: Streaming to OpenAI format with content mode...")
         chunks = []
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
-                with patch('kiro.streaming_openai.FAKE_REASONING_HANDLING', 'include_as_text'):
-                    async for chunk in stream_kiro_to_openai(
+        with patch('trae.streaming_openai.parse_trae_stream', mock_parse_trae_stream):
+            with patch('trae.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+                with patch('trae.streaming_openai.FAKE_REASONING_HANDLING', 'include_as_text'):
+                    async for chunk in stream_trae_to_openai(
                         mock_http_client, mock_response, "claude-sonnet-4",
                         mock_model_cache, mock_auth_manager
                     ):
@@ -473,8 +473,8 @@ class TestStreamingOpenaiNoneProtection:
         """
         print("Setup: Mock stream with None function name...")
         
-        async def mock_parse_kiro_stream(*args, **kwargs):
-            yield KiroEvent(type="tool_use", tool_use={
+        async def mock_parse_trae_stream(*args, **kwargs):
+            yield TraeEvent(type="tool_use", tool_use={
                 "id": "call_1", "type": "function",
                 "function": {"name": None, "arguments": "{}"}
             })
@@ -482,9 +482,9 @@ class TestStreamingOpenaiNoneProtection:
         print("Action: Streaming to OpenAI format...")
         chunks = []
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
-                async for chunk in stream_kiro_to_openai(
+        with patch('trae.streaming_openai.parse_trae_stream', mock_parse_trae_stream):
+            with patch('trae.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+                async for chunk in stream_trae_to_openai(
                     mock_http_client, mock_response, "claude-sonnet-4",
                     mock_model_cache, mock_auth_manager
                 ):
@@ -518,8 +518,8 @@ class TestStreamingOpenaiNoneProtection:
         """
         print("Setup: Mock stream with None arguments...")
         
-        async def mock_parse_kiro_stream(*args, **kwargs):
-            yield KiroEvent(type="tool_use", tool_use={
+        async def mock_parse_trae_stream(*args, **kwargs):
+            yield TraeEvent(type="tool_use", tool_use={
                 "id": "call_1", "type": "function",
                 "function": {"name": "func1", "arguments": None}
             })
@@ -527,9 +527,9 @@ class TestStreamingOpenaiNoneProtection:
         print("Action: Streaming to OpenAI format...")
         chunks = []
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
-                async for chunk in stream_kiro_to_openai(
+        with patch('trae.streaming_openai.parse_trae_stream', mock_parse_trae_stream):
+            with patch('trae.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+                async for chunk in stream_trae_to_openai(
                     mock_http_client, mock_response, "claude-sonnet-4",
                     mock_model_cache, mock_auth_manager
                 ):
@@ -563,8 +563,8 @@ class TestStreamingOpenaiNoneProtection:
         """
         print("Setup: Mock stream with None function...")
         
-        async def mock_parse_kiro_stream(*args, **kwargs):
-            yield KiroEvent(type="tool_use", tool_use={
+        async def mock_parse_trae_stream(*args, **kwargs):
+            yield TraeEvent(type="tool_use", tool_use={
                 "id": "call_1", "type": "function",
                 "function": None
             })
@@ -572,9 +572,9 @@ class TestStreamingOpenaiNoneProtection:
         print("Action: Streaming to OpenAI format...")
         chunks = []
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
-                async for chunk in stream_kiro_to_openai(
+        with patch('trae.streaming_openai.parse_trae_stream', mock_parse_trae_stream):
+            with patch('trae.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+                async for chunk in stream_trae_to_openai(
                     mock_http_client, mock_response, "claude-sonnet-4",
                     mock_model_cache, mock_auth_manager
                 ):
@@ -617,18 +617,18 @@ class TestStreamWithFirstTokenRetry:
         # First call raises timeout, second succeeds
         timeout_raised = False
         
-        async def mock_parse_kiro_stream_with_retry(*args, **kwargs):
+        async def mock_parse_trae_stream_with_retry(*args, **kwargs):
             nonlocal timeout_raised
             if not timeout_raised:
                 timeout_raised = True
                 raise FirstTokenTimeoutError("Timeout!")
-            yield KiroEvent(type="content", content="Success")
+            yield TraeEvent(type="content", content="Success")
         
         print("Action: Running stream_with_first_token_retry...")
         chunks = []
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream_with_retry):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+        with patch('trae.streaming_openai.parse_trae_stream', mock_parse_trae_stream_with_retry):
+            with patch('trae.streaming_openai.parse_bracket_tool_calls', return_value=[]):
                 async for chunk in stream_with_first_token_retry(
                     mock_make_request,
                     mock_http_client,
@@ -668,7 +668,7 @@ class TestStreamWithFirstTokenRetry:
             call_count += 1
             return mock_response
         
-        async def mock_parse_kiro_stream_always_timeout(*args, **kwargs):
+        async def mock_parse_trae_stream_always_timeout(*args, **kwargs):
             raise FirstTokenTimeoutError("Timeout!")
             yield  # Make it a generator
         
@@ -676,7 +676,7 @@ class TestStreamWithFirstTokenRetry:
         
         print(f"Action: Running stream_with_first_token_retry with max_retries={max_retries}...")
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream_always_timeout):
+        with patch('trae.streaming_openai.parse_trae_stream', mock_parse_trae_stream_always_timeout):
             with pytest.raises(HTTPException) as exc_info:
                 async for chunk in stream_with_first_token_retry(
                     mock_make_request,
@@ -752,13 +752,13 @@ class TestStreamWithFirstTokenRetry:
             call_count += 1
             return mock_response
         
-        async def mock_parse_kiro_stream_error(*args, **kwargs):
+        async def mock_parse_trae_stream_error(*args, **kwargs):
             raise RuntimeError("Test error")
             yield  # Make it a generator
         
         print("Action: Running stream_with_first_token_retry with RuntimeError...")
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream_error):
+        with patch('trae.streaming_openai.parse_trae_stream', mock_parse_trae_stream_error):
             with pytest.raises(RuntimeError) as exc_info:
                 async for chunk in stream_with_first_token_retry(
                     mock_make_request,
@@ -807,17 +807,17 @@ class TestStreamWithFirstTokenRetry:
         # First call raises timeout, second succeeds
         timeout_raised = False
         
-        async def mock_parse_kiro_stream_with_retry(*args, **kwargs):
+        async def mock_parse_trae_stream_with_retry(*args, **kwargs):
             nonlocal timeout_raised
             if not timeout_raised:
                 timeout_raised = True
                 raise FirstTokenTimeoutError("Timeout!")
-            yield KiroEvent(type="content", content="Success")
+            yield TraeEvent(type="content", content="Success")
         
         print("Action: Running stream_with_first_token_retry...")
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream_with_retry):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+        with patch('trae.streaming_openai.parse_trae_stream', mock_parse_trae_stream_with_retry):
+            with patch('trae.streaming_openai.parse_bracket_tool_calls', return_value=[]):
                 async for chunk in stream_with_first_token_retry(
                     mock_make_request,
                     mock_http_client,
@@ -849,14 +849,14 @@ class TestCollectStreamResponse:
         """
         print("Setup: Mock stream with content...")
         
-        async def mock_parse_kiro_stream(*args, **kwargs):
-            yield KiroEvent(type="content", content="Hello")
-            yield KiroEvent(type="content", content=" World")
+        async def mock_parse_trae_stream(*args, **kwargs):
+            yield TraeEvent(type="content", content="Hello")
+            yield TraeEvent(type="content", content=" World")
         
         print("Action: Collecting stream response...")
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+        with patch('trae.streaming_openai.parse_trae_stream', mock_parse_trae_stream):
+            with patch('trae.streaming_openai.parse_bracket_tool_calls', return_value=[]):
                 result = await collect_stream_response(
                     mock_http_client, mock_response, "claude-sonnet-4",
                     mock_model_cache, mock_auth_manager
@@ -875,15 +875,15 @@ class TestCollectStreamResponse:
         """
         print("Setup: Mock stream with thinking content...")
         
-        async def mock_parse_kiro_stream(*args, **kwargs):
-            yield KiroEvent(type="thinking", thinking_content="Let me think...")
-            yield KiroEvent(type="content", content="Answer")
+        async def mock_parse_trae_stream(*args, **kwargs):
+            yield TraeEvent(type="thinking", thinking_content="Let me think...")
+            yield TraeEvent(type="content", content="Answer")
         
         print("Action: Collecting stream response with reasoning mode...")
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
-                with patch('kiro.streaming_openai.FAKE_REASONING_HANDLING', 'as_reasoning_content'):
+        with patch('trae.streaming_openai.parse_trae_stream', mock_parse_trae_stream):
+            with patch('trae.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+                with patch('trae.streaming_openai.FAKE_REASONING_HANDLING', 'as_reasoning_content'):
                     result = await collect_stream_response(
                         mock_http_client, mock_response, "claude-sonnet-4",
                         mock_model_cache, mock_auth_manager
@@ -904,16 +904,16 @@ class TestCollectStreamResponse:
         """
         print("Setup: Mock stream with tool calls...")
         
-        async def mock_parse_kiro_stream(*args, **kwargs):
-            yield KiroEvent(type="tool_use", tool_use={
+        async def mock_parse_trae_stream(*args, **kwargs):
+            yield TraeEvent(type="tool_use", tool_use={
                 "id": "call_1", "type": "function",
                 "function": {"name": "func1", "arguments": '{"a": 1}'}
             })
         
         print("Action: Collecting stream response...")
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+        with patch('trae.streaming_openai.parse_trae_stream', mock_parse_trae_stream):
+            with patch('trae.streaming_openai.parse_bracket_tool_calls', return_value=[]):
                 result = await collect_stream_response(
                     mock_http_client, mock_response, "claude-sonnet-4",
                     mock_model_cache, mock_auth_manager
@@ -935,16 +935,16 @@ class TestCollectStreamResponse:
         """
         print("Setup: Mock stream with tool calls...")
         
-        async def mock_parse_kiro_stream(*args, **kwargs):
-            yield KiroEvent(type="tool_use", tool_use={
+        async def mock_parse_trae_stream(*args, **kwargs):
+            yield TraeEvent(type="tool_use", tool_use={
                 "id": "call_1", "type": "function",
                 "function": {"name": "func1", "arguments": "{}"}
             })
         
         print("Action: Collecting stream response...")
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+        with patch('trae.streaming_openai.parse_trae_stream', mock_parse_trae_stream):
+            with patch('trae.streaming_openai.parse_bracket_tool_calls', return_value=[]):
                 result = await collect_stream_response(
                     mock_http_client, mock_response, "claude-sonnet-4",
                     mock_model_cache, mock_auth_manager
@@ -966,14 +966,14 @@ class TestCollectStreamResponse:
         """
         print("Setup: Mock stream with content...")
         
-        async def mock_parse_kiro_stream(*args, **kwargs):
-            yield KiroEvent(type="content", content="Hello")
-            yield KiroEvent(type="context_usage", context_usage_percentage=5.0)
+        async def mock_parse_trae_stream(*args, **kwargs):
+            yield TraeEvent(type="content", content="Hello")
+            yield TraeEvent(type="context_usage", context_usage_percentage=5.0)
         
         print("Action: Collecting stream response...")
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+        with patch('trae.streaming_openai.parse_trae_stream', mock_parse_trae_stream):
+            with patch('trae.streaming_openai.parse_bracket_tool_calls', return_value=[]):
                 result = await collect_stream_response(
                     mock_http_client, mock_response, "claude-sonnet-4",
                     mock_model_cache, mock_auth_manager
@@ -995,16 +995,16 @@ class TestCollectStreamResponse:
         """
         print("Setup: Mock stream with tool calls...")
         
-        async def mock_parse_kiro_stream(*args, **kwargs):
-            yield KiroEvent(type="tool_use", tool_use={
+        async def mock_parse_trae_stream(*args, **kwargs):
+            yield TraeEvent(type="tool_use", tool_use={
                 "id": "call_1", "type": "function",
                 "function": {"name": "func1", "arguments": "{}"}
             })
         
         print("Action: Collecting stream response...")
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+        with patch('trae.streaming_openai.parse_trae_stream', mock_parse_trae_stream):
+            with patch('trae.streaming_openai.parse_bracket_tool_calls', return_value=[]):
                 result = await collect_stream_response(
                     mock_http_client, mock_response, "claude-sonnet-4",
                     mock_model_cache, mock_auth_manager
@@ -1023,13 +1023,13 @@ class TestCollectStreamResponse:
         """
         print("Setup: Mock stream without tool calls...")
         
-        async def mock_parse_kiro_stream(*args, **kwargs):
-            yield KiroEvent(type="content", content="Hello")
+        async def mock_parse_trae_stream(*args, **kwargs):
+            yield TraeEvent(type="content", content="Hello")
         
         print("Action: Collecting stream response...")
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+        with patch('trae.streaming_openai.parse_trae_stream', mock_parse_trae_stream):
+            with patch('trae.streaming_openai.parse_bracket_tool_calls', return_value=[]):
                 result = await collect_stream_response(
                     mock_http_client, mock_response, "claude-sonnet-4",
                     mock_model_cache, mock_auth_manager
@@ -1048,13 +1048,13 @@ class TestCollectStreamResponse:
         """
         print("Setup: Mock stream...")
         
-        async def mock_parse_kiro_stream(*args, **kwargs):
-            yield KiroEvent(type="content", content="Hello")
+        async def mock_parse_trae_stream(*args, **kwargs):
+            yield TraeEvent(type="content", content="Hello")
         
         print("Action: Collecting stream response...")
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+        with patch('trae.streaming_openai.parse_trae_stream', mock_parse_trae_stream):
+            with patch('trae.streaming_openai.parse_bracket_tool_calls', return_value=[]):
                 result = await collect_stream_response(
                     mock_http_client, mock_response, "claude-sonnet-4",
                     mock_model_cache, mock_auth_manager
@@ -1073,13 +1073,13 @@ class TestCollectStreamResponse:
         """
         print("Setup: Mock stream...")
         
-        async def mock_parse_kiro_stream(*args, **kwargs):
-            yield KiroEvent(type="content", content="Hello")
+        async def mock_parse_trae_stream(*args, **kwargs):
+            yield TraeEvent(type="content", content="Hello")
         
         print("Action: Collecting stream response...")
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+        with patch('trae.streaming_openai.parse_trae_stream', mock_parse_trae_stream):
+            with patch('trae.streaming_openai.parse_bracket_tool_calls', return_value=[]):
                 result = await collect_stream_response(
                     mock_http_client, mock_response, "claude-sonnet-4",
                     mock_model_cache, mock_auth_manager
@@ -1098,13 +1098,13 @@ class TestCollectStreamResponse:
         """
         print("Setup: Mock stream...")
         
-        async def mock_parse_kiro_stream(*args, **kwargs):
-            yield KiroEvent(type="content", content="Hello")
+        async def mock_parse_trae_stream(*args, **kwargs):
+            yield TraeEvent(type="content", content="Hello")
         
         print("Action: Collecting stream response...")
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+        with patch('trae.streaming_openai.parse_trae_stream', mock_parse_trae_stream):
+            with patch('trae.streaming_openai.parse_bracket_tool_calls', return_value=[]):
                 result = await collect_stream_response(
                     mock_http_client, mock_response, "claude-sonnet-4",
                     mock_model_cache, mock_auth_manager
@@ -1131,15 +1131,15 @@ class TestStreamingOpenaiErrorHandling:
         """
         print("Setup: Mock stream that raises timeout...")
         
-        async def mock_parse_kiro_stream(*args, **kwargs):
+        async def mock_parse_trae_stream(*args, **kwargs):
             raise FirstTokenTimeoutError("Timeout!")
             yield  # Make it a generator
         
         print("Action: Streaming to OpenAI format with timeout...")
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
+        with patch('trae.streaming_openai.parse_trae_stream', mock_parse_trae_stream):
             with pytest.raises(FirstTokenTimeoutError):
-                async for chunk in stream_kiro_to_openai(
+                async for chunk in stream_trae_to_openai(
                     mock_http_client, mock_response, "claude-sonnet-4",
                     mock_model_cache, mock_auth_manager
                 ):
@@ -1155,18 +1155,18 @@ class TestStreamingOpenaiErrorHandling:
         """
         print("Setup: Mock stream that raises GeneratorExit...")
         
-        async def mock_parse_kiro_stream(*args, **kwargs):
-            yield KiroEvent(type="content", content="Hello")
+        async def mock_parse_trae_stream(*args, **kwargs):
+            yield TraeEvent(type="content", content="Hello")
             raise GeneratorExit()
         
         print("Action: Streaming to OpenAI format with GeneratorExit...")
         chunks = []
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+        with patch('trae.streaming_openai.parse_trae_stream', mock_parse_trae_stream):
+            with patch('trae.streaming_openai.parse_bracket_tool_calls', return_value=[]):
                 # GeneratorExit is caught internally and not re-raised
                 # This is correct behavior - client disconnect should be handled gracefully
-                async for chunk in stream_kiro_to_openai(
+                async for chunk in stream_trae_to_openai(
                     mock_http_client, mock_response, "claude-sonnet-4",
                     mock_model_cache, mock_auth_manager
                 ):
@@ -1185,16 +1185,16 @@ class TestStreamingOpenaiErrorHandling:
         """
         print("Setup: Mock stream that raises RuntimeError...")
         
-        async def mock_parse_kiro_stream(*args, **kwargs):
-            yield KiroEvent(type="content", content="Hello")
+        async def mock_parse_trae_stream(*args, **kwargs):
+            yield TraeEvent(type="content", content="Hello")
             raise RuntimeError("Test error")
         
         print("Action: Streaming to OpenAI format with RuntimeError...")
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+        with patch('trae.streaming_openai.parse_trae_stream', mock_parse_trae_stream):
+            with patch('trae.streaming_openai.parse_bracket_tool_calls', return_value=[]):
                 with pytest.raises(RuntimeError) as exc_info:
-                    async for chunk in stream_kiro_to_openai(
+                    async for chunk in stream_trae_to_openai(
                         mock_http_client, mock_response, "claude-sonnet-4",
                         mock_model_cache, mock_auth_manager
                     ):
@@ -1214,16 +1214,16 @@ class TestStreamingOpenaiErrorHandling:
         
         mock_response.aclose = AsyncMock(side_effect=ConnectionError("Connection lost"))
         
-        async def mock_parse_kiro_stream(*args, **kwargs):
-            yield KiroEvent(type="content", content="Hello")
+        async def mock_parse_trae_stream(*args, **kwargs):
+            yield TraeEvent(type="content", content="Hello")
             raise RuntimeError("Original error")
         
         print("Action: Streaming to OpenAI format with error and aclose error...")
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+        with patch('trae.streaming_openai.parse_trae_stream', mock_parse_trae_stream):
+            with patch('trae.streaming_openai.parse_bracket_tool_calls', return_value=[]):
                 with pytest.raises(RuntimeError) as exc_info:
-                    async for chunk in stream_kiro_to_openai(
+                    async for chunk in stream_trae_to_openai(
                         mock_http_client, mock_response, "claude-sonnet-4",
                         mock_model_cache, mock_auth_manager
                     ):
@@ -1249,8 +1249,8 @@ class TestStreamingOpenaiBracketToolCalls:
         """
         print("Setup: Mock stream with bracket tool calls...")
         
-        async def mock_parse_kiro_stream(*args, **kwargs):
-            yield KiroEvent(type="content", content="[tool_call: func1]")
+        async def mock_parse_trae_stream(*args, **kwargs):
+            yield TraeEvent(type="content", content="[tool_call: func1]")
         
         bracket_tool_calls = [
             {"id": "call_1", "type": "function", "function": {"name": "func1", "arguments": "{}"}}
@@ -1259,9 +1259,9 @@ class TestStreamingOpenaiBracketToolCalls:
         print("Action: Streaming to OpenAI format...")
         chunks = []
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=bracket_tool_calls):
-                async for chunk in stream_kiro_to_openai(
+        with patch('trae.streaming_openai.parse_trae_stream', mock_parse_trae_stream):
+            with patch('trae.streaming_openai.parse_bracket_tool_calls', return_value=bracket_tool_calls):
+                async for chunk in stream_trae_to_openai(
                     mock_http_client, mock_response, "claude-sonnet-4",
                     mock_model_cache, mock_auth_manager
                 ):
@@ -1282,9 +1282,9 @@ class TestStreamingOpenaiBracketToolCalls:
         """
         print("Setup: Mock stream with duplicate tool calls...")
         
-        async def mock_parse_kiro_stream(*args, **kwargs):
-            yield KiroEvent(type="content", content="text")
-            yield KiroEvent(type="tool_use", tool_use={
+        async def mock_parse_trae_stream(*args, **kwargs):
+            yield TraeEvent(type="content", content="text")
+            yield TraeEvent(type="tool_use", tool_use={
                 "id": "call_1", "type": "function",
                 "function": {"name": "func1", "arguments": "{}"}
             })
@@ -1297,13 +1297,13 @@ class TestStreamingOpenaiBracketToolCalls:
         print("Action: Streaming to OpenAI format...")
         chunks = []
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=bracket_tool_calls):
-                with patch('kiro.streaming_openai.deduplicate_tool_calls') as mock_dedup:
+        with patch('trae.streaming_openai.parse_trae_stream', mock_parse_trae_stream):
+            with patch('trae.streaming_openai.parse_bracket_tool_calls', return_value=bracket_tool_calls):
+                with patch('trae.streaming_openai.deduplicate_tool_calls') as mock_dedup:
                     mock_dedup.return_value = [
                         {"id": "call_1", "type": "function", "function": {"name": "func1", "arguments": "{}"}}
                     ]
-                    async for chunk in stream_kiro_to_openai(
+                    async for chunk in stream_trae_to_openai(
                         mock_http_client, mock_response, "claude-sonnet-4",
                         mock_model_cache, mock_auth_manager
                     ):
@@ -1330,16 +1330,16 @@ class TestStreamingOpenaiMeteringData:
         """
         print("Setup: Mock stream with metering data...")
         
-        async def mock_parse_kiro_stream(*args, **kwargs):
-            yield KiroEvent(type="content", content="Hello")
-            yield KiroEvent(type="usage", usage={"credits": 0.001})
+        async def mock_parse_trae_stream(*args, **kwargs):
+            yield TraeEvent(type="content", content="Hello")
+            yield TraeEvent(type="usage", usage={"credits": 0.001})
         
         print("Action: Streaming to OpenAI format...")
         chunks = []
         
-        with patch('kiro.streaming_openai.parse_kiro_stream', mock_parse_kiro_stream):
-            with patch('kiro.streaming_openai.parse_bracket_tool_calls', return_value=[]):
-                async for chunk in stream_kiro_to_openai(
+        with patch('trae.streaming_openai.parse_trae_stream', mock_parse_trae_stream):
+            with patch('trae.streaming_openai.parse_bracket_tool_calls', return_value=[]):
+                async for chunk in stream_trae_to_openai(
                     mock_http_client, mock_response, "claude-sonnet-4",
                     mock_model_cache, mock_auth_manager
                 ):

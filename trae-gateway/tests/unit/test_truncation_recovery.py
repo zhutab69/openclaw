@@ -15,7 +15,7 @@ from unittest.mock import patch
 
 import pytest
 
-from kiro.truncation_recovery import (
+from trae.truncation_recovery import (
     should_inject_recovery,
     generate_truncation_tool_result,
     generate_truncation_user_message
@@ -38,7 +38,7 @@ class TestRecoveryEnabledCheck:
         with patch.dict(os.environ, {"TRUNCATION_RECOVERY": "true"}):
             # Need to reload config to pick up env change
             from importlib import reload
-            from kiro import config
+            from trae import config
             reload(config)
             
             result = should_inject_recovery()
@@ -62,7 +62,7 @@ class TestRecoveryEnabledCheck:
         with patch.dict(os.environ, {"TRUNCATION_RECOVERY": "false"}):
             # Need to reload config to pick up env change
             from importlib import reload
-            from kiro import config
+            from trae import config
             reload(config)
             
             result = should_inject_recovery()

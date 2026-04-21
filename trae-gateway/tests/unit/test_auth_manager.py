@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 
 """
-Unit tests for KiroAuthManager.
-Tests token management logic for Kiro without real network requests.
+Unit tests for TraeAuthManager.
+Tests token management logic for Trae without real network requests.
 """
 
 import asyncio
@@ -12,20 +12,20 @@ from datetime import datetime, timezone, timedelta
 from unittest.mock import AsyncMock, Mock, patch
 import httpx
 
-from kiro.auth import KiroAuthManager, AuthType
-from kiro.config import TOKEN_REFRESH_THRESHOLD, get_aws_sso_oidc_url
+from trae.auth import TraeAuthManager, AuthType
+from trae.config import TOKEN_REFRESH_THRESHOLD, get_aws_sso_oidc_url
 
 
-class TestKiroAuthManagerInitialization:
-    """Tests for KiroAuthManager initialization."""
+class TestTraeAuthManagerInitialization:
+    """Tests for TraeAuthManager initialization."""
     
     def test_initialization_stores_credentials(self):
         """
         What it does: Verifies correct storage of credentials during initialization.
         Purpose: Ensure all constructor parameters are stored in private fields.
         """
-        print("Setup: Creating KiroAuthManager with test credentials...")
-        manager = KiroAuthManager(
+        print("Setup: Creating TraeAuthManager with test credentials...")
+        manager = TraeAuthManager(
             refresh_token="test_refresh_123",
             profile_arn="arn:aws:codewhisperer:us-east-1:123456789:profile/test",
             region="us-east-1"
@@ -50,8 +50,8 @@ class TestKiroAuthManagerInitialization:
         What it does: Verifies URL formation based on region.
         Purpose: Ensure URLs are dynamically formed with the correct region.
         """
-        print("Setup: Creating KiroAuthManager with region eu-west-1...")
-        manager = KiroAuthManager(
+        print("Setup: Creating TraeAuthManager with region eu-west-1...")
+        manager = TraeAuthManager(
             refresh_token="test_token",
             region="eu-west-1"
         )
@@ -71,8 +71,8 @@ class TestKiroAuthManagerInitialization:
         What it does: Verifies unique fingerprint generation.
         Purpose: Ensure fingerprint is generated and has correct format.
         """
-        print("Setup: Creating KiroAuthManager...")
-        manager = KiroAuthManager(refresh_token="test_token")
+        print("Setup: Creating TraeAuthManager...")
+        manager = TraeAuthManager(refresh_token="test_token")
         
         print("Verification: Fingerprint generated...")
         print(f"Fingerprint: {manager._fingerprint}")
@@ -80,7 +80,7 @@ class TestKiroAuthManagerInitialization:
         assert len(manager._fingerprint) == 64  # SHA256 hex digest
 
 
-class TestKiroAuthManagerCredentialsFile:
+class TestTraeAuthManagerCredentialsFile:
     """Tests for loading credentials from file."""
     
     def test_load_credentials_from_file(self, temp_creds_file):
@@ -88,8 +88,8 @@ class TestKiroAuthManagerCredentialsFile:
         What it does: Verifies loading credentials from JSON file.
         Purpose: Ensure data is correctly read from file.
         """
-        print(f"Setup: Creating KiroAuthManager with credentials file: {temp_creds_file}")
-        manager = KiroAuthManager(creds_file=temp_creds_file)
+        print(f"Setup: Creating TraeAuthManager with credentials file: {temp_creds_file}")
+        manager = TraeAuthManager(creds_file=temp_creds_file)
         
         print("Verification: Data loaded from file...")
         print(f"Comparing access_token: Expected 'file_access_token', Got '{manager._access_token}'")
@@ -110,10 +110,10 @@ class TestKiroAuthManagerCredentialsFile:
         What it does: Verifies handling of missing credentials file.
         Purpose: Ensure application doesn't crash when file is missing.
         """
-        print("Setup: Creating KiroAuthManager with non-existent file...")
+        print("Setup: Creating TraeAuthManager with non-existent file...")
         non_existent_file = str(tmp_path / "non_existent.json")
         
-        manager = KiroAuthManager(
+        manager = TraeAuthManager(
             refresh_token="fallback_token",
             creds_file=non_existent_file
         )
@@ -123,7 +123,7 @@ class TestKiroAuthManagerCredentialsFile:
         assert manager._refresh_token == "fallback_token"
 
 
-class TestKiroAuthManagerTokenExpiration:
+class TestTraeAuthManagerTokenExpiration:
     """Tests for token expiration checking."""
     
     def test_is_token_expiring_soon_returns_true_when_no_expires_at(self):
@@ -131,8 +131,8 @@ class TestKiroAuthManagerTokenExpiration:
         What it does: Verifies that without expires_at token is considered expiring.
         Purpose: Ensure safe behavior when time information is missing.
         """
-        print("Setup: Creating KiroAuthManager without expires_at...")
-        manager = KiroAuthManager(refresh_token="test_token")
+        print("Setup: Creating TraeAuthManager without expires_at...")
+        manager = TraeAuthManager(refresh_token="test_token")
         manager._expires_at = None
         
         print("Verification: is_token_expiring_soon returns True...")
@@ -145,8 +145,8 @@ class TestKiroAuthManagerTokenExpiration:
         What it does: Verifies that expired token is correctly identified.
         Purpose: Ensure token in the past is considered expiring.
         """
-        print("Setup: Creating KiroAuthManager with expired token...")
-        manager = KiroAuthManager(refresh_token="test_token")
+        print("Setup: Creating TraeAuthManager with expired token...")
+        manager = TraeAuthManager(refresh_token="test_token")
         manager._expires_at = datetime.now(timezone.utc) - timedelta(hours=1)
         
         print("Verification: is_token_expiring_soon returns True for expired token...")
@@ -159,8 +159,8 @@ class TestKiroAuthManagerTokenExpiration:
         What it does: Verifies that token within threshold is considered expiring.
         Purpose: Ensure token is refreshed in advance (10 minutes before expiration).
         """
-        print("Setup: Creating KiroAuthManager with token expiring in 5 minutes...")
-        manager = KiroAuthManager(refresh_token="test_token")
+        print("Setup: Creating TraeAuthManager with token expiring in 5 minutes...")
+        manager = TraeAuthManager(refresh_token="test_token")
         manager._expires_at = datetime.now(timezone.utc) + timedelta(minutes=5)
         
         print(f"TOKEN_REFRESH_THRESHOLD = {TOKEN_REFRESH_THRESHOLD} seconds")
@@ -174,8 +174,8 @@ class TestKiroAuthManagerTokenExpiration:
         What it does: Verifies that valid token is not considered expiring.
         Purpose: Ensure token far in the future doesn't require refresh.
         """
-        print("Setup: Creating KiroAuthManager with token expiring in 1 hour...")
-        manager = KiroAuthManager(refresh_token="test_token")
+        print("Setup: Creating TraeAuthManager with token expiring in 1 hour...")
+        manager = TraeAuthManager(refresh_token="test_token")
         manager._expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
         
         print("Verification: is_token_expiring_soon returns False...")
@@ -184,28 +184,28 @@ class TestKiroAuthManagerTokenExpiration:
         assert result is False
 
 
-class TestKiroAuthManagerTokenRefresh:
+class TestTraeAuthManagerTokenRefresh:
     """Tests for token refresh mechanism."""
     
     @pytest.mark.asyncio
-    async def test_refresh_token_successful(self, valid_kiro_token, mock_kiro_token_response):
+    async def test_refresh_token_successful(self, valid_trae_token, mock_trae_token_response):
         """
-        What it does: Tests successful token refresh via Kiro API.
+        What it does: Tests successful token refresh via Trae API.
         Purpose: Verify that on successful response token and expiration time are set.
         """
-        print("Setup: Creating KiroAuthManager...")
-        manager = KiroAuthManager(
+        print("Setup: Creating TraeAuthManager...")
+        manager = TraeAuthManager(
             refresh_token="test_refresh",
             region="us-east-1"
         )
         
-        print("Setup: Mocking successful response from Kiro...")
+        print("Setup: Mocking successful response from Trae...")
         mock_response = AsyncMock()
         mock_response.status_code = 200
-        mock_response.json = Mock(return_value=mock_kiro_token_response())
+        mock_response.json = Mock(return_value=mock_trae_token_response())
         mock_response.raise_for_status = Mock()
         
-        with patch('kiro.auth.httpx.AsyncClient') as mock_client_class:
+        with patch('trae.auth.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_response)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -216,8 +216,8 @@ class TestKiroAuthManagerTokenRefresh:
             await manager._refresh_token_request()
             
             print("Verification: Token set correctly...")
-            print(f"Comparing access_token: Expected '{valid_kiro_token}', Got '{manager._access_token}'")
-            assert manager._access_token == valid_kiro_token
+            print(f"Comparing access_token: Expected '{valid_trae_token}', Got '{manager._access_token}'")
+            assert manager._access_token == valid_trae_token
             
             print("Verification: Expiration time set...")
             assert manager._expires_at is not None
@@ -226,21 +226,21 @@ class TestKiroAuthManagerTokenRefresh:
             mock_client.post.assert_called_once()
     
     @pytest.mark.asyncio
-    async def test_refresh_token_updates_refresh_token(self, mock_kiro_token_response):
+    async def test_refresh_token_updates_refresh_token(self, mock_trae_token_response):
         """
         What it does: Verifies refresh_token update from response.
         Purpose: Ensure new refresh_token is saved.
         """
-        print("Setup: Creating KiroAuthManager...")
-        manager = KiroAuthManager(refresh_token="old_refresh_token")
+        print("Setup: Creating TraeAuthManager...")
+        manager = TraeAuthManager(refresh_token="old_refresh_token")
         
         print("Setup: Mocking response with new refresh_token...")
         mock_response = AsyncMock()
         mock_response.status_code = 200
-        mock_response.json = Mock(return_value=mock_kiro_token_response())
+        mock_response.json = Mock(return_value=mock_trae_token_response())
         mock_response.raise_for_status = Mock()
         
-        with patch('kiro.auth.httpx.AsyncClient') as mock_client_class:
+        with patch('trae.auth.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_response)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -260,8 +260,8 @@ class TestKiroAuthManagerTokenRefresh:
         What it does: Verifies handling of response without accessToken.
         Purpose: Ensure exception is raised on invalid response.
         """
-        print("Setup: Creating KiroAuthManager...")
-        manager = KiroAuthManager(refresh_token="test_refresh")
+        print("Setup: Creating TraeAuthManager...")
+        manager = TraeAuthManager(refresh_token="test_refresh")
         
         print("Setup: Mocking response without accessToken...")
         mock_response = AsyncMock()
@@ -269,7 +269,7 @@ class TestKiroAuthManagerTokenRefresh:
         mock_response.json = Mock(return_value={"expiresIn": 3600})  # No accessToken!
         mock_response.raise_for_status = Mock()
         
-        with patch('kiro.auth.httpx.AsyncClient') as mock_client_class:
+        with patch('trae.auth.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_response)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -289,8 +289,8 @@ class TestKiroAuthManagerTokenRefresh:
         What it does: Verifies handling of missing refresh_token.
         Purpose: Ensure exception is raised without refresh_token.
         """
-        print("Setup: Creating KiroAuthManager without refresh_token...")
-        manager = KiroAuthManager()
+        print("Setup: Creating TraeAuthManager without refresh_token...")
+        manager = TraeAuthManager()
         manager._refresh_token = None
         
         print("Action: Attempting token refresh without refresh_token...")
@@ -301,27 +301,27 @@ class TestKiroAuthManagerTokenRefresh:
         assert "Refresh token" in str(exc_info.value)
 
 
-class TestKiroAuthManagerGetAccessToken:
+class TestTraeAuthManagerGetAccessToken:
     """Tests for public get_access_token method."""
     
     @pytest.mark.asyncio
-    async def test_get_access_token_refreshes_when_expired(self, valid_kiro_token, mock_kiro_token_response):
+    async def test_get_access_token_refreshes_when_expired(self, valid_trae_token, mock_trae_token_response):
         """
         What it does: Verifies automatic refresh of expired token.
         Purpose: Ensure stale token is refreshed before returning.
         """
-        print("Setup: Creating KiroAuthManager with expired token...")
-        manager = KiroAuthManager(refresh_token="test_refresh")
+        print("Setup: Creating TraeAuthManager with expired token...")
+        manager = TraeAuthManager(refresh_token="test_refresh")
         manager._access_token = "old_expired_token"
         manager._expires_at = datetime.now(timezone.utc) - timedelta(hours=1)
         
         print("Setup: Mocking successful refresh...")
         mock_response = AsyncMock()
         mock_response.status_code = 200
-        mock_response.json = Mock(return_value=mock_kiro_token_response())
+        mock_response.json = Mock(return_value=mock_trae_token_response())
         mock_response.raise_for_status = Mock()
         
-        with patch('kiro.auth.httpx.AsyncClient') as mock_client_class:
+        with patch('trae.auth.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_response)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -332,26 +332,26 @@ class TestKiroAuthManagerGetAccessToken:
             token = await manager.get_access_token()
             
             print("Verification: Got new token, not expired one...")
-            print(f"Comparing token: Expected '{valid_kiro_token}', Got '{token}'")
-            assert token == valid_kiro_token
+            print(f"Comparing token: Expected '{valid_trae_token}', Got '{token}'")
+            assert token == valid_trae_token
             assert token != "old_expired_token"
             
             print("Verification: _refresh_token_request was called...")
             mock_client.post.assert_called_once()
     
     @pytest.mark.asyncio
-    async def test_get_access_token_returns_valid_without_refresh(self, valid_kiro_token):
+    async def test_get_access_token_returns_valid_without_refresh(self, valid_trae_token):
         """
         What it does: Verifies valid token is returned without refresh.
         Purpose: Ensure no unnecessary requests are made if token is valid.
         """
-        print("Setup: Creating KiroAuthManager with valid token...")
-        manager = KiroAuthManager(refresh_token="test_refresh")
-        manager._access_token = valid_kiro_token
+        print("Setup: Creating TraeAuthManager with valid token...")
+        manager = TraeAuthManager(refresh_token="test_refresh")
+        manager._access_token = valid_trae_token
         manager._expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
         
         print("Setup: Mocking httpx to track calls...")
-        with patch('kiro.auth.httpx.AsyncClient') as mock_client_class:
+        with patch('trae.auth.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock()
             mock_client_class.return_value = mock_client
@@ -360,20 +360,20 @@ class TestKiroAuthManagerGetAccessToken:
             token = await manager.get_access_token()
             
             print("Verification: Existing token returned...")
-            print(f"Comparing token: Expected '{valid_kiro_token}', Got '{token}'")
-            assert token == valid_kiro_token
+            print(f"Comparing token: Expected '{valid_trae_token}', Got '{token}'")
+            assert token == valid_trae_token
             
             print("Verification: _refresh_token was NOT called (no network requests)...")
             mock_client.post.assert_not_called()
     
     @pytest.mark.asyncio
-    async def test_get_access_token_thread_safety(self, valid_kiro_token, mock_kiro_token_response):
+    async def test_get_access_token_thread_safety(self, valid_trae_token, mock_trae_token_response):
         """
         What it does: Verifies thread safety via asyncio.Lock.
         Purpose: Ensure parallel calls don't cause race conditions.
         """
-        print("Setup: Creating KiroAuthManager...")
-        manager = KiroAuthManager(refresh_token="test_refresh")
+        print("Setup: Creating TraeAuthManager...")
+        manager = TraeAuthManager(refresh_token="test_refresh")
         manager._access_token = None
         manager._expires_at = None
         
@@ -383,7 +383,7 @@ class TestKiroAuthManagerGetAccessToken:
             nonlocal refresh_call_count
             refresh_call_count += 1
             await asyncio.sleep(0.1)  # Simulate delay
-            manager._access_token = valid_kiro_token
+            manager._access_token = valid_trae_token
             manager._expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
         
         print("Setup: Patching _refresh_token_request to track calls...")
@@ -394,34 +394,34 @@ class TestKiroAuthManagerGetAccessToken:
             ])
             
             print("Verification: All calls got the same token...")
-            assert all(token == valid_kiro_token for token in tokens)
+            assert all(token == valid_trae_token for token in tokens)
             
             print(f"Verification: _refresh_token called ONLY ONCE (thanks to lock)...")
             print(f"Comparing call count: Expected 1, Got {refresh_call_count}")
             assert refresh_call_count == 1
 
 
-class TestKiroAuthManagerForceRefresh:
+class TestTraeAuthManagerForceRefresh:
     """Tests for forced token refresh."""
     
     @pytest.mark.asyncio
-    async def test_force_refresh_updates_token(self, valid_kiro_token, mock_kiro_token_response):
+    async def test_force_refresh_updates_token(self, valid_trae_token, mock_trae_token_response):
         """
         What it does: Verifies forced token refresh.
         Purpose: Ensure force_refresh always refreshes the token.
         """
-        print("Setup: Creating KiroAuthManager with valid token...")
-        manager = KiroAuthManager(refresh_token="test_refresh")
+        print("Setup: Creating TraeAuthManager with valid token...")
+        manager = TraeAuthManager(refresh_token="test_refresh")
         manager._access_token = "old_but_valid_token"
         manager._expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
         
         print("Setup: Mocking refresh...")
         mock_response = AsyncMock()
         mock_response.status_code = 200
-        mock_response.json = Mock(return_value=mock_kiro_token_response())
+        mock_response.json = Mock(return_value=mock_trae_token_response())
         mock_response.raise_for_status = Mock()
         
-        with patch('kiro.auth.httpx.AsyncClient') as mock_client_class:
+        with patch('trae.auth.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_response)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -432,23 +432,23 @@ class TestKiroAuthManagerForceRefresh:
             token = await manager.force_refresh()
             
             print("Verification: Token refreshed despite old one being valid...")
-            print(f"Comparing token: Expected '{valid_kiro_token}', Got '{token}'")
-            assert token == valid_kiro_token
+            print(f"Comparing token: Expected '{valid_trae_token}', Got '{token}'")
+            assert token == valid_trae_token
             
             print("Verification: POST request was made...")
             mock_client.post.assert_called_once()
 
 
-class TestKiroAuthManagerProperties:
-    """Tests for KiroAuthManager properties."""
+class TestTraeAuthManagerProperties:
+    """Tests for TraeAuthManager properties."""
     
     def test_profile_arn_property(self):
         """
         What it does: Verifies profile_arn property.
         Purpose: Ensure profile_arn is accessible via property.
         """
-        print("Setup: Creating KiroAuthManager with profile_arn...")
-        manager = KiroAuthManager(
+        print("Setup: Creating TraeAuthManager with profile_arn...")
+        manager = TraeAuthManager(
             refresh_token="test",
             profile_arn="arn:aws:test:profile"
         )
@@ -462,8 +462,8 @@ class TestKiroAuthManagerProperties:
         What it does: Verifies region property.
         Purpose: Ensure region is accessible via property.
         """
-        print("Setup: Creating KiroAuthManager with region...")
-        manager = KiroAuthManager(
+        print("Setup: Creating TraeAuthManager with region...")
+        manager = TraeAuthManager(
             refresh_token="test",
             region="eu-west-1"
         )
@@ -477,8 +477,8 @@ class TestKiroAuthManagerProperties:
         What it does: Verifies api_host property.
         Purpose: Ensure api_host is formed correctly.
         """
-        print("Setup: Creating KiroAuthManager...")
-        manager = KiroAuthManager(
+        print("Setup: Creating TraeAuthManager...")
+        manager = TraeAuthManager(
             refresh_token="test",
             region="us-east-1"
         )
@@ -493,8 +493,8 @@ class TestKiroAuthManagerProperties:
         What it does: Verifies fingerprint property.
         Purpose: Ensure fingerprint is accessible via property.
         """
-        print("Setup: Creating KiroAuthManager...")
-        manager = KiroAuthManager(refresh_token="test")
+        print("Setup: Creating TraeAuthManager...")
+        manager = TraeAuthManager(refresh_token="test")
         
         print("Verification: fingerprint accessible and has correct length...")
         print(f"fingerprint: {manager.fingerprint}")
@@ -514,7 +514,7 @@ class TestAuthTypeEnum:
         Purpose: Ensure enum contains KIRO_DESKTOP and AWS_SSO_OIDC.
         """
         print("Verification: AuthType contains KIRO_DESKTOP...")
-        assert AuthType.KIRO_DESKTOP.value == "kiro_desktop"
+        assert AuthType.KIRO_DESKTOP.value == "trae_desktop"
         
         print("Verification: AuthType contains AWS_SSO_OIDC...")
         assert AuthType.AWS_SSO_OIDC.value == "aws_sso_oidc"
@@ -527,7 +527,7 @@ class TestAuthTypeEnum:
 # Tests for _detect_auth_type()
 # =============================================================================
 
-class TestKiroAuthManagerDetectAuthType:
+class TestTraeAuthManagerDetectAuthType:
     """Tests for _detect_auth_type() method."""
     
     def test_detect_auth_type_kiro_desktop_when_no_client_credentials(self):
@@ -535,8 +535,8 @@ class TestKiroAuthManagerDetectAuthType:
         What it does: Verifies KIRO_DESKTOP type detection without client credentials.
         Purpose: Ensure KIRO_DESKTOP is used without clientId/clientSecret.
         """
-        print("Setup: Creating KiroAuthManager without client credentials...")
-        manager = KiroAuthManager(refresh_token="test_token")
+        print("Setup: Creating TraeAuthManager without client credentials...")
+        manager = TraeAuthManager(refresh_token="test_token")
         
         print("Verification: auth_type = KIRO_DESKTOP...")
         print(f"Comparing auth_type: Expected KIRO_DESKTOP, Got {manager.auth_type}")
@@ -547,8 +547,8 @@ class TestKiroAuthManagerDetectAuthType:
         What it does: Verifies AWS_SSO_OIDC type detection with client credentials.
         Purpose: Ensure AWS_SSO_OIDC is used with clientId and clientSecret.
         """
-        print("Setup: Creating KiroAuthManager with client credentials...")
-        manager = KiroAuthManager(
+        print("Setup: Creating TraeAuthManager with client credentials...")
+        manager = TraeAuthManager(
             refresh_token="test_token",
             client_id="test_client_id",
             client_secret="test_client_secret"
@@ -563,8 +563,8 @@ class TestKiroAuthManagerDetectAuthType:
         What it does: Verifies type detection with only clientId (no secret).
         Purpose: Ensure KIRO_DESKTOP is used without clientSecret.
         """
-        print("Setup: Creating KiroAuthManager with only client_id...")
-        manager = KiroAuthManager(
+        print("Setup: Creating TraeAuthManager with only client_id...")
+        manager = TraeAuthManager(
             refresh_token="test_token",
             client_id="test_client_id"
         )
@@ -578,7 +578,7 @@ class TestKiroAuthManagerDetectAuthType:
 # Tests for loading AWS SSO credentials from JSON file
 # =============================================================================
 
-class TestKiroAuthManagerAwsSsoCredentialsFile:
+class TestTraeAuthManagerAwsSsoCredentialsFile:
     """Tests for loading AWS SSO OIDC credentials from JSON file."""
     
     def test_load_credentials_from_file_with_client_id_and_secret(self, temp_aws_sso_creds_file):
@@ -586,8 +586,8 @@ class TestKiroAuthManagerAwsSsoCredentialsFile:
         What it does: Verifies loading clientId and clientSecret from JSON file.
         Purpose: Ensure AWS SSO fields are correctly read from file.
         """
-        print(f"Setup: Creating KiroAuthManager with AWS SSO file: {temp_aws_sso_creds_file}")
-        manager = KiroAuthManager(creds_file=temp_aws_sso_creds_file)
+        print(f"Setup: Creating TraeAuthManager with AWS SSO file: {temp_aws_sso_creds_file}")
+        manager = TraeAuthManager(creds_file=temp_aws_sso_creds_file)
         
         print("Verification: clientId loaded...")
         print(f"Comparing client_id: Expected 'test_client_id_12345', Got '{manager._client_id}'")
@@ -602,8 +602,8 @@ class TestKiroAuthManagerAwsSsoCredentialsFile:
         What it does: Verifies auto-detection of auth type after loading from file.
         Purpose: Ensure auth_type automatically becomes AWS_SSO_OIDC.
         """
-        print(f"Setup: Creating KiroAuthManager with AWS SSO file: {temp_aws_sso_creds_file}")
-        manager = KiroAuthManager(creds_file=temp_aws_sso_creds_file)
+        print(f"Setup: Creating TraeAuthManager with AWS SSO file: {temp_aws_sso_creds_file}")
+        manager = TraeAuthManager(creds_file=temp_aws_sso_creds_file)
         
         print("Verification: auth_type automatically detected as AWS_SSO_OIDC...")
         print(f"Comparing auth_type: Expected AWS_SSO_OIDC, Got {manager.auth_type}")
@@ -614,8 +614,8 @@ class TestKiroAuthManagerAwsSsoCredentialsFile:
         What it does: Verifies that Kiro Desktop file doesn't change type to AWS SSO.
         Purpose: Ensure file without clientId/clientSecret stays KIRO_DESKTOP.
         """
-        print(f"Setup: Creating KiroAuthManager with Kiro Desktop file: {temp_creds_file}")
-        manager = KiroAuthManager(creds_file=temp_creds_file)
+        print(f"Setup: Creating TraeAuthManager with Kiro Desktop file: {temp_creds_file}")
+        manager = TraeAuthManager(creds_file=temp_creds_file)
         
         print("Verification: auth_type stays KIRO_DESKTOP...")
         print(f"Comparing auth_type: Expected KIRO_DESKTOP, Got {manager.auth_type}")
@@ -626,7 +626,7 @@ class TestKiroAuthManagerAwsSsoCredentialsFile:
 # Tests for loading credentials from SQLite
 # =============================================================================
 
-class TestKiroAuthManagerSqliteCredentials:
+class TestTraeAuthManagerSqliteCredentials:
     """Tests for loading credentials from SQLite database (kiro-cli format)."""
     
     def test_load_credentials_from_sqlite_success(self, temp_sqlite_db):
@@ -634,8 +634,8 @@ class TestKiroAuthManagerSqliteCredentials:
         What it does: Verifies successful loading of credentials from SQLite.
         Purpose: Ensure all data is correctly read from database.
         """
-        print(f"Setup: Creating KiroAuthManager with SQLite: {temp_sqlite_db}")
-        manager = KiroAuthManager(sqlite_db=temp_sqlite_db)
+        print(f"Setup: Creating TraeAuthManager with SQLite: {temp_sqlite_db}")
+        manager = TraeAuthManager(sqlite_db=temp_sqlite_db)
         
         print("Verification: access_token loaded...")
         print(f"Comparing access_token: Expected 'sqlite_access_token', Got '{manager._access_token}'")
@@ -650,10 +650,10 @@ class TestKiroAuthManagerSqliteCredentials:
         What it does: Verifies handling of missing SQLite file.
         Purpose: Ensure application doesn't crash when file is missing.
         """
-        print("Setup: Creating KiroAuthManager with non-existent SQLite file...")
+        print("Setup: Creating TraeAuthManager with non-existent SQLite file...")
         non_existent_db = str(tmp_path / "non_existent.sqlite3")
         
-        manager = KiroAuthManager(
+        manager = TraeAuthManager(
             refresh_token="fallback_token",
             sqlite_db=non_existent_db
         )
@@ -669,8 +669,8 @@ class TestKiroAuthManagerSqliteCredentials:
         Note: API region stays at us-east-1 (CodeWhisperer API only exists there),
               SSO region is stored separately for OIDC token refresh.
         """
-        print(f"Setup: Creating KiroAuthManager with SQLite: {temp_sqlite_db}")
-        manager = KiroAuthManager(sqlite_db=temp_sqlite_db)
+        print(f"Setup: Creating TraeAuthManager with SQLite: {temp_sqlite_db}")
+        manager = TraeAuthManager(sqlite_db=temp_sqlite_db)
         
         print("Verification: SSO region loaded from SQLite...")
         print(f"Comparing sso_region: Expected 'eu-west-1', Got '{manager._sso_region}'")
@@ -689,8 +689,8 @@ class TestKiroAuthManagerSqliteCredentials:
         What it does: Verifies loading device registration from SQLite.
         Purpose: Ensure client_id and client_secret are loaded.
         """
-        print(f"Setup: Creating KiroAuthManager with SQLite: {temp_sqlite_db}")
-        manager = KiroAuthManager(sqlite_db=temp_sqlite_db)
+        print(f"Setup: Creating TraeAuthManager with SQLite: {temp_sqlite_db}")
+        manager = TraeAuthManager(sqlite_db=temp_sqlite_db)
         
         print("Verification: client_id loaded...")
         print(f"Comparing client_id: Expected 'sqlite_client_id', Got '{manager._client_id}'")
@@ -705,8 +705,8 @@ class TestKiroAuthManagerSqliteCredentials:
         What it does: Verifies auto-detection of auth type after loading from SQLite.
         Purpose: Ensure auth_type automatically becomes AWS_SSO_OIDC.
         """
-        print(f"Setup: Creating KiroAuthManager with SQLite: {temp_sqlite_db}")
-        manager = KiroAuthManager(sqlite_db=temp_sqlite_db)
+        print(f"Setup: Creating TraeAuthManager with SQLite: {temp_sqlite_db}")
+        manager = TraeAuthManager(sqlite_db=temp_sqlite_db)
         
         print("Verification: auth_type automatically detected as AWS_SSO_OIDC...")
         print(f"Comparing auth_type: Expected AWS_SSO_OIDC, Got {manager.auth_type}")
@@ -717,8 +717,8 @@ class TestKiroAuthManagerSqliteCredentials:
         What it does: Verifies handling of missing device-registration key.
         Purpose: Ensure application doesn't crash without device-registration.
         """
-        print(f"Setup: Creating KiroAuthManager with SQLite without device-registration...")
-        manager = KiroAuthManager(sqlite_db=temp_sqlite_db_token_only)
+        print(f"Setup: Creating TraeAuthManager with SQLite without device-registration...")
+        manager = TraeAuthManager(sqlite_db=temp_sqlite_db_token_only)
         
         print("Verification: refresh_token loaded...")
         assert manager._refresh_token == "partial_refresh_token"
@@ -734,8 +734,8 @@ class TestKiroAuthManagerSqliteCredentials:
         What it does: Verifies handling of invalid JSON in SQLite.
         Purpose: Ensure application doesn't crash on invalid JSON.
         """
-        print("Setup: Creating KiroAuthManager with SQLite with invalid JSON...")
-        manager = KiroAuthManager(
+        print("Setup: Creating TraeAuthManager with SQLite with invalid JSON...")
+        manager = TraeAuthManager(
             refresh_token="fallback_token",
             sqlite_db=temp_sqlite_db_invalid_json
         )
@@ -749,8 +749,8 @@ class TestKiroAuthManagerSqliteCredentials:
         What it does: Verifies SQLite priority over JSON file.
         Purpose: Ensure SQLite is loaded instead of JSON when both specified.
         """
-        print("Setup: Creating KiroAuthManager with SQLite and JSON file...")
-        manager = KiroAuthManager(
+        print("Setup: Creating TraeAuthManager with SQLite and JSON file...")
+        manager = TraeAuthManager(
             sqlite_db=temp_sqlite_db,
             creds_file=temp_creds_file
         )
@@ -772,17 +772,17 @@ class TestKiroAuthManagerSqliteCredentials:
 # Tests for _refresh_token_request() routing
 # =============================================================================
 
-class TestKiroAuthManagerRefreshTokenRouting:
+class TestTraeAuthManagerRefreshTokenRouting:
     """Tests for _refresh_token_request() routing based on auth_type."""
     
     @pytest.mark.asyncio
     async def test_refresh_token_request_routes_to_kiro_desktop(self):
         """
         What it does: Verifies that KIRO_DESKTOP calls _refresh_token_kiro_desktop.
-        Purpose: Ensure correct routing for Kiro Desktop auth.
+        Purpose: Ensure correct routing for Trae Desktop auth.
         """
-        print("Setup: Creating KiroAuthManager with KIRO_DESKTOP...")
-        manager = KiroAuthManager(refresh_token="test_refresh")
+        print("Setup: Creating TraeAuthManager with KIRO_DESKTOP...")
+        manager = TraeAuthManager(refresh_token="test_refresh")
         assert manager.auth_type == AuthType.KIRO_DESKTOP
         
         print("Setup: Mocking _refresh_token_kiro_desktop...")
@@ -802,8 +802,8 @@ class TestKiroAuthManagerRefreshTokenRouting:
         What it does: Verifies that AWS_SSO_OIDC calls _refresh_token_aws_sso_oidc.
         Purpose: Ensure correct routing for AWS SSO OIDC auth.
         """
-        print("Setup: Creating KiroAuthManager with AWS_SSO_OIDC...")
-        manager = KiroAuthManager(
+        print("Setup: Creating TraeAuthManager with AWS_SSO_OIDC...")
+        manager = TraeAuthManager(
             refresh_token="test_refresh",
             client_id="test_client_id",
             client_secret="test_client_secret"
@@ -826,7 +826,7 @@ class TestKiroAuthManagerRefreshTokenRouting:
 # Tests for _refresh_token_aws_sso_oidc()
 # =============================================================================
 
-class TestKiroAuthManagerAwsSsoOidcRefresh:
+class TestTraeAuthManagerAwsSsoOidcRefresh:
     """Tests for _refresh_token_aws_sso_oidc() method."""
     
     @pytest.mark.asyncio
@@ -835,8 +835,8 @@ class TestKiroAuthManagerAwsSsoOidcRefresh:
         What it does: Tests successful token refresh via AWS SSO OIDC.
         Purpose: Verify that on successful response token and expiration time are set.
         """
-        print("Setup: Creating KiroAuthManager with AWS SSO OIDC...")
-        manager = KiroAuthManager(
+        print("Setup: Creating TraeAuthManager with AWS SSO OIDC...")
+        manager = TraeAuthManager(
             refresh_token="test_refresh",
             client_id="test_client_id",
             client_secret="test_client_secret",
@@ -849,7 +849,7 @@ class TestKiroAuthManagerAwsSsoOidcRefresh:
         mock_response.json = Mock(return_value=mock_aws_sso_oidc_token_response())
         mock_response.raise_for_status = Mock()
         
-        with patch('kiro.auth.httpx.AsyncClient') as mock_client_class:
+        with patch('trae.auth.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_response)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -872,8 +872,8 @@ class TestKiroAuthManagerAwsSsoOidcRefresh:
         What it does: Verifies handling of missing refresh_token.
         Purpose: Ensure ValueError is raised without refresh_token.
         """
-        print("Setup: Creating KiroAuthManager without refresh_token...")
-        manager = KiroAuthManager(
+        print("Setup: Creating TraeAuthManager without refresh_token...")
+        manager = TraeAuthManager(
             client_id="test_client_id",
             client_secret="test_client_secret"
         )
@@ -892,8 +892,8 @@ class TestKiroAuthManagerAwsSsoOidcRefresh:
         What it does: Verifies handling of missing client_id.
         Purpose: Ensure ValueError is raised without client_id.
         """
-        print("Setup: Creating KiroAuthManager without client_id...")
-        manager = KiroAuthManager(
+        print("Setup: Creating TraeAuthManager without client_id...")
+        manager = TraeAuthManager(
             refresh_token="test_refresh",
             client_secret="test_client_secret"
         )
@@ -913,8 +913,8 @@ class TestKiroAuthManagerAwsSsoOidcRefresh:
         What it does: Verifies handling of missing client_secret.
         Purpose: Ensure ValueError is raised without client_secret.
         """
-        print("Setup: Creating KiroAuthManager without client_secret...")
-        manager = KiroAuthManager(
+        print("Setup: Creating TraeAuthManager without client_secret...")
+        manager = TraeAuthManager(
             refresh_token="test_refresh",
             client_id="test_client_id"
         )
@@ -934,8 +934,8 @@ class TestKiroAuthManagerAwsSsoOidcRefresh:
         What it does: Verifies correct endpoint usage.
         Purpose: Ensure request goes to https://oidc.{region}.amazonaws.com/token.
         """
-        print("Setup: Creating KiroAuthManager with region=eu-west-1...")
-        manager = KiroAuthManager(
+        print("Setup: Creating TraeAuthManager with region=eu-west-1...")
+        manager = TraeAuthManager(
             refresh_token="test_refresh",
             client_id="test_client_id",
             client_secret="test_client_secret",
@@ -948,7 +948,7 @@ class TestKiroAuthManagerAwsSsoOidcRefresh:
         mock_response.json = Mock(return_value=mock_aws_sso_oidc_token_response())
         mock_response.raise_for_status = Mock()
         
-        with patch('kiro.auth.httpx.AsyncClient') as mock_client_class:
+        with patch('trae.auth.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_response)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -970,8 +970,8 @@ class TestKiroAuthManagerAwsSsoOidcRefresh:
         What it does: Verifies JSON format usage (AWS SSO OIDC CreateToken API).
         Purpose: Ensure Content-Type = application/json (not form-urlencoded).
         """
-        print("Setup: Creating KiroAuthManager...")
-        manager = KiroAuthManager(
+        print("Setup: Creating TraeAuthManager...")
+        manager = TraeAuthManager(
             refresh_token="test_refresh",
             client_id="test_client_id",
             client_secret="test_client_secret"
@@ -983,7 +983,7 @@ class TestKiroAuthManagerAwsSsoOidcRefresh:
         mock_response.json = Mock(return_value=mock_aws_sso_oidc_token_response())
         mock_response.raise_for_status = Mock()
         
-        with patch('kiro.auth.httpx.AsyncClient') as mock_client_class:
+        with patch('trae.auth.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_response)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -1004,8 +1004,8 @@ class TestKiroAuthManagerAwsSsoOidcRefresh:
         What it does: Verifies correct grantType is sent (camelCase).
         Purpose: Ensure grantType=refresh_token in JSON payload.
         """
-        print("Setup: Creating KiroAuthManager...")
-        manager = KiroAuthManager(
+        print("Setup: Creating TraeAuthManager...")
+        manager = TraeAuthManager(
             refresh_token="test_refresh",
             client_id="test_client_id",
             client_secret="test_client_secret"
@@ -1017,7 +1017,7 @@ class TestKiroAuthManagerAwsSsoOidcRefresh:
         mock_response.json = Mock(return_value=mock_aws_sso_oidc_token_response())
         mock_response.raise_for_status = Mock()
         
-        with patch('kiro.auth.httpx.AsyncClient') as mock_client_class:
+        with patch('trae.auth.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_response)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -1038,8 +1038,8 @@ class TestKiroAuthManagerAwsSsoOidcRefresh:
         What it does: Verifies access_token and refresh_token update.
         Purpose: Ensure both tokens are updated from response.
         """
-        print("Setup: Creating KiroAuthManager...")
-        manager = KiroAuthManager(
+        print("Setup: Creating TraeAuthManager...")
+        manager = TraeAuthManager(
             refresh_token="old_refresh_token",
             client_id="test_client_id",
             client_secret="test_client_secret"
@@ -1051,7 +1051,7 @@ class TestKiroAuthManagerAwsSsoOidcRefresh:
         mock_response.json = Mock(return_value=mock_aws_sso_oidc_token_response())
         mock_response.raise_for_status = Mock()
         
-        with patch('kiro.auth.httpx.AsyncClient') as mock_client_class:
+        with patch('trae.auth.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_response)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -1072,8 +1072,8 @@ class TestKiroAuthManagerAwsSsoOidcRefresh:
         What it does: Verifies correct expiration time calculation.
         Purpose: Ensure expires_at is calculated based on expiresIn.
         """
-        print("Setup: Creating KiroAuthManager...")
-        manager = KiroAuthManager(
+        print("Setup: Creating TraeAuthManager...")
+        manager = TraeAuthManager(
             refresh_token="test_refresh",
             client_id="test_client_id",
             client_secret="test_client_secret"
@@ -1085,7 +1085,7 @@ class TestKiroAuthManagerAwsSsoOidcRefresh:
         mock_response.json = Mock(return_value=mock_aws_sso_oidc_token_response(expires_in=7200))
         mock_response.raise_for_status = Mock()
         
-        with patch('kiro.auth.httpx.AsyncClient') as mock_client_class:
+        with patch('trae.auth.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_response)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -1109,8 +1109,8 @@ class TestKiroAuthManagerAwsSsoOidcRefresh:
         Purpose: Per OAuth 2.0 RFC 6749 Section 6, scope is optional in refresh and
                  AWS SSO OIDC returns invalid_request if scope is sent.
         """
-        print("Setup: Creating KiroAuthManager with scopes...")
-        manager = KiroAuthManager(
+        print("Setup: Creating TraeAuthManager with scopes...")
+        manager = TraeAuthManager(
             refresh_token="test_refresh",
             client_id="test_client_id",
             client_secret="test_client_secret"
@@ -1124,7 +1124,7 @@ class TestKiroAuthManagerAwsSsoOidcRefresh:
         mock_response.json = Mock(return_value=mock_aws_sso_oidc_token_response())
         mock_response.raise_for_status = Mock()
         
-        with patch('kiro.auth.httpx.AsyncClient') as mock_client_class:
+        with patch('trae.auth.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_response)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -1150,8 +1150,8 @@ class TestKiroAuthManagerAwsSsoOidcRefresh:
         What it does: Verifies refresh works when scopes are None.
         Purpose: Ensure backward compatibility with credentials that don't have scopes.
         """
-        print("Setup: Creating KiroAuthManager without scopes...")
-        manager = KiroAuthManager(
+        print("Setup: Creating TraeAuthManager without scopes...")
+        manager = TraeAuthManager(
             refresh_token="test_refresh",
             client_id="test_client_id",
             client_secret="test_client_secret"
@@ -1165,7 +1165,7 @@ class TestKiroAuthManagerAwsSsoOidcRefresh:
         mock_response.json = Mock(return_value=mock_aws_sso_oidc_token_response())
         mock_response.raise_for_status = Mock()
         
-        with patch('kiro.auth.httpx.AsyncClient') as mock_client_class:
+        with patch('trae.auth.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_response)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -1187,7 +1187,7 @@ class TestKiroAuthManagerAwsSsoOidcRefresh:
 # Tests for auth_type property and constructor with new parameters
 # =============================================================================
 
-class TestKiroAuthManagerAuthTypeProperty:
+class TestTraeAuthManagerAuthTypeProperty:
     """Tests for auth_type property and constructor."""
     
     def test_auth_type_property_returns_correct_value(self):
@@ -1195,14 +1195,14 @@ class TestKiroAuthManagerAuthTypeProperty:
         What it does: Verifies that auth_type property returns correct value.
         Purpose: Ensure property works correctly.
         """
-        print("Setup: Creating KiroAuthManager with KIRO_DESKTOP...")
-        manager_desktop = KiroAuthManager(refresh_token="test")
+        print("Setup: Creating TraeAuthManager with KIRO_DESKTOP...")
+        manager_desktop = TraeAuthManager(refresh_token="test")
         
         print("Verification: auth_type = KIRO_DESKTOP...")
         assert manager_desktop.auth_type == AuthType.KIRO_DESKTOP
         
-        print("Setup: Creating KiroAuthManager with AWS_SSO_OIDC...")
-        manager_sso = KiroAuthManager(
+        print("Setup: Creating TraeAuthManager with AWS_SSO_OIDC...")
+        manager_sso = TraeAuthManager(
             refresh_token="test",
             client_id="id",
             client_secret="secret"
@@ -1216,8 +1216,8 @@ class TestKiroAuthManagerAuthTypeProperty:
         What it does: Verifies initialization with client_id and client_secret.
         Purpose: Ensure parameters are stored in private fields.
         """
-        print("Setup: Creating KiroAuthManager with client credentials...")
-        manager = KiroAuthManager(
+        print("Setup: Creating TraeAuthManager with client credentials...")
+        manager = TraeAuthManager(
             refresh_token="test",
             client_id="my_client_id",
             client_secret="my_client_secret"
@@ -1234,8 +1234,8 @@ class TestKiroAuthManagerAuthTypeProperty:
         What it does: Verifies initialization with sqlite_db parameter.
         Purpose: Ensure data is loaded from SQLite.
         """
-        print(f"Setup: Creating KiroAuthManager with sqlite_db: {temp_sqlite_db}")
-        manager = KiroAuthManager(sqlite_db=temp_sqlite_db)
+        print(f"Setup: Creating TraeAuthManager with sqlite_db: {temp_sqlite_db}")
+        manager = TraeAuthManager(sqlite_db=temp_sqlite_db)
         
         print("Verification: Data loaded from SQLite...")
         assert manager._access_token == "sqlite_access_token"
@@ -1246,8 +1246,8 @@ class TestKiroAuthManagerAuthTypeProperty:
         What it does: Verifies type detection with only clientSecret (no id).
         Purpose: Ensure KIRO_DESKTOP is used without clientId.
         """
-        print("Setup: Creating KiroAuthManager with only client_secret...")
-        manager = KiroAuthManager(
+        print("Setup: Creating TraeAuthManager with only client_secret...")
+        manager = TraeAuthManager(
             refresh_token="test_token",
             client_secret="test_client_secret"
         )
@@ -1261,7 +1261,7 @@ class TestKiroAuthManagerAuthTypeProperty:
 # Tests for SSO region separation (Issue #16)
 # =============================================================================
 
-class TestKiroAuthManagerSsoRegionSeparation:
+class TestTraeAuthManagerSsoRegionSeparation:
     """Tests for SSO region separation from API region (Issue #16 fix).
     
     Background: CodeWhisperer API only exists in us-east-1, but users may have
@@ -1274,8 +1274,8 @@ class TestKiroAuthManagerSsoRegionSeparation:
         What it does: Verifies API region doesn't change when loading from SQLite.
         Purpose: Ensure CodeWhisperer API calls go to us-east-1 regardless of SSO region.
         """
-        print(f"Setup: Creating KiroAuthManager with SQLite (region=eu-west-1)...")
-        manager = KiroAuthManager(sqlite_db=temp_sqlite_db)
+        print(f"Setup: Creating TraeAuthManager with SQLite (region=eu-west-1)...")
+        manager = TraeAuthManager(sqlite_db=temp_sqlite_db)
         
         print("Verification: API region stays at us-east-1...")
         print(f"Comparing _region: Expected 'us-east-1', Got '{manager._region}'")
@@ -1294,8 +1294,8 @@ class TestKiroAuthManagerSsoRegionSeparation:
         What it does: Verifies SSO region is stored in _sso_region field.
         Purpose: Ensure SSO region is available for OIDC token refresh.
         """
-        print(f"Setup: Creating KiroAuthManager with SQLite (region=eu-west-1)...")
-        manager = KiroAuthManager(sqlite_db=temp_sqlite_db)
+        print(f"Setup: Creating TraeAuthManager with SQLite (region=eu-west-1)...")
+        manager = TraeAuthManager(sqlite_db=temp_sqlite_db)
         
         print("Verification: SSO region stored in _sso_region...")
         print(f"Comparing _sso_region: Expected 'eu-west-1', Got '{manager._sso_region}'")
@@ -1309,8 +1309,8 @@ class TestKiroAuthManagerSsoRegionSeparation:
         What it does: Verifies _sso_region is None when not loading from SQLite.
         Purpose: Ensure backward compatibility with direct credential initialization.
         """
-        print("Setup: Creating KiroAuthManager with direct credentials...")
-        manager = KiroAuthManager(
+        print("Setup: Creating TraeAuthManager with direct credentials...")
+        manager = TraeAuthManager(
             refresh_token="test_token",
             region="us-east-1"
         )
@@ -1325,8 +1325,8 @@ class TestKiroAuthManagerSsoRegionSeparation:
         What it does: Verifies OIDC token refresh uses SSO region, not API region.
         Purpose: Ensure token refresh goes to correct regional OIDC endpoint.
         """
-        print("Setup: Creating KiroAuthManager with SSO region=ap-southeast-1...")
-        manager = KiroAuthManager(
+        print("Setup: Creating TraeAuthManager with SSO region=ap-southeast-1...")
+        manager = TraeAuthManager(
             refresh_token="test_refresh",
             client_id="test_client_id",
             client_secret="test_client_secret",
@@ -1341,7 +1341,7 @@ class TestKiroAuthManagerSsoRegionSeparation:
         mock_response.json = Mock(return_value=mock_aws_sso_oidc_token_response())
         mock_response.raise_for_status = Mock()
         
-        with patch('kiro.auth.httpx.AsyncClient') as mock_client_class:
+        with patch('trae.auth.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_response)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -1365,8 +1365,8 @@ class TestKiroAuthManagerSsoRegionSeparation:
         What it does: Verifies OIDC refresh uses API region when SSO region not set.
         Purpose: Ensure backward compatibility when _sso_region is None.
         """
-        print("Setup: Creating KiroAuthManager without SSO region...")
-        manager = KiroAuthManager(
+        print("Setup: Creating TraeAuthManager without SSO region...")
+        manager = TraeAuthManager(
             refresh_token="test_refresh",
             client_id="test_client_id",
             client_secret="test_client_secret",
@@ -1381,7 +1381,7 @@ class TestKiroAuthManagerSsoRegionSeparation:
         mock_response.json = Mock(return_value=mock_aws_sso_oidc_token_response())
         mock_response.raise_for_status = Mock()
         
-        with patch('kiro.auth.httpx.AsyncClient') as mock_client_class:
+        with patch('trae.auth.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_response)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -1402,8 +1402,8 @@ class TestKiroAuthManagerSsoRegionSeparation:
         What it does: Verifies API hosts don't change when loading from SQLite.
         Purpose: Ensure all API calls go to us-east-1 where CodeWhisperer exists.
         """
-        print(f"Setup: Creating KiroAuthManager with SQLite (region=eu-west-1)...")
-        manager = KiroAuthManager(sqlite_db=temp_sqlite_db)
+        print(f"Setup: Creating TraeAuthManager with SQLite (region=eu-west-1)...")
+        manager = TraeAuthManager(sqlite_db=temp_sqlite_db)
         
         print("Verification: _api_host points to us-east-1...")
         assert "us-east-1" in manager._api_host
@@ -1425,8 +1425,8 @@ class TestKiroAuthManagerSsoRegionSeparation:
         What it does: Verifies that in-memory token is used first, not SQLite.
         Purpose: Ensure container's successfully refreshed token is used (not overwritten by SQLite).
         """
-        print("Setup: Creating KiroAuthManager with in-memory credentials...")
-        manager = KiroAuthManager(
+        print("Setup: Creating TraeAuthManager with in-memory credentials...")
+        manager = TraeAuthManager(
             refresh_token="memory_refresh_token",
             client_id="test_client_id",
             client_secret="test_client_secret"
@@ -1440,7 +1440,7 @@ class TestKiroAuthManagerSsoRegionSeparation:
         mock_response.json = Mock(return_value=mock_aws_sso_oidc_token_response())
         mock_response.raise_for_status = Mock()
         
-        with patch('kiro.auth.httpx.AsyncClient') as mock_client_class:
+        with patch('trae.auth.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_response)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -1508,8 +1508,8 @@ class TestKiroAuthManagerSsoRegionSeparation:
         conn.commit()
         conn.close()
         
-        print("Setup: Creating KiroAuthManager with SQLite...")
-        manager = KiroAuthManager(sqlite_db=str(db_file))
+        print("Setup: Creating TraeAuthManager with SQLite...")
+        manager = TraeAuthManager(sqlite_db=str(db_file))
         
         print("Verification: Initial refresh_token loaded...")
         assert manager._refresh_token == "old_refresh_token"
@@ -1569,7 +1569,7 @@ class TestKiroAuthManagerSsoRegionSeparation:
                 return mock_error_response
             return mock_success_response
         
-        with patch('kiro.auth.httpx.AsyncClient') as mock_client_class:
+        with patch('trae.auth.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post = mock_post
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -1599,8 +1599,8 @@ class TestKiroAuthManagerSsoRegionSeparation:
         What it does: Verifies that non-400 errors are not retried.
         Purpose: Ensure only 400 (invalid_request) triggers SQLite reload.
         """
-        print("Setup: Creating KiroAuthManager...")
-        manager = KiroAuthManager(
+        print("Setup: Creating TraeAuthManager...")
+        manager = TraeAuthManager(
             refresh_token="test_refresh",
             client_id="test_client_id",
             client_secret="test_client_secret"
@@ -1620,7 +1620,7 @@ class TestKiroAuthManagerSsoRegionSeparation:
             )
         )
         
-        with patch('kiro.auth.httpx.AsyncClient') as mock_client_class:
+        with patch('trae.auth.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_error_response)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -1646,8 +1646,8 @@ class TestKiroAuthManagerSsoRegionSeparation:
         What it does: Verifies that 400 error is not retried when sqlite_db is not set.
         Purpose: Ensure retry only happens when SQLite source is available.
         """
-        print("Setup: Creating KiroAuthManager WITHOUT sqlite_db...")
-        manager = KiroAuthManager(
+        print("Setup: Creating TraeAuthManager WITHOUT sqlite_db...")
+        manager = TraeAuthManager(
             refresh_token="test_refresh",
             client_id="test_client_id",
             client_secret="test_client_secret"
@@ -1668,7 +1668,7 @@ class TestKiroAuthManagerSsoRegionSeparation:
             )
         )
         
-        with patch('kiro.auth.httpx.AsyncClient') as mock_client_class:
+        with patch('trae.auth.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_error_response)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -1690,7 +1690,7 @@ class TestKiroAuthManagerSsoRegionSeparation:
 # Tests for is_token_expired() method
 # =============================================================================
 
-class TestKiroAuthManagerIsTokenExpired:
+class TestTraeAuthManagerIsTokenExpired:
     """Tests for is_token_expired() method.
     
     This method checks if the token has actually expired (not just expiring soon).
@@ -1702,8 +1702,8 @@ class TestKiroAuthManagerIsTokenExpired:
         What it does: Verifies that without expires_at token is considered expired.
         Purpose: Ensure safe behavior when time information is missing.
         """
-        print("Setup: Creating KiroAuthManager without expires_at...")
-        manager = KiroAuthManager(refresh_token="test_token")
+        print("Setup: Creating TraeAuthManager without expires_at...")
+        manager = TraeAuthManager(refresh_token="test_token")
         manager._expires_at = None
         
         print("Verification: is_token_expired returns True...")
@@ -1716,8 +1716,8 @@ class TestKiroAuthManagerIsTokenExpired:
         What it does: Verifies that expired token is correctly identified.
         Purpose: Ensure token in the past is considered expired.
         """
-        print("Setup: Creating KiroAuthManager with expired token...")
-        manager = KiroAuthManager(refresh_token="test_token")
+        print("Setup: Creating TraeAuthManager with expired token...")
+        manager = TraeAuthManager(refresh_token="test_token")
         manager._expires_at = datetime.now(timezone.utc) - timedelta(hours=1)
         
         print("Verification: is_token_expired returns True for expired token...")
@@ -1730,8 +1730,8 @@ class TestKiroAuthManagerIsTokenExpired:
         What it does: Verifies that valid token is not considered expired.
         Purpose: Ensure token in the future is not considered expired.
         """
-        print("Setup: Creating KiroAuthManager with valid token...")
-        manager = KiroAuthManager(refresh_token="test_token")
+        print("Setup: Creating TraeAuthManager with valid token...")
+        manager = TraeAuthManager(refresh_token="test_token")
         manager._expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
         
         print("Verification: is_token_expired returns False...")
@@ -1744,8 +1744,8 @@ class TestKiroAuthManagerIsTokenExpired:
         What it does: Verifies difference between expiring soon and actually expired.
         Purpose: Ensure token expiring in 5 minutes is NOT considered expired yet.
         """
-        print("Setup: Creating KiroAuthManager with token expiring in 5 minutes...")
-        manager = KiroAuthManager(refresh_token="test_token")
+        print("Setup: Creating TraeAuthManager with token expiring in 5 minutes...")
+        manager = TraeAuthManager(refresh_token="test_token")
         manager._expires_at = datetime.now(timezone.utc) + timedelta(minutes=5)
         
         print("Verification: is_token_expiring_soon returns True (within threshold)...")
@@ -1761,7 +1761,7 @@ class TestKiroAuthManagerIsTokenExpired:
 # Tests for graceful degradation in get_access_token() (SQLite mode)
 # =============================================================================
 
-class TestKiroAuthManagerGracefulDegradation:
+class TestTraeAuthManagerGracefulDegradation:
     """Tests for graceful degradation when refresh fails in SQLite mode.
     
     Background: When kiro-cli refreshes tokens in memory without persisting to SQLite,
@@ -1814,8 +1814,8 @@ class TestKiroAuthManagerGracefulDegradation:
         conn.commit()
         conn.close()
         
-        print("Setup: Creating KiroAuthManager with expiring token...")
-        manager = KiroAuthManager(sqlite_db=str(db_file))
+        print("Setup: Creating TraeAuthManager with expiring token...")
+        manager = TraeAuthManager(sqlite_db=str(db_file))
         # Simulate token expiring soon (within threshold)
         manager._access_token = "old_expiring_token"
         manager._expires_at = datetime.now(timezone.utc) + timedelta(minutes=5)
@@ -1877,8 +1877,8 @@ class TestKiroAuthManagerGracefulDegradation:
         conn.commit()
         conn.close()
         
-        print("Setup: Creating KiroAuthManager...")
-        manager = KiroAuthManager(sqlite_db=str(db_file))
+        print("Setup: Creating TraeAuthManager...")
+        manager = TraeAuthManager(sqlite_db=str(db_file))
         
         print("Verification: Token is expiring soon but NOT expired...")
         assert manager.is_token_expiring_soon() is True
@@ -1897,7 +1897,7 @@ class TestKiroAuthManagerGracefulDegradation:
             )
         )
         
-        with patch('kiro.auth.httpx.AsyncClient') as mock_client_class:
+        with patch('trae.auth.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_error_response)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -1958,8 +1958,8 @@ class TestKiroAuthManagerGracefulDegradation:
         conn.commit()
         conn.close()
         
-        print("Setup: Creating KiroAuthManager...")
-        manager = KiroAuthManager(sqlite_db=str(db_file))
+        print("Setup: Creating TraeAuthManager...")
+        manager = TraeAuthManager(sqlite_db=str(db_file))
         
         print("Verification: Token is expired...")
         assert manager.is_token_expired() is True
@@ -1977,7 +1977,7 @@ class TestKiroAuthManagerGracefulDegradation:
             )
         )
         
-        with patch('kiro.auth.httpx.AsyncClient') as mock_client_class:
+        with patch('trae.auth.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_error_response)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -1997,8 +1997,8 @@ class TestKiroAuthManagerGracefulDegradation:
         What it does: Verifies 400 error is propagated in non-SQLite mode.
         Purpose: Ensure graceful degradation only applies to SQLite mode.
         """
-        print("Setup: Creating KiroAuthManager WITHOUT sqlite_db...")
-        manager = KiroAuthManager(
+        print("Setup: Creating TraeAuthManager WITHOUT sqlite_db...")
+        manager = TraeAuthManager(
             refresh_token="test_refresh",
             client_id="test_client_id",
             client_secret="test_client_secret"
@@ -2022,7 +2022,7 @@ class TestKiroAuthManagerGracefulDegradation:
             )
         )
         
-        with patch('kiro.auth.httpx.AsyncClient') as mock_client_class:
+        with patch('trae.auth.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_error_response)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -2041,7 +2041,7 @@ class TestKiroAuthManagerGracefulDegradation:
 # Tests for _save_credentials_to_sqlite() - NEW FUNCTIONALITY
 # =============================================================================
 
-class TestKiroAuthManagerSaveCredentialsToSqlite:
+class TestTraeAuthManagerSaveCredentialsToSqlite:
     """Tests for _save_credentials_to_sqlite() method (Issue #43 fix).
     
     Background: Gateway was not persisting refreshed tokens back to SQLite,
@@ -2082,8 +2082,8 @@ class TestKiroAuthManagerSaveCredentialsToSqlite:
         conn.commit()
         conn.close()
         
-        print("Setup: Creating KiroAuthManager with SQLite...")
-        manager = KiroAuthManager(sqlite_db=str(db_file))
+        print("Setup: Creating TraeAuthManager with SQLite...")
+        manager = TraeAuthManager(sqlite_db=str(db_file))
         
         print("Action: Updating tokens in memory...")
         manager._access_token = "new_access_token"
@@ -2114,10 +2114,10 @@ class TestKiroAuthManagerSaveCredentialsToSqlite:
         What it does: Verifies handling of missing SQLite file.
         Purpose: Ensure application doesn't crash when database is missing.
         """
-        print("Setup: Creating KiroAuthManager with non-existent SQLite...")
+        print("Setup: Creating TraeAuthManager with non-existent SQLite...")
         non_existent_db = str(tmp_path / "non_existent.sqlite3")
         
-        manager = KiroAuthManager(
+        manager = TraeAuthManager(
             refresh_token="test_token",
             sqlite_db=non_existent_db
         )
@@ -2135,8 +2135,8 @@ class TestKiroAuthManagerSaveCredentialsToSqlite:
         What it does: Verifies early return when sqlite_db is None.
         Purpose: Ensure method is no-op when SQLite is not configured.
         """
-        print("Setup: Creating KiroAuthManager without sqlite_db...")
-        manager = KiroAuthManager(refresh_token="test_token")
+        print("Setup: Creating TraeAuthManager without sqlite_db...")
+        manager = TraeAuthManager(refresh_token="test_token")
         manager._sqlite_db = None
         manager._access_token = "new_token"
         
@@ -2152,7 +2152,7 @@ class TestKiroAuthManagerSaveCredentialsToSqlite:
 # Tests for token persistence after refresh (Issue #43 fix)
 # =============================================================================
 
-class TestKiroAuthManagerTokenPersistence:
+class TestTraeAuthManagerTokenPersistence:
     """Tests for token persistence after refresh.
     
     Background: After refresh, tokens must be saved to SQLite so they're
@@ -2203,8 +2203,8 @@ class TestKiroAuthManagerTokenPersistence:
         conn.commit()
         conn.close()
         
-        print("Setup: Creating KiroAuthManager with SQLite...")
-        manager = KiroAuthManager(sqlite_db=str(db_file))
+        print("Setup: Creating TraeAuthManager with SQLite...")
+        manager = TraeAuthManager(sqlite_db=str(db_file))
         
         print("Setup: Mocking HTTP client for successful refresh...")
         mock_response = AsyncMock()
@@ -2212,7 +2212,7 @@ class TestKiroAuthManagerTokenPersistence:
         mock_response.json = Mock(return_value=mock_aws_sso_oidc_token_response())
         mock_response.raise_for_status = Mock()
         
-        with patch('kiro.auth.httpx.AsyncClient') as mock_client_class:
+        with patch('trae.auth.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_response)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -2243,7 +2243,7 @@ class TestKiroAuthManagerTokenPersistence:
             assert saved_data['refresh_token'] == "new_aws_sso_refresh_token"
     
     @pytest.mark.asyncio
-    async def test_refresh_token_kiro_desktop_saves_to_sqlite(self, tmp_path, mock_kiro_token_response):
+    async def test_refresh_token_kiro_desktop_saves_to_sqlite(self, tmp_path, mock_trae_token_response):
         """
         What it does: Verifies tokens are saved to SQLite after Kiro Desktop refresh.
         Purpose: Ensure consistency between both refresh methods.
@@ -2276,8 +2276,8 @@ class TestKiroAuthManagerTokenPersistence:
         conn.commit()
         conn.close()
         
-        print("Setup: Creating KiroAuthManager with SQLite and Kiro Desktop auth...")
-        manager = KiroAuthManager(
+        print("Setup: Creating TraeAuthManager with SQLite and Kiro Desktop auth...")
+        manager = TraeAuthManager(
             refresh_token="test_refresh",
             sqlite_db=str(db_file)
         )
@@ -2285,10 +2285,10 @@ class TestKiroAuthManagerTokenPersistence:
         print("Setup: Mocking HTTP client for successful refresh...")
         mock_response = AsyncMock()
         mock_response.status_code = 200
-        mock_response.json = Mock(return_value=mock_kiro_token_response())
+        mock_response.json = Mock(return_value=mock_trae_token_response())
         mock_response.raise_for_status = Mock()
         
-        with patch('kiro.auth.httpx.AsyncClient') as mock_client_class:
+        with patch('trae.auth.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_response)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -2316,7 +2316,7 @@ class TestKiroAuthManagerTokenPersistence:
 # Tests for Social Login Support (kirocli:social:token)
 # =============================================================================
 
-class TestKiroAuthManagerSocialLogin:
+class TestTraeAuthManagerSocialLogin:
     """Tests for social login support (Google, GitHub, etc.).
     
     Background: kiro-cli supports social login (Google, GitHub) for free-tier users.
@@ -2330,8 +2330,8 @@ class TestKiroAuthManagerSocialLogin:
         What it does: Verifies loading credentials from kirocli:social:token key.
         Purpose: Ensure social login credentials are loaded correctly.
         """
-        print(f"Setup: Creating KiroAuthManager with social login SQLite: {temp_sqlite_db_social}")
-        manager = KiroAuthManager(sqlite_db=temp_sqlite_db_social)
+        print(f"Setup: Creating TraeAuthManager with social login SQLite: {temp_sqlite_db_social}")
+        manager = TraeAuthManager(sqlite_db=temp_sqlite_db_social)
         
         print("Verification: access_token loaded from social key...")
         print(f"Comparing access_token: Expected 'social_access_token', Got '{manager._access_token}'")
@@ -2349,8 +2349,8 @@ class TestKiroAuthManagerSocialLogin:
         What it does: Verifies social login is detected as KIRO_DESKTOP auth type.
         Purpose: Ensure social login uses Kiro Desktop Auth endpoint (no AWS SSO OIDC).
         """
-        print(f"Setup: Creating KiroAuthManager with social login SQLite...")
-        manager = KiroAuthManager(sqlite_db=temp_sqlite_db_social)
+        print(f"Setup: Creating TraeAuthManager with social login SQLite...")
+        manager = TraeAuthManager(sqlite_db=temp_sqlite_db_social)
         
         print("Verification: No client_id loaded (social login doesn't have it)...")
         assert manager._client_id is None
@@ -2367,8 +2367,8 @@ class TestKiroAuthManagerSocialLogin:
         What it does: Verifies kirocli:social:token has highest priority.
         Purpose: Ensure correct key is loaded when multiple keys exist.
         """
-        print("Setup: Creating KiroAuthManager with database containing all three keys...")
-        manager = KiroAuthManager(sqlite_db=temp_sqlite_db_all_keys)
+        print("Setup: Creating TraeAuthManager with database containing all three keys...")
+        manager = TraeAuthManager(sqlite_db=temp_sqlite_db_all_keys)
         
         print("Verification: Loaded from kirocli:social:token (highest priority)...")
         print(f"Comparing access_token: Expected 'social_token', Got '{manager._access_token}'")
@@ -2386,8 +2386,8 @@ class TestKiroAuthManagerSocialLogin:
         What it does: Verifies _sqlite_token_key is set when loading from social key.
         Purpose: Ensure tokens are saved back to correct key after refresh.
         """
-        print("Setup: Creating KiroAuthManager with social login SQLite...")
-        manager = KiroAuthManager(sqlite_db=temp_sqlite_db_social)
+        print("Setup: Creating TraeAuthManager with social login SQLite...")
+        manager = TraeAuthManager(sqlite_db=temp_sqlite_db_social)
         
         print("Verification: _sqlite_token_key set to kirocli:social:token...")
         print(f"Comparing _sqlite_token_key: Expected 'kirocli:social:token', Got '{manager._sqlite_token_key}'")
@@ -2398,8 +2398,8 @@ class TestKiroAuthManagerSocialLogin:
         What it does: Verifies _sqlite_token_key is set when loading from OIDC key.
         Purpose: Ensure backward compatibility with existing OIDC credentials.
         """
-        print("Setup: Creating KiroAuthManager with OIDC SQLite...")
-        manager = KiroAuthManager(sqlite_db=temp_sqlite_db)
+        print("Setup: Creating TraeAuthManager with OIDC SQLite...")
+        manager = TraeAuthManager(sqlite_db=temp_sqlite_db)
         
         print("Verification: _sqlite_token_key set to codewhisperer:odic:token...")
         print(f"Comparing _sqlite_token_key: Expected 'codewhisperer:odic:token', Got '{manager._sqlite_token_key}'")
@@ -2413,8 +2413,8 @@ class TestKiroAuthManagerSocialLogin:
         import sqlite3
         import json
         
-        print("Setup: Creating KiroAuthManager with social login SQLite...")
-        manager = KiroAuthManager(sqlite_db=temp_sqlite_db_social)
+        print("Setup: Creating TraeAuthManager with social login SQLite...")
+        manager = TraeAuthManager(sqlite_db=temp_sqlite_db_social)
         
         print("Verification: Loaded from kirocli:social:token...")
         assert manager._sqlite_token_key == "kirocli:social:token"
@@ -2447,7 +2447,7 @@ class TestKiroAuthManagerSocialLogin:
     
     @pytest.mark.asyncio
     async def test_refresh_token_kiro_desktop_saves_to_social_key(
-        self, temp_sqlite_db_social, mock_kiro_token_response
+        self, temp_sqlite_db_social, mock_trae_token_response
     ):
         """
         What it does: Verifies tokens are saved to kirocli:social:token after Kiro Desktop refresh.
@@ -2456,8 +2456,8 @@ class TestKiroAuthManagerSocialLogin:
         import sqlite3
         import json
         
-        print("Setup: Creating KiroAuthManager with social login SQLite...")
-        manager = KiroAuthManager(sqlite_db=temp_sqlite_db_social)
+        print("Setup: Creating TraeAuthManager with social login SQLite...")
+        manager = TraeAuthManager(sqlite_db=temp_sqlite_db_social)
         
         print("Verification: Loaded from kirocli:social:token...")
         assert manager._sqlite_token_key == "kirocli:social:token"
@@ -2466,10 +2466,10 @@ class TestKiroAuthManagerSocialLogin:
         print("Setup: Mocking HTTP client for successful refresh...")
         mock_response = AsyncMock()
         mock_response.status_code = 200
-        mock_response.json = Mock(return_value=mock_kiro_token_response())
+        mock_response.json = Mock(return_value=mock_trae_token_response())
         mock_response.raise_for_status = Mock()
         
-        with patch('kiro.auth.httpx.AsyncClient') as mock_client_class:
+        with patch('trae.auth.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_response)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -2524,8 +2524,8 @@ class TestKiroAuthManagerSocialLogin:
         conn.commit()
         conn.close()
         
-        print("Setup: Creating KiroAuthManager with direct credentials (not from SQLite)...")
-        manager = KiroAuthManager(
+        print("Setup: Creating TraeAuthManager with direct credentials (not from SQLite)...")
+        manager = TraeAuthManager(
             refresh_token="test_refresh",
             sqlite_db=str(db_file)
         )
@@ -2569,8 +2569,8 @@ class TestKiroAuthManagerSocialLogin:
         print(f"Verification: No device-registration keys found (count={count})...")
         assert count == 0
         
-        print("Setup: Creating KiroAuthManager with social login SQLite...")
-        manager = KiroAuthManager(sqlite_db=temp_sqlite_db_social)
+        print("Setup: Creating TraeAuthManager with social login SQLite...")
+        manager = TraeAuthManager(sqlite_db=temp_sqlite_db_social)
         
         print("Verification: Manager initialized successfully without device-registration...")
         assert manager._access_token == "social_access_token"
@@ -2585,8 +2585,8 @@ class TestKiroAuthManagerSocialLogin:
         import sqlite3
         import json
         
-        print("Setup: Creating KiroAuthManager with social login SQLite...")
-        manager = KiroAuthManager(sqlite_db=temp_sqlite_db_social)
+        print("Setup: Creating TraeAuthManager with social login SQLite...")
+        manager = TraeAuthManager(sqlite_db=temp_sqlite_db_social)
         
         print("Action: Updating tokens and saving...")
         manager._access_token = "new_social_token"
@@ -2615,7 +2615,7 @@ class TestKiroAuthManagerSocialLogin:
 # Tests for Enterprise Kiro IDE Support (Issue #45)
 # =============================================================================
 
-class TestKiroAuthManagerEnterpriseIDE:
+class TestTraeAuthManagerEnterpriseIDE:
     """Tests for Enterprise Kiro IDE support (IdC login with clientIdHash).
     
     Background: Enterprise Kiro IDE uses AWS IAM Identity Center (IdC) for authentication.
@@ -2634,8 +2634,8 @@ class TestKiroAuthManagerEnterpriseIDE:
         """
         creds_file, device_reg_file = temp_enterprise_ide_complete
         
-        print(f"Setup: Creating KiroAuthManager with Enterprise IDE credentials: {creds_file}")
-        manager = KiroAuthManager(creds_file=creds_file)
+        print(f"Setup: Creating TraeAuthManager with Enterprise IDE credentials: {creds_file}")
+        manager = TraeAuthManager(creds_file=creds_file)
         
         print("Verification: clientIdHash loaded...")
         print(f"Comparing _client_id_hash: Expected 'abc123def456', Got '{manager._client_id_hash}'")
@@ -2652,8 +2652,8 @@ class TestKiroAuthManagerEnterpriseIDE:
         """
         creds_file, device_reg_file = temp_enterprise_ide_complete
         
-        print("Setup: Creating KiroAuthManager with Enterprise IDE credentials...")
-        manager = KiroAuthManager(creds_file=creds_file)
+        print("Setup: Creating TraeAuthManager with Enterprise IDE credentials...")
+        manager = TraeAuthManager(creds_file=creds_file)
         
         print("Verification: clientId loaded from device registration...")
         print(f"Comparing _client_id: Expected 'enterprise_client_id_12345', Got '{manager._client_id}'")
@@ -2670,8 +2670,8 @@ class TestKiroAuthManagerEnterpriseIDE:
         """
         creds_file, device_reg_file = temp_enterprise_ide_complete
         
-        print("Setup: Creating KiroAuthManager with Enterprise IDE credentials...")
-        manager = KiroAuthManager(creds_file=creds_file)
+        print("Setup: Creating TraeAuthManager with Enterprise IDE credentials...")
+        manager = TraeAuthManager(creds_file=creds_file)
         
         print("Verification: auth_type = AWS_SSO_OIDC...")
         print(f"Comparing auth_type: Expected AWS_SSO_OIDC, Got {manager.auth_type}")
@@ -2695,8 +2695,8 @@ class TestKiroAuthManagerEnterpriseIDE:
         }
         creds_file.write_text(json.dumps(creds_data))
         
-        print("Action: Creating KiroAuthManager...")
-        manager = KiroAuthManager(creds_file=str(creds_file))
+        print("Action: Creating TraeAuthManager...")
+        manager = TraeAuthManager(creds_file=str(creds_file))
         
         print("Verification: clientIdHash stored...")
         assert manager._client_id_hash == "nonexistent_hash"
@@ -2733,8 +2733,8 @@ class TestKiroAuthManagerEnterpriseIDE:
         }
         creds_file.write_text(json.dumps(creds_data))
         
-        print("Action: Creating KiroAuthManager (should handle error gracefully)...")
-        manager = KiroAuthManager(creds_file=str(creds_file))
+        print("Action: Creating TraeAuthManager (should handle error gracefully)...")
+        manager = TraeAuthManager(creds_file=str(creds_file))
         
         print("Verification: clientId and clientSecret are None (JSON parse error)...")
         assert manager._client_id is None
@@ -2769,8 +2769,8 @@ class TestKiroAuthManagerEnterpriseIDE:
         }
         creds_file.write_text(json.dumps(creds_data))
         
-        print("Action: Creating KiroAuthManager...")
-        manager = KiroAuthManager(creds_file=str(creds_file))
+        print("Action: Creating TraeAuthManager...")
+        manager = TraeAuthManager(creds_file=str(creds_file))
         
         print("Verification: clientId and clientSecret are None (missing in file)...")
         assert manager._client_id is None
@@ -2786,8 +2786,8 @@ class TestKiroAuthManagerEnterpriseIDE:
         """
         creds_file, device_reg_file = temp_enterprise_ide_complete
         
-        print("Setup: Creating KiroAuthManager with Enterprise IDE credentials...")
-        manager = KiroAuthManager(creds_file=creds_file)
+        print("Setup: Creating TraeAuthManager with Enterprise IDE credentials...")
+        manager = TraeAuthManager(creds_file=creds_file)
         
         print("Verification: auth_type = AWS_SSO_OIDC...")
         assert manager.auth_type == AuthType.AWS_SSO_OIDC
@@ -2798,7 +2798,7 @@ class TestKiroAuthManagerEnterpriseIDE:
         mock_response.json = Mock(return_value=mock_aws_sso_oidc_token_response())
         mock_response.raise_for_status = Mock()
         
-        with patch('kiro.auth.httpx.AsyncClient') as mock_client_class:
+        with patch('trae.auth.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_response)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -2830,8 +2830,8 @@ class TestKiroAuthManagerEnterpriseIDE:
         """
         creds_file, device_reg_file = temp_enterprise_ide_complete
         
-        print("Setup: Creating KiroAuthManager with Enterprise IDE credentials...")
-        manager = KiroAuthManager(creds_file=creds_file)
+        print("Setup: Creating TraeAuthManager with Enterprise IDE credentials...")
+        manager = TraeAuthManager(creds_file=creds_file)
         
         print("Setup: Mocking HTTP client...")
         mock_response = AsyncMock()
@@ -2839,7 +2839,7 @@ class TestKiroAuthManagerEnterpriseIDE:
         mock_response.json = Mock(return_value=mock_aws_sso_oidc_token_response())
         mock_response.raise_for_status = Mock()
         
-        with patch('kiro.auth.httpx.AsyncClient') as mock_client_class:
+        with patch('trae.auth.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_response)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -2875,8 +2875,8 @@ class TestKiroAuthManagerEnterpriseIDE:
         """
         creds_file, device_reg_file = temp_enterprise_ide_complete
         
-        print("Setup: Creating KiroAuthManager with Enterprise IDE credentials...")
-        manager = KiroAuthManager(creds_file=creds_file)
+        print("Setup: Creating TraeAuthManager with Enterprise IDE credentials...")
+        manager = TraeAuthManager(creds_file=creds_file)
         
         print("Setup: Mocking HTTP client...")
         mock_response = AsyncMock()
@@ -2884,7 +2884,7 @@ class TestKiroAuthManagerEnterpriseIDE:
         mock_response.json = Mock(return_value=mock_aws_sso_oidc_token_response())
         mock_response.raise_for_status = Mock()
         
-        with patch('kiro.auth.httpx.AsyncClient') as mock_client_class:
+        with patch('trae.auth.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_response)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -2916,8 +2916,8 @@ class TestKiroAuthManagerEnterpriseIDE:
         """
         creds_file, device_reg_file = temp_enterprise_ide_complete
         
-        print("Setup: Creating KiroAuthManager with Enterprise IDE credentials...")
-        manager = KiroAuthManager(creds_file=creds_file)
+        print("Setup: Creating TraeAuthManager with Enterprise IDE credentials...")
+        manager = TraeAuthManager(creds_file=creds_file)
         
         print("Verification: Initial state correct...")
         assert manager._client_id_hash == "abc123def456"
@@ -2931,7 +2931,7 @@ class TestKiroAuthManagerEnterpriseIDE:
         mock_response.json = Mock(return_value=mock_aws_sso_oidc_token_response())
         mock_response.raise_for_status = Mock()
         
-        with patch('kiro.auth.httpx.AsyncClient') as mock_client_class:
+        with patch('trae.auth.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
             mock_client.post = AsyncMock(return_value=mock_response)
             mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -2965,5 +2965,5 @@ class TestKiroAuthManagerEnterpriseIDE:
         print("  - kiro-cli: SQLite database")
         print("")
         print("This is verified by other tests in this class and")
-        print("TestKiroAuthManagerSsoRegionSeparation class.")
+        print("TestTraeAuthManagerSsoRegionSeparation class.")
         assert True  # Documentation test

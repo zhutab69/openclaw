@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
-# Kiro Gateway
-# https://github.com/jwadow/kiro-gateway
+# Trae Gateway
+# (Trae Gateway - based on Kiro Gateway)
 # Copyright (C) 2025 Jwadow
 #
 # This program is free software: you can redistribute it and/or modify
@@ -18,18 +18,18 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 """
-Kiro Gateway - Proxy for Kiro API.
+Trae Gateway - Proxy for Trae API.
 
 This package provides a modular architecture for proxying
-OpenAI API requests to Kiro (AWS CodeWhisperer).
+OpenAI API requests to Trae API.
 
 Modules:
     - config: Configuration and constants
     - models: Pydantic models for OpenAI API
-    - auth: Kiro authentication manager
+    - auth: Trae authentication manager
     - cache: Model metadata cache
     - utils: Helper utilities
-    - converters: OpenAI <-> Kiro format conversion
+    - converters: OpenAI <-> Trae format conversion
     - parsers: AWS SSE stream parsers
     - streaming: Response streaming logic
     - http_client: HTTP client with retry logic
@@ -39,19 +39,19 @@ Modules:
 
 # Version is imported from config.py — the single source of truth
 # This allows changing the version in only one place
-from kiro.config import APP_VERSION as __version__
+from trae.config import APP_VERSION as __version__
 
 __author__ = "Jwadow"
 
 # Main components for convenient import
-from kiro.auth import KiroAuthManager
-from kiro.cache import ModelInfoCache
-from kiro.http_client import KiroHttpClient
-from kiro.routes_openai import router
-from kiro.model_resolver import ModelResolver, normalize_model_name, get_model_id_for_kiro
+from trae.auth import TraeAuthManager
+from trae.cache import ModelInfoCache
+from trae.http_client import TraeHttpClient
+from trae.routes_openai import router
+from trae.model_resolver import ModelResolver, normalize_model_name, get_model_id_for_trae
 
 # Configuration
-from kiro.config import (
+from trae.config import (
     PROXY_API_KEY,
     REGION,
     HIDDEN_MODELS,
@@ -59,7 +59,7 @@ from kiro.config import (
 )
 
 # Models
-from kiro.models_openai import (
+from trae.models_openai import (
     ChatCompletionRequest,
     ChatMessage,
     OpenAIModel,
@@ -67,26 +67,26 @@ from kiro.models_openai import (
 )
 
 # Converters
-from kiro.converters_openai import build_kiro_payload
-from kiro.converters_core import (
+from trae.converters_openai import build_trae_payload
+from trae.converters_core import (
     extract_text_content,
     merge_adjacent_messages,
 )
 
 # Parsers
-from kiro.parsers import (
+from trae.parsers import (
     AwsEventStreamParser,
     parse_bracket_tool_calls,
 )
 
 # Streaming
-from kiro.streaming_openai import (
-    stream_kiro_to_openai,
+from trae.streaming_openai import (
+    stream_trae_to_openai,
     collect_stream_response,
 )
 
 # Exceptions
-from kiro.exceptions import (
+from trae.exceptions import (
     validation_exception_handler,
     sanitize_validation_errors,
 )
@@ -96,9 +96,9 @@ __all__ = [
     "__version__",
     
     # Main classes
-    "KiroAuthManager",
+    "TraeAuthManager",
     "ModelInfoCache",
-    "KiroHttpClient",
+    "TraeHttpClient",
     "ModelResolver",
     "router",
     
@@ -110,7 +110,7 @@ __all__ = [
     
     # Model resolution
     "normalize_model_name",
-    "get_model_id_for_kiro",
+    "get_model_id_for_trae",
     
     # Models
     "ChatCompletionRequest",
@@ -119,7 +119,7 @@ __all__ = [
     "ModelList",
     
     # Converters
-    "build_kiro_payload",
+    "build_trae_payload",
     "extract_text_content",
     "merge_adjacent_messages",
     
@@ -128,7 +128,7 @@ __all__ = [
     "parse_bracket_tool_calls",
     
     # Streaming
-    "stream_kiro_to_openai",
+    "stream_trae_to_openai",
     "collect_stream_response",
     
     # Exceptions

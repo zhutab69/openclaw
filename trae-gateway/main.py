@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
-# Kiro Gateway
-# https://github.com/jwadow/kiro-gateway
+# Trae Gateway
+# (Trae Gateway - based on Kiro Gateway)
 # Copyright (C) 2025 Jwadow
 #
 # This program is free software: you can redistribute it and/or modify
@@ -18,7 +18,7 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 """
-Kiro Gateway - OpenAI-compatible interface for Kiro API.
+Trae Gateway - OpenAI-compatible interface for Trae API.
 
 Application entry point. Creates FastAPI app and connects routes.
 
@@ -52,15 +52,15 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
-from kiro.config import (
+from trae.config import (
     APP_TITLE,
     APP_DESCRIPTION,
     APP_VERSION,
     REFRESH_TOKEN,
     PROFILE_ARN,
     REGION,
-    KIRO_CREDS_FILE,
-    KIRO_CLI_DB_FILE,
+    TRAE_CREDS_FILE,
+    TRAE_CLI_DB_FILE,
     PROXY_API_KEY,
     LOG_LEVEL,
     SERVER_HOST,
@@ -75,13 +75,13 @@ from kiro.config import (
     VPN_PROXY_URL,
     _warn_timeout_configuration,
 )
-from kiro.auth import KiroAuthManager
-from kiro.cache import ModelInfoCache
-from kiro.model_resolver import ModelResolver
-from kiro.routes_openai import router as openai_router
-from kiro.routes_anthropic import router as anthropic_router
-from kiro.exceptions import validation_exception_handler
-from kiro.debug_middleware import DebugLoggerMiddleware
+from trae.auth import TraeAuthManager
+from trae.cache import ModelInfoCache
+from trae.model_resolver import ModelResolver
+from trae.routes_openai import router as openai_router
+from trae.routes_anthropic import router as anthropic_router
+from trae.exceptions import validation_exception_handler
+from trae.debug_middleware import DebugLoggerMiddleware
 
 
 # --- Loguru Configuration ---
@@ -205,7 +205,7 @@ def validate_configuration() -> None:
     Validates that required configuration is present.
     
     Checks:
-    - Either REFRESH_TOKEN, KIRO_CREDS_FILE, or KIRO_CLI_DB_FILE is configured
+    - Either REFRESH_TOKEN, TRAE_CREDS_FILE, or TRAE_CLI_DB_FILE is configured
     - Supports both .env file (local) and environment variables (Docker)
     
     Raises:
@@ -218,26 +218,26 @@ def validate_configuration() -> None:
     
     # Check for credentials (from .env or environment variables)
     has_refresh_token = bool(REFRESH_TOKEN)
-    has_creds_file = bool(KIRO_CREDS_FILE)
-    has_cli_db = bool(KIRO_CLI_DB_FILE)
+    has_creds_file = bool(TRAE_CREDS_FILE)
+    has_cli_db = bool(TRAE_CLI_DB_FILE)
     
     # Check for Trae CLI Token
-    from kiro.config import TRAE_CLI_TOKEN
+    from trae.config import TRAE_CLI_TOKEN
     has_trae_token = bool(TRAE_CLI_TOKEN)
     
     # Check if creds file actually exists
-    if KIRO_CREDS_FILE:
-        creds_path = Path(KIRO_CREDS_FILE).expanduser()
+    if TRAE_CREDS_FILE:
+        creds_path = Path(TRAE_CREDS_FILE).expanduser()
         if not creds_path.exists():
             has_creds_file = False
-            logger.warning(f"KIRO_CREDS_FILE not found: {KIRO_CREDS_FILE}")
+            logger.warning(f"TRAE_CREDS_FILE not found: {TRAE_CREDS_FILE}")
     
     # Check if CLI database file actually exists
-    if KIRO_CLI_DB_FILE:
-        cli_db_path = Path(KIRO_CLI_DB_FILE).expanduser()
+    if TRAE_CLI_DB_FILE:
+        cli_db_path = Path(TRAE_CLI_DB_FILE).expanduser()
         if not cli_db_path.exists():
             has_cli_db = False
-            logger.warning(f"KIRO_CLI_DB_FILE not found: {KIRO_CLI_DB_FILE}")
+            logger.warning(f"TRAE_CLI_DB_FILE not found: {TRAE_CLI_DB_FILE}")
     
     # If no credentials found, show helpful error
     if not has_refresh_token and not has_creds_file and not has_cli_db and not has_trae_token:
@@ -253,9 +253,9 @@ def validate_configuration() -> None:
                 "2. Edit .env and configure your credentials:\n"
                 "   2.1. Set you super-secret password as PROXY_API_KEY\n"
                 "   2.2. Set your Kiro credentials:\n"
-                "      - Option 1: KIRO_CREDS_FILE to your Kiro credentials JSON file\n"
+                "      - Option 1: TRAE_CREDS_FILE to your Kiro credentials JSON file\n"
                 "      - Option 2: REFRESH_TOKEN from Kiro IDE traffic\n"
-                "      - Option 3: KIRO_CLI_DB_FILE to kiro-cli SQLite database\n"
+                "      - Option 3: TRAE_CLI_DB_FILE to kiro-cli SQLite database\n"
                 "\n"
                 "Or use environment variables (for Docker):\n"
                 "   docker run -e PROXY_API_KEY=\"...\" -e REFRESH_TOKEN=\"...\" ...\n"
@@ -273,13 +273,13 @@ def validate_configuration() -> None:
                 "   PROXY_API_KEY=\"my-super-secret-password-123\"\n"
                 "\n"
                 "   Option 1 (Recommended): JSON credentials file\n"
-                "      KIRO_CREDS_FILE=\"path/to/your/kiro-credentials.json\"\n"
+                "      TRAE_CREDS_FILE=\"path/to/your/kiro-credentials.json\"\n"
                 "\n"
                 "   Option 2: Refresh token\n"
                 "      REFRESH_TOKEN=\"your_refresh_token_here\"\n"
                 "\n"
                 "   Option 3: kiro-cli SQLite database (AWS SSO)\n"
-                "      KIRO_CLI_DB_FILE=\"~/.local/share/kiro-cli/data.sqlite3\"\n"
+                "      TRAE_CLI_DB_FILE=\"~/.local/share/kiro-cli/data.sqlite3\"\n"
                 "\n"
                 "   See README.md for how to obtain credentials."
             )
@@ -297,7 +297,7 @@ def validate_configuration() -> None:
         logger.error("")
         sys.exit(1)
     
-    # Note: Credential loading details are logged by KiroAuthManager
+    # Note: Credential loading details are logged by TraeAuthManager
 
 
 # --- Lifespan Manager ---
@@ -308,7 +308,7 @@ async def lifespan(app: FastAPI):
     
     Creates and initializes:
     - Shared HTTP client with connection pooling
-    - KiroAuthManager for token management
+    - TraeAuthManager for token management
     - ModelInfoCache for model caching
     
     The shared HTTP client is used by all requests to reduce memory usage
@@ -341,29 +341,29 @@ async def lifespan(app: FastAPI):
     
     # Create AuthManager
     # Priority: CLI Token > Trae storage.json > Kiro authentication
-    from kiro.config import TRAE_CLI_TOKEN
+    from trae.config import TRAE_CLI_TOKEN
     
     if TRAE_CLI_TOKEN:
         logger.info("Using Trae CLI Token authentication")
-        from kiro.auth_trae import TraeAuthManager
+        from trae.auth_trae import TraeAuthManager
         app.state.auth_manager = TraeAuthManager(
             cli_token=TRAE_CLI_TOKEN
         )
-    elif KIRO_CREDS_FILE and 'Trae CN' in KIRO_CREDS_FILE:
+    elif TRAE_CREDS_FILE and 'Trae CN' in TRAE_CREDS_FILE:
         logger.info("Detected Trae CN storage.json, using Trae authentication")
-        from kiro.auth_trae import TraeAuthManager
+        from trae.auth_trae import TraeAuthManager
         app.state.auth_manager = TraeAuthManager(
-            storage_file=KIRO_CREDS_FILE
+            storage_file=TRAE_CREDS_FILE
         )
     else:
         # Use original Kiro authentication
         # Priority: SQLite DB > JSON file > environment variables
-        app.state.auth_manager = KiroAuthManager(
+        app.state.auth_manager = TraeAuthManager(
             refresh_token=REFRESH_TOKEN,
             profile_arn=PROFILE_ARN,
             region=REGION,
-            creds_file=KIRO_CREDS_FILE if KIRO_CREDS_FILE else None,
-            sqlite_db=KIRO_CLI_DB_FILE if KIRO_CLI_DB_FILE else None,
+            creds_file=TRAE_CREDS_FILE if TRAE_CREDS_FILE else None,
+            sqlite_db=TRAE_CLI_DB_FILE if TRAE_CLI_DB_FILE else None,
         )
     
     # Create model cache
@@ -588,7 +588,7 @@ def print_startup_banner(host: str, port: int) -> None:
     print()
     print(f"  {DIM}{'-' * 48}{RESET}")
     print(f"  {WHITE}Found a bug? Need help? Have questions?{RESET}")
-    print(f"  {YELLOW}-> https://github.com/jwadow/kiro-gateway/issues{RESET}")
+    print(f"  {YELLOW}-> (Trae Gateway - based on Kiro Gateway)/issues{RESET}")
     print(f"  {DIM}{'-' * 48}{RESET}")
     print()
 

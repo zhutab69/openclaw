@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
-# Kiro Gateway
-# https://github.com/jwadow/kiro-gateway
+# Trae Gateway
+# (Trae Gateway - based on Kiro Gateway)
 # Copyright (C) 2025 Jwadow
 #
 # This program is free software: you can redistribute it and/or modify
@@ -18,9 +18,9 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 """
-Streaming logic for converting Kiro stream to Anthropic Messages API format.
+Streaming logic for converting Trae stream to Anthropic Messages API format.
 
-This module formats Kiro events into Anthropic SSE format:
+This module formats Trae events into Anthropic SSE format:
 - event: message_start
 - event: content_block_start
 - event: content_block_delta
@@ -39,25 +39,25 @@ from typing import TYPE_CHECKING, AsyncGenerator, Dict, List, Optional, Any
 import httpx
 from loguru import logger
 
-from kiro.streaming_core import (
-    parse_kiro_stream,
+from trae.streaming_core import (
+    parse_trae_stream,
     collect_stream_to_result,
     FirstTokenTimeoutError,
-    KiroEvent,
+    TraeEvent,
     calculate_tokens_from_context_usage,
     stream_with_first_token_retry,
 )
-from kiro.tokenizer import count_tokens, count_message_tokens, count_tools_tokens
-from kiro.parsers import parse_bracket_tool_calls, deduplicate_tool_calls
-from kiro.config import FIRST_TOKEN_TIMEOUT, FIRST_TOKEN_MAX_RETRIES, FAKE_REASONING_HANDLING
+from trae.tokenizer import count_tokens, count_message_tokens, count_tools_tokens
+from trae.parsers import parse_bracket_tool_calls, deduplicate_tool_calls
+from trae.config import FIRST_TOKEN_TIMEOUT, FIRST_TOKEN_MAX_RETRIES, FAKE_REASONING_HANDLING
 
 if TYPE_CHECKING:
-    from kiro.auth import KiroAuthManager
-    from kiro.cache import ModelInfoCache
+    from trae.auth import TraeAuthManager
+    from trae.cache import ModelInfoCache
 
 # Import debug_logger for logging
 try:
-    from kiro.debug_logger import debug_logger
+    from trae.debug_logger import debug_logger
 except ImportError:
     debug_logger = None
 
@@ -98,19 +98,19 @@ def generate_thinking_signature() -> str:
     return f"sig_{uuid.uuid4().hex[:32]}"
 
 
-async def stream_kiro_to_anthropic(
+async def stream_trae_to_anthropic(
     response: httpx.Response,
     model: str,
     model_cache: "ModelInfoCache",
-    auth_manager: "KiroAuthManager",
+    auth_manager: "TraeAuthManager",
     first_token_timeout: float = FIRST_TOKEN_TIMEOUT,
     request_messages: Optional[list] = None,
     conversation_id: Optional[str] = None
 ) -> AsyncGenerator[str, None]:
     """
-    Generator for converting Kiro stream to Anthropic SSE format.
+    Generator for converting Trae stream to Anthropic SSE format.
     
-    Parses Kiro AWS SSE stream and converts events to Anthropic format.
+    Parses Trae SSE stream and converts events to Anthropic format.
     Supports thinking content blocks when FAKE_REASONING_HANDLING=as_reasoning_content.
     
     Args:
@@ -175,7 +175,7 @@ async def stream_kiro_to_anthropic(
             }
         })
         
-        async for event in parse_kiro_stream(response, first_token_timeout):
+        async for event in parse_trae_stream(response, first_token_timeout):
             if event.type == "content":
                 content = event.content or ""
                 full_content += content
@@ -447,9 +447,9 @@ async def stream_kiro_to_anthropic(
         )
         
         if content_was_truncated:
-            from kiro.config import TRUNCATION_RECOVERY
+            from trae.config import TRUNCATION_RECOVERY
             logger.error(
-                f"Content truncated by Kiro API: stream ended without completion signals, "
+                f"Content truncated by Trae API: stream ended without completion signals, "
                 f"length={len(full_content)} chars. "
                 f"{'Model will be notified automatically about truncation.' if TRUNCATION_RECOVERY else 'Set TRUNCATION_RECOVERY=true in .env to auto-notify model about truncation.'}"
             )
@@ -485,8 +485,8 @@ async def stream_kiro_to_anthropic(
         })
         
         # Save truncation info for recovery (tracked by stable identifiers)
-        from kiro.truncation_recovery import should_inject_recovery
-        from kiro.truncation_state import save_tool_truncation, save_content_truncation
+        from trae.truncation_recovery import should_inject_recovery
+        from trae.truncation_state import save_tool_truncation, save_content_truncation
         
         if should_inject_recovery():
             # Save tool truncations (tracked by tool_call_id)
@@ -544,11 +544,11 @@ async def collect_anthropic_response(
     response: httpx.Response,
     model: str,
     model_cache: "ModelInfoCache",
-    auth_manager: "KiroAuthManager",
+    auth_manager: "TraeAuthManager",
     request_messages: Optional[list] = None
 ) -> dict:
     """
-    Collect full response from Kiro stream in Anthropic format.
+    Collect full response from Trae stream in Anthropic format.
     
     Used for non-streaming mode.
     
@@ -652,7 +652,7 @@ async def stream_with_first_token_retry_anthropic(
     make_request,
     model: str,
     model_cache: "ModelInfoCache",
-    auth_manager: "KiroAuthManager",
+    auth_manager: "TraeAuthManager",
     max_retries: int = FIRST_TOKEN_MAX_RETRIES,
     first_token_timeout: float = FIRST_TOKEN_TIMEOUT,
     request_messages: Optional[list] = None,
@@ -705,7 +705,7 @@ async def stream_with_first_token_retry_anthropic(
     
     async def stream_processor(response: httpx.Response) -> AsyncGenerator[str, None]:
         """Process response and yield Anthropic SSE chunks."""
-        async for chunk in stream_kiro_to_anthropic(
+        async for chunk in stream_trae_to_anthropic(
             response,
             model,
             model_cache,

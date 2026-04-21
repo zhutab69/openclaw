@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 """
-Unit tests for KiroHttpClient.
+Unit tests for TraeHttpClient.
 Tests retry logic, error handling, and HTTP client management.
 """
 
@@ -13,15 +13,15 @@ from datetime import datetime, timezone, timedelta
 import httpx
 from fastapi import HTTPException
 
-from kiro.http_client import KiroHttpClient
-from kiro.auth import KiroAuthManager
-from kiro.config import MAX_RETRIES, BASE_RETRY_DELAY, FIRST_TOKEN_MAX_RETRIES, STREAMING_READ_TIMEOUT
+from trae.http_client import TraeHttpClient
+from trae.auth import TraeAuthManager
+from trae.config import MAX_RETRIES, BASE_RETRY_DELAY, FIRST_TOKEN_MAX_RETRIES, STREAMING_READ_TIMEOUT
 
 
 @pytest.fixture
 def mock_auth_manager_for_http():
-    """Creates a mocked KiroAuthManager for HTTP client tests."""
-    manager = Mock(spec=KiroAuthManager)
+    """Creates a mocked TraeAuthManager for HTTP client tests."""
+    manager = Mock(spec=TraeAuthManager)
     manager.get_access_token = AsyncMock(return_value="test_access_token")
     manager.force_refresh = AsyncMock(return_value="new_access_token")
     manager.fingerprint = "test_fingerprint_12345678"
@@ -29,16 +29,16 @@ def mock_auth_manager_for_http():
     return manager
 
 
-class TestKiroHttpClientInitialization:
-    """Tests for KiroHttpClient initialization."""
+class TestTraeHttpClientInitialization:
+    """Tests for TraeHttpClient initialization."""
     
     def test_initialization_stores_auth_manager(self, mock_auth_manager_for_http):
         """
         What it does: Verifies auth_manager is stored during initialization.
         Purpose: Ensure auth_manager is available for obtaining tokens.
         """
-        print("Setup: Creating KiroHttpClient...")
-        client = KiroHttpClient(mock_auth_manager_for_http)
+        print("Setup: Creating TraeHttpClient...")
+        client = TraeHttpClient(mock_auth_manager_for_http)
         
         print("Verification: auth_manager is stored...")
         assert client.auth_manager is mock_auth_manager_for_http
@@ -48,14 +48,14 @@ class TestKiroHttpClientInitialization:
         What it does: Verifies that HTTP client is initially None.
         Purpose: Ensure lazy initialization.
         """
-        print("Setup: Creating KiroHttpClient...")
-        client = KiroHttpClient(mock_auth_manager_for_http)
+        print("Setup: Creating TraeHttpClient...")
+        client = TraeHttpClient(mock_auth_manager_for_http)
         
         print("Verification: client is initially None...")
         assert client.client is None
 
 
-class TestKiroHttpClientGetClient:
+class TestTraeHttpClientGetClient:
     """Tests for _get_client method."""
     
     @pytest.mark.asyncio
@@ -64,11 +64,11 @@ class TestKiroHttpClientGetClient:
         What it does: Verifies creation of a new HTTP client.
         Purpose: Ensure client is created on first call.
         """
-        print("Setup: Creating KiroHttpClient...")
-        http_client = KiroHttpClient(mock_auth_manager_for_http)
+        print("Setup: Creating TraeHttpClient...")
+        http_client = TraeHttpClient(mock_auth_manager_for_http)
         
         print("Action: Getting client...")
-        with patch('kiro.http_client.httpx.AsyncClient') as mock_async_client:
+        with patch('trae.http_client.httpx.AsyncClient') as mock_async_client:
             mock_instance = AsyncMock()
             mock_instance.is_closed = False
             mock_async_client.return_value = mock_instance
@@ -85,8 +85,8 @@ class TestKiroHttpClientGetClient:
         What it does: Verifies reuse of existing client.
         Purpose: Ensure client is not recreated unnecessarily.
         """
-        print("Setup: Creating KiroHttpClient with existing client...")
-        http_client = KiroHttpClient(mock_auth_manager_for_http)
+        print("Setup: Creating TraeHttpClient with existing client...")
+        http_client = TraeHttpClient(mock_auth_manager_for_http)
         
         mock_existing = AsyncMock()
         mock_existing.is_closed = False
@@ -104,15 +104,15 @@ class TestKiroHttpClientGetClient:
         What it does: Verifies recreation of closed client.
         Purpose: Ensure closed client is replaced with a new one.
         """
-        print("Setup: Creating KiroHttpClient with closed client...")
-        http_client = KiroHttpClient(mock_auth_manager_for_http)
+        print("Setup: Creating TraeHttpClient with closed client...")
+        http_client = TraeHttpClient(mock_auth_manager_for_http)
         
         mock_closed = AsyncMock()
         mock_closed.is_closed = True
         http_client.client = mock_closed
         
         print("Action: Getting client...")
-        with patch('kiro.http_client.httpx.AsyncClient') as mock_async_client:
+        with patch('trae.http_client.httpx.AsyncClient') as mock_async_client:
             mock_new = AsyncMock()
             mock_new.is_closed = False
             mock_async_client.return_value = mock_new
@@ -124,7 +124,7 @@ class TestKiroHttpClientGetClient:
             assert client is mock_new
 
 
-class TestKiroHttpClientClose:
+class TestTraeHttpClientClose:
     """Tests for close method."""
     
     @pytest.mark.asyncio
@@ -133,8 +133,8 @@ class TestKiroHttpClientClose:
         What it does: Verifies HTTP client closure.
         Purpose: Ensure aclose() is called.
         """
-        print("Setup: Creating KiroHttpClient with client...")
-        http_client = KiroHttpClient(mock_auth_manager_for_http)
+        print("Setup: Creating TraeHttpClient with client...")
+        http_client = TraeHttpClient(mock_auth_manager_for_http)
         
         mock_client = AsyncMock()
         mock_client.is_closed = False
@@ -153,8 +153,8 @@ class TestKiroHttpClientClose:
         What it does: Verifies that close() doesn't fail for None client.
         Purpose: Ensure safe close() call without client.
         """
-        print("Setup: Creating KiroHttpClient without client...")
-        http_client = KiroHttpClient(mock_auth_manager_for_http)
+        print("Setup: Creating TraeHttpClient without client...")
+        http_client = TraeHttpClient(mock_auth_manager_for_http)
         
         print("Action: Closing client...")
         await http_client.close()  # Should not raise an error
@@ -167,8 +167,8 @@ class TestKiroHttpClientClose:
         What it does: Verifies that close() doesn't fail for closed client.
         Purpose: Ensure safe repeated close() call.
         """
-        print("Setup: Creating KiroHttpClient with closed client...")
-        http_client = KiroHttpClient(mock_auth_manager_for_http)
+        print("Setup: Creating TraeHttpClient with closed client...")
+        http_client = TraeHttpClient(mock_auth_manager_for_http)
         
         mock_client = AsyncMock()
         mock_client.is_closed = True
@@ -181,7 +181,7 @@ class TestKiroHttpClientClose:
         mock_client.aclose.assert_not_called()
 
 
-class TestKiroHttpClientRequestWithRetry:
+class TestTraeHttpClientRequestWithRetry:
     """Tests for request_with_retry method."""
     
     @pytest.mark.asyncio
@@ -190,8 +190,8 @@ class TestKiroHttpClientRequestWithRetry:
         What it does: Verifies successful request.
         Purpose: Ensure 200 response is returned immediately.
         """
-        print("Setup: Creating KiroHttpClient...")
-        http_client = KiroHttpClient(mock_auth_manager_for_http)
+        print("Setup: Creating TraeHttpClient...")
+        http_client = TraeHttpClient(mock_auth_manager_for_http)
         
         mock_response = AsyncMock()
         mock_response.status_code = 200
@@ -202,7 +202,7 @@ class TestKiroHttpClientRequestWithRetry:
         
         print("Action: Executing request...")
         with patch.object(http_client, '_get_client', return_value=mock_client):
-            with patch('kiro.http_client.get_kiro_headers', return_value={}):
+            with patch('trae.http_client.get_trae_headers', return_value={}):
                 response = await http_client.request_with_retry(
                     "POST",
                     "https://api.example.com/test",
@@ -219,8 +219,8 @@ class TestKiroHttpClientRequestWithRetry:
         What it does: Verifies token refresh on 403.
         Purpose: Ensure force_refresh() is called on 403.
         """
-        print("Setup: Creating KiroHttpClient...")
-        http_client = KiroHttpClient(mock_auth_manager_for_http)
+        print("Setup: Creating TraeHttpClient...")
+        http_client = TraeHttpClient(mock_auth_manager_for_http)
         
         mock_response_403 = AsyncMock()
         mock_response_403.status_code = 403
@@ -234,7 +234,7 @@ class TestKiroHttpClientRequestWithRetry:
         
         print("Action: Executing request...")
         with patch.object(http_client, '_get_client', return_value=mock_client):
-            with patch('kiro.http_client.get_kiro_headers', return_value={}):
+            with patch('trae.http_client.get_trae_headers', return_value={}):
                 response = await http_client.request_with_retry(
                     "POST",
                     "https://api.example.com/test",
@@ -251,8 +251,8 @@ class TestKiroHttpClientRequestWithRetry:
         What it does: Verifies exponential backoff on 429.
         Purpose: Ensure request is retried after delay.
         """
-        print("Setup: Creating KiroHttpClient...")
-        http_client = KiroHttpClient(mock_auth_manager_for_http)
+        print("Setup: Creating TraeHttpClient...")
+        http_client = TraeHttpClient(mock_auth_manager_for_http)
         
         mock_response_429 = AsyncMock()
         mock_response_429.status_code = 429
@@ -266,8 +266,8 @@ class TestKiroHttpClientRequestWithRetry:
         
         print("Action: Executing request...")
         with patch.object(http_client, '_get_client', return_value=mock_client):
-            with patch('kiro.http_client.get_kiro_headers', return_value={}):
-                with patch('kiro.http_client.asyncio.sleep', new_callable=AsyncMock) as mock_sleep:
+            with patch('trae.http_client.get_trae_headers', return_value={}):
+                with patch('trae.http_client.asyncio.sleep', new_callable=AsyncMock) as mock_sleep:
                     response = await http_client.request_with_retry(
                         "POST",
                         "https://api.example.com/test",
@@ -284,8 +284,8 @@ class TestKiroHttpClientRequestWithRetry:
         What it does: Verifies exponential backoff on 5xx.
         Purpose: Ensure server errors are handled with retry.
         """
-        print("Setup: Creating KiroHttpClient...")
-        http_client = KiroHttpClient(mock_auth_manager_for_http)
+        print("Setup: Creating TraeHttpClient...")
+        http_client = TraeHttpClient(mock_auth_manager_for_http)
         
         mock_response_500 = AsyncMock()
         mock_response_500.status_code = 500
@@ -299,8 +299,8 @@ class TestKiroHttpClientRequestWithRetry:
         
         print("Action: Executing request...")
         with patch.object(http_client, '_get_client', return_value=mock_client):
-            with patch('kiro.http_client.get_kiro_headers', return_value={}):
-                with patch('kiro.http_client.asyncio.sleep', new_callable=AsyncMock) as mock_sleep:
+            with patch('trae.http_client.get_trae_headers', return_value={}):
+                with patch('trae.http_client.asyncio.sleep', new_callable=AsyncMock) as mock_sleep:
                     response = await http_client.request_with_retry(
                         "POST",
                         "https://api.example.com/test",
@@ -317,8 +317,8 @@ class TestKiroHttpClientRequestWithRetry:
         What it does: Verifies exponential backoff on timeout.
         Purpose: Ensure timeouts are handled with retry.
         """
-        print("Setup: Creating KiroHttpClient...")
-        http_client = KiroHttpClient(mock_auth_manager_for_http)
+        print("Setup: Creating TraeHttpClient...")
+        http_client = TraeHttpClient(mock_auth_manager_for_http)
         
         mock_response_200 = AsyncMock()
         mock_response_200.status_code = 200
@@ -332,8 +332,8 @@ class TestKiroHttpClientRequestWithRetry:
         
         print("Action: Executing request...")
         with patch.object(http_client, '_get_client', return_value=mock_client):
-            with patch('kiro.http_client.get_kiro_headers', return_value={}):
-                with patch('kiro.http_client.asyncio.sleep', new_callable=AsyncMock) as mock_sleep:
+            with patch('trae.http_client.get_trae_headers', return_value={}):
+                with patch('trae.http_client.asyncio.sleep', new_callable=AsyncMock) as mock_sleep:
                     response = await http_client.request_with_retry(
                         "POST",
                         "https://api.example.com/test",
@@ -350,8 +350,8 @@ class TestKiroHttpClientRequestWithRetry:
         What it does: Verifies exponential backoff on request error.
         Purpose: Ensure network errors are handled with retry.
         """
-        print("Setup: Creating KiroHttpClient...")
-        http_client = KiroHttpClient(mock_auth_manager_for_http)
+        print("Setup: Creating TraeHttpClient...")
+        http_client = TraeHttpClient(mock_auth_manager_for_http)
         
         mock_response_200 = AsyncMock()
         mock_response_200.status_code = 200
@@ -365,8 +365,8 @@ class TestKiroHttpClientRequestWithRetry:
         
         print("Action: Executing request...")
         with patch.object(http_client, '_get_client', return_value=mock_client):
-            with patch('kiro.http_client.get_kiro_headers', return_value={}):
-                with patch('kiro.http_client.asyncio.sleep', new_callable=AsyncMock) as mock_sleep:
+            with patch('trae.http_client.get_trae_headers', return_value={}):
+                with patch('trae.http_client.asyncio.sleep', new_callable=AsyncMock) as mock_sleep:
                     response = await http_client.request_with_retry(
                         "POST",
                         "https://api.example.com/test",
@@ -383,8 +383,8 @@ class TestKiroHttpClientRequestWithRetry:
         What it does: Verifies HTTPException is raised after exhausting retries.
         Purpose: Ensure 504 is raised after MAX_RETRIES for timeout errors.
         """
-        print("Setup: Creating KiroHttpClient...")
-        http_client = KiroHttpClient(mock_auth_manager_for_http)
+        print("Setup: Creating TraeHttpClient...")
+        http_client = TraeHttpClient(mock_auth_manager_for_http)
         
         mock_client = AsyncMock()
         mock_client.is_closed = False
@@ -392,8 +392,8 @@ class TestKiroHttpClientRequestWithRetry:
         
         print("Action: Executing request...")
         with patch.object(http_client, '_get_client', return_value=mock_client):
-            with patch('kiro.http_client.get_kiro_headers', return_value={}):
-                with patch('kiro.http_client.asyncio.sleep', new_callable=AsyncMock):
+            with patch('trae.http_client.get_trae_headers', return_value={}):
+                with patch('trae.http_client.asyncio.sleep', new_callable=AsyncMock):
                     with pytest.raises(HTTPException) as exc_info:
                         await http_client.request_with_retry(
                             "POST",
@@ -412,8 +412,8 @@ class TestKiroHttpClientRequestWithRetry:
         What it does: Verifies other status codes are returned without retry.
         Purpose: Ensure 400, 404, etc. are returned immediately.
         """
-        print("Setup: Creating KiroHttpClient...")
-        http_client = KiroHttpClient(mock_auth_manager_for_http)
+        print("Setup: Creating TraeHttpClient...")
+        http_client = TraeHttpClient(mock_auth_manager_for_http)
         
         mock_response = AsyncMock()
         mock_response.status_code = 400
@@ -424,7 +424,7 @@ class TestKiroHttpClientRequestWithRetry:
         
         print("Action: Executing request...")
         with patch.object(http_client, '_get_client', return_value=mock_client):
-            with patch('kiro.http_client.get_kiro_headers', return_value={}):
+            with patch('trae.http_client.get_trae_headers', return_value={}):
                 response = await http_client.request_with_retry(
                     "POST",
                     "https://api.example.com/test",
@@ -441,8 +441,8 @@ class TestKiroHttpClientRequestWithRetry:
         What it does: Verifies send() is used for streaming.
         Purpose: Ensure stream=True uses build_request + send.
         """
-        print("Setup: Creating KiroHttpClient...")
-        http_client = KiroHttpClient(mock_auth_manager_for_http)
+        print("Setup: Creating TraeHttpClient...")
+        http_client = TraeHttpClient(mock_auth_manager_for_http)
         
         mock_response = AsyncMock()
         mock_response.status_code = 200
@@ -456,7 +456,7 @@ class TestKiroHttpClientRequestWithRetry:
         
         print("Action: Executing streaming request...")
         with patch.object(http_client, '_get_client', return_value=mock_client):
-            with patch('kiro.http_client.get_kiro_headers', return_value={}):
+            with patch('trae.http_client.get_trae_headers', return_value={}):
                 response = await http_client.request_with_retry(
                     "POST",
                     "https://api.example.com/test",
@@ -470,7 +470,7 @@ class TestKiroHttpClientRequestWithRetry:
         assert response.status_code == 200
 
 
-class TestKiroHttpClientContextManager:
+class TestTraeHttpClientContextManager:
     """Tests for async context manager."""
     
     @pytest.mark.asyncio
@@ -479,8 +479,8 @@ class TestKiroHttpClientContextManager:
         What it does: Verifies that __aenter__ returns self.
         Purpose: Ensure correct async with behavior.
         """
-        print("Setup: Creating KiroHttpClient...")
-        http_client = KiroHttpClient(mock_auth_manager_for_http)
+        print("Setup: Creating TraeHttpClient...")
+        http_client = TraeHttpClient(mock_auth_manager_for_http)
         
         print("Action: Entering context...")
         result = await http_client.__aenter__()
@@ -494,8 +494,8 @@ class TestKiroHttpClientContextManager:
         What it does: Verifies client closure on context exit.
         Purpose: Ensure close() is called in __aexit__.
         """
-        print("Setup: Creating KiroHttpClient...")
-        http_client = KiroHttpClient(mock_auth_manager_for_http)
+        print("Setup: Creating TraeHttpClient...")
+        http_client = TraeHttpClient(mock_auth_manager_for_http)
         
         mock_client = AsyncMock()
         mock_client.is_closed = False
@@ -509,7 +509,7 @@ class TestKiroHttpClientContextManager:
         mock_client.aclose.assert_called_once()
 
 
-class TestKiroHttpClientExponentialBackoff:
+class TestTraeHttpClientExponentialBackoff:
     """Tests for exponential backoff logic."""
     
     @pytest.mark.asyncio
@@ -518,8 +518,8 @@ class TestKiroHttpClientExponentialBackoff:
         What it does: Verifies exponential delay increase.
         Purpose: Ensure delay = BASE_RETRY_DELAY * (2 ** attempt).
         """
-        print("Setup: Creating KiroHttpClient...")
-        http_client = KiroHttpClient(mock_auth_manager_for_http)
+        print("Setup: Creating TraeHttpClient...")
+        http_client = TraeHttpClient(mock_auth_manager_for_http)
         
         mock_response_429 = AsyncMock()
         mock_response_429.status_code = 429
@@ -543,8 +543,8 @@ class TestKiroHttpClientExponentialBackoff:
         
         print("Action: Executing request with multiple retries...")
         with patch.object(http_client, '_get_client', return_value=mock_client):
-            with patch('kiro.http_client.get_kiro_headers', return_value={}):
-                with patch('kiro.http_client.asyncio.sleep', side_effect=capture_sleep):
+            with patch('trae.http_client.get_trae_headers', return_value={}):
+                with patch('trae.http_client.asyncio.sleep', side_effect=capture_sleep):
                     response = await http_client.request_with_retry(
                         "POST",
                         "https://api.example.com/test",
@@ -558,7 +558,7 @@ class TestKiroHttpClientExponentialBackoff:
         assert sleep_delays[1] == BASE_RETRY_DELAY * (2 ** 1)  # 2.0
 
 
-class TestKiroHttpClientStreamingTimeout:
+class TestTraeHttpClientStreamingTimeout:
     """Tests for streaming request timeout logic."""
     
     @pytest.mark.asyncio
@@ -567,8 +567,8 @@ class TestKiroHttpClientStreamingTimeout:
         What it does: Verifies that streaming requests use STREAMING_READ_TIMEOUT.
         Purpose: Ensure stream=True uses httpx.Timeout with correct values.
         """
-        print("Setup: Creating KiroHttpClient...")
-        http_client = KiroHttpClient(mock_auth_manager_for_http)
+        print("Setup: Creating TraeHttpClient...")
+        http_client = TraeHttpClient(mock_auth_manager_for_http)
         
         mock_response = AsyncMock()
         mock_response.status_code = 200
@@ -581,10 +581,10 @@ class TestKiroHttpClientStreamingTimeout:
         mock_client.send = AsyncMock(return_value=mock_response)
         
         print("Action: Executing streaming request...")
-        with patch('kiro.http_client.httpx.AsyncClient') as mock_async_client:
+        with patch('trae.http_client.httpx.AsyncClient') as mock_async_client:
             mock_async_client.return_value = mock_client
             
-            with patch('kiro.http_client.get_kiro_headers', return_value={}):
+            with patch('trae.http_client.get_trae_headers', return_value={}):
                 response = await http_client.request_with_retry(
                     "POST",
                     "https://api.example.com/test",
@@ -609,8 +609,8 @@ class TestKiroHttpClientStreamingTimeout:
         What it does: Verifies that streaming requests use FIRST_TOKEN_MAX_RETRIES.
         Purpose: Ensure stream=True uses separate retry counter.
         """
-        print("Setup: Creating KiroHttpClient...")
-        http_client = KiroHttpClient(mock_auth_manager_for_http)
+        print("Setup: Creating TraeHttpClient...")
+        http_client = TraeHttpClient(mock_auth_manager_for_http)
         
         mock_request = Mock()
         
@@ -620,9 +620,9 @@ class TestKiroHttpClientStreamingTimeout:
         mock_client.send = AsyncMock(side_effect=httpx.TimeoutException("Timeout"))
         
         print("Action: Executing streaming request with timeouts...")
-        with patch('kiro.http_client.httpx.AsyncClient', return_value=mock_client):
-            with patch('kiro.http_client.get_kiro_headers', return_value={}):
-                with patch('kiro.http_client.asyncio.sleep', new_callable=AsyncMock):
+        with patch('trae.http_client.httpx.AsyncClient', return_value=mock_client):
+            with patch('trae.http_client.get_trae_headers', return_value={}):
+                with patch('trae.http_client.asyncio.sleep', new_callable=AsyncMock):
                     with pytest.raises(HTTPException) as exc_info:
                         await http_client.request_with_retry(
                             "POST",
@@ -644,8 +644,8 @@ class TestKiroHttpClientStreamingTimeout:
         What it does: Verifies that streaming timeout retry happens with exponential backoff.
         Purpose: Ensure timeouts are retried with proper delay (new behavior with classifier).
         """
-        print("Setup: Creating KiroHttpClient...")
-        http_client = KiroHttpClient(mock_auth_manager_for_http)
+        print("Setup: Creating TraeHttpClient...")
+        http_client = TraeHttpClient(mock_auth_manager_for_http)
         
         mock_response = AsyncMock()
         mock_response.status_code = 200
@@ -668,9 +668,9 @@ class TestKiroHttpClientStreamingTimeout:
             sleep_called = True
         
         print("Action: Executing streaming request with one timeout...")
-        with patch('kiro.http_client.httpx.AsyncClient', return_value=mock_client):
-            with patch('kiro.http_client.get_kiro_headers', return_value={}):
-                with patch('kiro.http_client.asyncio.sleep', side_effect=capture_sleep):
+        with patch('trae.http_client.httpx.AsyncClient', return_value=mock_client):
+            with patch('trae.http_client.get_trae_headers', return_value={}):
+                with patch('trae.http_client.asyncio.sleep', side_effect=capture_sleep):
                     response = await http_client.request_with_retry(
                         "POST",
                         "https://api.example.com/test",
@@ -688,8 +688,8 @@ class TestKiroHttpClientStreamingTimeout:
         What it does: Verifies that non-streaming requests use 300 seconds.
         Purpose: Ensure stream=False uses unified httpx.Timeout.
         """
-        print("Setup: Creating KiroHttpClient...")
-        http_client = KiroHttpClient(mock_auth_manager_for_http)
+        print("Setup: Creating TraeHttpClient...")
+        http_client = TraeHttpClient(mock_auth_manager_for_http)
         
         mock_response = AsyncMock()
         mock_response.status_code = 200
@@ -699,10 +699,10 @@ class TestKiroHttpClientStreamingTimeout:
         mock_client.request = AsyncMock(return_value=mock_response)
         
         print("Action: Executing non-streaming request...")
-        with patch('kiro.http_client.httpx.AsyncClient') as mock_async_client:
+        with patch('trae.http_client.httpx.AsyncClient') as mock_async_client:
             mock_async_client.return_value = mock_client
             
-            with patch('kiro.http_client.get_kiro_headers', return_value={}):
+            with patch('trae.http_client.get_trae_headers', return_value={}):
                 response = await http_client.request_with_retry(
                     "POST",
                     "https://api.example.com/test",
@@ -726,8 +726,8 @@ class TestKiroHttpClientStreamingTimeout:
         What it does: Verifies ConnectTimeout logging.
         Purpose: Ensure ConnectTimeout is logged with user-friendly message.
         """
-        print("Setup: Creating KiroHttpClient...")
-        http_client = KiroHttpClient(mock_auth_manager_for_http)
+        print("Setup: Creating TraeHttpClient...")
+        http_client = TraeHttpClient(mock_auth_manager_for_http)
         
         mock_response = AsyncMock()
         mock_response.status_code = 200
@@ -744,10 +744,10 @@ class TestKiroHttpClientStreamingTimeout:
         ])
         
         print("Action: Executing streaming request with ConnectTimeout...")
-        with patch('kiro.http_client.httpx.AsyncClient', return_value=mock_client):
-            with patch('kiro.http_client.get_kiro_headers', return_value={}):
-                with patch('kiro.http_client.asyncio.sleep', new_callable=AsyncMock):
-                    with patch('kiro.http_client.logger') as mock_logger:
+        with patch('trae.http_client.httpx.AsyncClient', return_value=mock_client):
+            with patch('trae.http_client.get_trae_headers', return_value={}):
+                with patch('trae.http_client.asyncio.sleep', new_callable=AsyncMock):
+                    with patch('trae.http_client.logger') as mock_logger:
                         response = await http_client.request_with_retry(
                             "POST",
                             "https://api.example.com/test",
@@ -766,8 +766,8 @@ class TestKiroHttpClientStreamingTimeout:
         What it does: Verifies ReadTimeout logging.
         Purpose: Ensure ReadTimeout is logged with user-friendly message.
         """
-        print("Setup: Creating KiroHttpClient...")
-        http_client = KiroHttpClient(mock_auth_manager_for_http)
+        print("Setup: Creating TraeHttpClient...")
+        http_client = TraeHttpClient(mock_auth_manager_for_http)
         
         mock_response = AsyncMock()
         mock_response.status_code = 200
@@ -784,10 +784,10 @@ class TestKiroHttpClientStreamingTimeout:
         ])
         
         print("Action: Executing streaming request with ReadTimeout...")
-        with patch('kiro.http_client.httpx.AsyncClient', return_value=mock_client):
-            with patch('kiro.http_client.get_kiro_headers', return_value={}):
-                with patch('kiro.http_client.asyncio.sleep', new_callable=AsyncMock):
-                    with patch('kiro.http_client.logger') as mock_logger:
+        with patch('trae.http_client.httpx.AsyncClient', return_value=mock_client):
+            with patch('trae.http_client.get_trae_headers', return_value={}):
+                with patch('trae.http_client.asyncio.sleep', new_callable=AsyncMock):
+                    with patch('trae.http_client.logger') as mock_logger:
                         response = await http_client.request_with_retry(
                             "POST",
                             "https://api.example.com/test",
@@ -806,8 +806,8 @@ class TestKiroHttpClientStreamingTimeout:
         What it does: Verifies that streaming timeout returns 504 with error type.
         Purpose: Ensure 504 is returned with error info after exhausting retries.
         """
-        print("Setup: Creating KiroHttpClient...")
-        http_client = KiroHttpClient(mock_auth_manager_for_http)
+        print("Setup: Creating TraeHttpClient...")
+        http_client = TraeHttpClient(mock_auth_manager_for_http)
         
         mock_request = Mock()
         
@@ -817,9 +817,9 @@ class TestKiroHttpClientStreamingTimeout:
         mock_client.send = AsyncMock(side_effect=httpx.ReadTimeout("Timeout"))
         
         print("Action: Executing streaming request with persistent timeouts...")
-        with patch('kiro.http_client.httpx.AsyncClient', return_value=mock_client):
-            with patch('kiro.http_client.get_kiro_headers', return_value={}):
-                with patch('kiro.http_client.asyncio.sleep', new_callable=AsyncMock):
+        with patch('trae.http_client.httpx.AsyncClient', return_value=mock_client):
+            with patch('trae.http_client.get_trae_headers', return_value={}):
+                with patch('trae.http_client.asyncio.sleep', new_callable=AsyncMock):
                     with pytest.raises(HTTPException) as exc_info:
                         await http_client.request_with_retry(
                             "POST",
@@ -841,17 +841,17 @@ class TestKiroHttpClientStreamingTimeout:
         What it does: Verifies that non-streaming timeout returns 504.
         Purpose: Ensure timeouts consistently return 504 (new behavior with classifier).
         """
-        print("Setup: Creating KiroHttpClient...")
-        http_client = KiroHttpClient(mock_auth_manager_for_http)
+        print("Setup: Creating TraeHttpClient...")
+        http_client = TraeHttpClient(mock_auth_manager_for_http)
         
         mock_client = AsyncMock()
         mock_client.is_closed = False
         mock_client.request = AsyncMock(side_effect=httpx.TimeoutException("Timeout"))
         
         print("Action: Executing non-streaming request with persistent timeouts...")
-        with patch('kiro.http_client.httpx.AsyncClient', return_value=mock_client):
-            with patch('kiro.http_client.get_kiro_headers', return_value={}):
-                with patch('kiro.http_client.asyncio.sleep', new_callable=AsyncMock):
+        with patch('trae.http_client.httpx.AsyncClient', return_value=mock_client):
+            with patch('trae.http_client.get_trae_headers', return_value={}):
+                with patch('trae.http_client.asyncio.sleep', new_callable=AsyncMock):
                     with pytest.raises(HTTPException) as exc_info:
                         await http_client.request_with_retry(
                             "POST",
@@ -864,7 +864,7 @@ class TestKiroHttpClientStreamingTimeout:
         assert exc_info.value.status_code == 504
 
 
-class TestKiroHttpClientSharedClient:
+class TestTraeHttpClientSharedClient:
     """Tests for shared client functionality (connection pooling support)."""
     
     def test_initialization_with_shared_client(self, mock_auth_manager_for_http):
@@ -876,8 +876,8 @@ class TestKiroHttpClientSharedClient:
         mock_shared = AsyncMock()
         mock_shared.is_closed = False
         
-        print("Action: Creating KiroHttpClient with shared client...")
-        http_client = KiroHttpClient(mock_auth_manager_for_http, shared_client=mock_shared)
+        print("Action: Creating TraeHttpClient with shared client...")
+        http_client = TraeHttpClient(mock_auth_manager_for_http, shared_client=mock_shared)
         
         print("Verification: shared_client is stored...")
         print(f"Comparing _shared_client: Expected mock_shared, Got {http_client._shared_client}")
@@ -890,8 +890,8 @@ class TestKiroHttpClientSharedClient:
         What it does: Verifies _owns_client is True when no shared client provided.
         Purpose: Ensure client ownership is tracked correctly for cleanup.
         """
-        print("Setup: Creating KiroHttpClient without shared client...")
-        http_client = KiroHttpClient(mock_auth_manager_for_http)
+        print("Setup: Creating TraeHttpClient without shared client...")
+        http_client = TraeHttpClient(mock_auth_manager_for_http)
         
         print("Verification: _owns_client is True...")
         print(f"Comparing _owns_client: Expected True, Got {http_client._owns_client}")
@@ -908,8 +908,8 @@ class TestKiroHttpClientSharedClient:
         mock_shared = AsyncMock()
         mock_shared.is_closed = False
         
-        print("Action: Creating KiroHttpClient with shared client...")
-        http_client = KiroHttpClient(mock_auth_manager_for_http, shared_client=mock_shared)
+        print("Action: Creating TraeHttpClient with shared client...")
+        http_client = TraeHttpClient(mock_auth_manager_for_http, shared_client=mock_shared)
         
         print("Verification: _owns_client is False...")
         print(f"Comparing _owns_client: Expected False, Got {http_client._owns_client}")
@@ -925,11 +925,11 @@ class TestKiroHttpClientSharedClient:
         mock_shared = AsyncMock()
         mock_shared.is_closed = False
         
-        print("Action: Creating KiroHttpClient with shared client...")
-        http_client = KiroHttpClient(mock_auth_manager_for_http, shared_client=mock_shared)
+        print("Action: Creating TraeHttpClient with shared client...")
+        http_client = TraeHttpClient(mock_auth_manager_for_http, shared_client=mock_shared)
         
         print("Action: Getting client...")
-        with patch('kiro.http_client.httpx.AsyncClient') as mock_async_client:
+        with patch('trae.http_client.httpx.AsyncClient') as mock_async_client:
             client = await http_client._get_client(stream=True)
             
             print("Verification: Shared client returned, no new client created...")
@@ -948,8 +948,8 @@ class TestKiroHttpClientSharedClient:
         mock_shared.is_closed = False
         mock_shared.aclose = AsyncMock()
         
-        print("Action: Creating KiroHttpClient with shared client...")
-        http_client = KiroHttpClient(mock_auth_manager_for_http, shared_client=mock_shared)
+        print("Action: Creating TraeHttpClient with shared client...")
+        http_client = TraeHttpClient(mock_auth_manager_for_http, shared_client=mock_shared)
         
         print("Action: Closing client...")
         await http_client.close()
@@ -963,8 +963,8 @@ class TestKiroHttpClientSharedClient:
         What it does: Verifies close() DOES close owned client.
         Purpose: Ensure owned client is properly cleaned up.
         """
-        print("Setup: Creating KiroHttpClient without shared client...")
-        http_client = KiroHttpClient(mock_auth_manager_for_http)
+        print("Setup: Creating TraeHttpClient without shared client...")
+        http_client = TraeHttpClient(mock_auth_manager_for_http)
         
         mock_owned = AsyncMock()
         mock_owned.is_closed = False
@@ -978,7 +978,7 @@ class TestKiroHttpClientSharedClient:
         mock_owned.aclose.assert_called_once()
 
 
-class TestKiroHttpClientGracefulClose:
+class TestTraeHttpClientGracefulClose:
     """Tests for graceful exception handling in close() method."""
     
     @pytest.mark.asyncio
@@ -987,8 +987,8 @@ class TestKiroHttpClientGracefulClose:
         What it does: Verifies exception in aclose() is caught and doesn't propagate.
         Purpose: Ensure cleanup errors don't mask original exceptions.
         """
-        print("Setup: Creating KiroHttpClient with client that raises on close...")
-        http_client = KiroHttpClient(mock_auth_manager_for_http)
+        print("Setup: Creating TraeHttpClient with client that raises on close...")
+        http_client = TraeHttpClient(mock_auth_manager_for_http)
         
         mock_client = AsyncMock()
         mock_client.is_closed = False
@@ -1009,8 +1009,8 @@ class TestKiroHttpClientGracefulClose:
         What it does: Verifies warning is logged when aclose() fails.
         Purpose: Ensure errors are visible in logs for debugging.
         """
-        print("Setup: Creating KiroHttpClient with client that raises on close...")
-        http_client = KiroHttpClient(mock_auth_manager_for_http)
+        print("Setup: Creating TraeHttpClient with client that raises on close...")
+        http_client = TraeHttpClient(mock_auth_manager_for_http)
         
         mock_client = AsyncMock()
         mock_client.is_closed = False
@@ -1018,7 +1018,7 @@ class TestKiroHttpClientGracefulClose:
         http_client.client = mock_client
         
         print("Action: Closing client with logger mock...")
-        with patch('kiro.http_client.logger') as mock_logger:
+        with patch('trae.http_client.logger') as mock_logger:
             await http_client.close()
             
             print("Verification: logger.warning called...")
@@ -1028,7 +1028,7 @@ class TestKiroHttpClientGracefulClose:
             assert "Connection reset" in warning_message or "Error closing" in warning_message
 
 
-class TestKiroHttpClientConnectionCloseHeader:
+class TestTraeHttpClientConnectionCloseHeader:
     """Tests for Connection: close header on streaming requests (issue #38)."""
     
     @pytest.mark.asyncio
@@ -1037,8 +1037,8 @@ class TestKiroHttpClientConnectionCloseHeader:
         What it does: Verifies that streaming requests include Connection: close header.
         Purpose: Prevent CLOSE_WAIT connection leak by disabling connection reuse for streaming.
         """
-        print("Setup: Creating KiroHttpClient...")
-        http_client = KiroHttpClient(mock_auth_manager_for_http)
+        print("Setup: Creating TraeHttpClient...")
+        http_client = TraeHttpClient(mock_auth_manager_for_http)
         
         mock_response = AsyncMock()
         mock_response.status_code = 200
@@ -1057,7 +1057,7 @@ class TestKiroHttpClientConnectionCloseHeader:
         
         print("Action: Executing streaming request...")
         with patch.object(http_client, '_get_client', return_value=mock_client):
-            with patch('kiro.http_client.get_kiro_headers', return_value={"Authorization": "Bearer test"}):
+            with patch('trae.http_client.get_trae_headers', return_value={"Authorization": "Bearer test"}):
                 response = await http_client.request_with_retry(
                     "POST",
                     "https://api.example.com/test",
@@ -1078,8 +1078,8 @@ class TestKiroHttpClientConnectionCloseHeader:
         What it does: Verifies that non-streaming requests do NOT include Connection: close header.
         Purpose: Ensure connection pooling is preserved for non-streaming requests.
         """
-        print("Setup: Creating KiroHttpClient...")
-        http_client = KiroHttpClient(mock_auth_manager_for_http)
+        print("Setup: Creating TraeHttpClient...")
+        http_client = TraeHttpClient(mock_auth_manager_for_http)
         
         mock_response = AsyncMock()
         mock_response.status_code = 200
@@ -1096,7 +1096,7 @@ class TestKiroHttpClientConnectionCloseHeader:
         
         print("Action: Executing non-streaming request...")
         with patch.object(http_client, '_get_client', return_value=mock_client):
-            with patch('kiro.http_client.get_kiro_headers', return_value={"Authorization": "Bearer test"}):
+            with patch('trae.http_client.get_trae_headers', return_value={"Authorization": "Bearer test"}):
                 response = await http_client.request_with_retry(
                     "POST",
                     "https://api.example.com/test",
@@ -1115,8 +1115,8 @@ class TestKiroHttpClientConnectionCloseHeader:
         What it does: Verifies that adding Connection: close doesn't remove other headers.
         Purpose: Ensure Authorization and other headers are preserved.
         """
-        print("Setup: Creating KiroHttpClient...")
-        http_client = KiroHttpClient(mock_auth_manager_for_http)
+        print("Setup: Creating TraeHttpClient...")
+        http_client = TraeHttpClient(mock_auth_manager_for_http)
         
         mock_response = AsyncMock()
         mock_response.status_code = 200
@@ -1141,7 +1141,7 @@ class TestKiroHttpClientConnectionCloseHeader:
         
         print("Action: Executing streaming request with multiple headers...")
         with patch.object(http_client, '_get_client', return_value=mock_client):
-            with patch('kiro.http_client.get_kiro_headers', return_value=original_headers.copy()):
+            with patch('trae.http_client.get_trae_headers', return_value=original_headers.copy()):
                 response = await http_client.request_with_retry(
                     "POST",
                     "https://api.example.com/test",

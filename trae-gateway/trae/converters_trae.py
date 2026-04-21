@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from loguru import logger
 
-from kiro.models_openai import ChatMessage, ChatCompletionRequest, Tool
+from trae.models_openai import ChatMessage, ChatCompletionRequest, Tool
 
 
 def convert_openai_to_trae(request: ChatCompletionRequest) -> Dict[str, Any]:

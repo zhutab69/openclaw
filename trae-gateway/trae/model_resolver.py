@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
-# Kiro Gateway
-# https://github.com/jwadow/kiro-gateway
+# Trae Gateway
+# (Trae Gateway - based on Kiro Gateway)
 # Copyright (C) 2025 Jwadow
 #
 # This program is free software: you can redistribute it and/or modify
@@ -18,15 +18,15 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 """
-Dynamic Model Resolution System for Kiro Gateway.
+Dynamic Model Resolution System for Trae Gateway.
 
 Implements a 4-layer resolution pipeline:
-1. Normalize Name - Convert client formats to Kiro format (dashes→dots, strip dates)
+1. Normalize Name - Convert client formats to Trae format (dashes→dots, strip dates)
 2. Check Dynamic Cache - Models from /ListAvailableModels API
 3. Check Hidden Models - Manual config for undocumented models
-4. Pass-through - Unknown models sent to Kiro (let Kiro decide)
+4. Pass-through - Unknown models sent to Trae (let Trae decide)
 
-Key Principle: We are a gateway, not a gatekeeper. Kiro API is the final arbiter.
+Key Principle: We are a gateway, not a gatekeeper. Trae API is the final arbiter.
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ from typing import TYPE_CHECKING, Dict, List, Optional
 from loguru import logger
 
 if TYPE_CHECKING:
-    from kiro.cache import ModelInfoCache
+    from trae.cache import ModelInfoCache
 
 
 @dataclass(frozen=True)
@@ -47,7 +47,7 @@ class ModelResolution:
     Result of model resolution.
     
     Attributes:
-        internal_id: ID to send to Kiro API
+        internal_id: ID to send to Trae API
         source: Resolution source - "cache", "hidden", or "passthrough"
         original_request: What client originally sent
         normalized: Model name after normalization
@@ -62,7 +62,7 @@ class ModelResolution:
 
 def normalize_model_name(name: str) -> str:
     """
-    Normalize client model name to Kiro format.
+    Normalize client model name to Trae format.
     
     Transformations applied:
     1. claude-haiku-4-5 → claude-haiku-4.5 (dash to dot for minor version)
@@ -77,7 +77,7 @@ def normalize_model_name(name: str) -> str:
         name: External model name from client
     
     Returns:
-        Normalized model name in Kiro format
+        Normalized model name in Trae format
     
     Examples:
         >>> normalize_model_name("claude-haiku-4-5-20251001")
@@ -162,29 +162,29 @@ def normalize_model_name(name: str) -> str:
     return name
 
 
-def get_model_id_for_kiro(model_name: str, hidden_models: Dict[str, str]) -> str:
+def get_model_id_for_trae(model_name: str, hidden_models: Dict[str, str]) -> str:
     """
-    Get the model ID to send to Kiro API.
+    Get the model ID to send to Trae API.
     
     This is a simple helper for converters that don't have access to the full
     ModelResolver. It normalizes the name and checks hidden models.
     
-    For hidden models (like claude-3.7-sonnet), returns the internal Kiro ID.
+    For hidden models (like claude-3.7-sonnet), returns the internal Trae ID.
     For regular models, returns the normalized name.
     
     Args:
         model_name: External model name from client
-        hidden_models: Dict mapping display names to internal Kiro IDs
+        hidden_models: Dict mapping display names to internal Trae IDs
     
     Returns:
-        Model ID to send to Kiro API
+        Model ID to send to Trae API
     
     Examples:
-        >>> get_model_id_for_kiro("claude-haiku-4-5-20251001", {})
+        >>> get_model_id_for_trae("claude-haiku-4-5-20251001", {})
         'claude-haiku-4.5'
-        >>> get_model_id_for_kiro("claude-3.7-sonnet", {"claude-3.7-sonnet": "CLAUDE_3_7_SONNET_20250219_V1_0"})
+        >>> get_model_id_for_trae("claude-3.7-sonnet", {"claude-3.7-sonnet": "CLAUDE_3_7_SONNET_20250219_V1_0"})
         'CLAUDE_3_7_SONNET_20250219_V1_0'
-        >>> get_model_id_for_kiro("claude-3-7-sonnet", {"claude-3.7-sonnet": "CLAUDE_3_7_SONNET_20250219_V1_0"})
+        >>> get_model_id_for_trae("claude-3-7-sonnet", {"claude-3.7-sonnet": "CLAUDE_3_7_SONNET_20250219_V1_0"})
         'CLAUDE_3_7_SONNET_20250219_V1_0'
     """
     normalized = normalize_model_name(model_name)
@@ -222,24 +222,24 @@ class ModelResolver:
     Dynamic model resolver with normalization and optimistic pass-through.
     
     Key principle: We are a gateway, not a gatekeeper.
-    Kiro API is the final arbiter of what models exist.
+    Trae API is the final arbiter of what models exist.
     
     Resolution layers:
     0. Resolve aliases (custom name mappings)
     1. Normalize name (dashes→dots, strip dates)
     2. Check dynamic cache (from /ListAvailableModels)
     3. Check hidden models (manual config)
-    4. Pass-through (let Kiro decide)
+    4. Pass-through (let Trae decide)
     
     Attributes:
         cache: ModelInfoCache instance for dynamic model lookup
-        hidden_models: Dict mapping display names to internal Kiro IDs
+        hidden_models: Dict mapping display names to internal Trae IDs
         aliases: Dict mapping alias names to real model IDs
         hidden_from_list: Set of model IDs to hide from /v1/models endpoint
     
     Example:
-        >>> resolver = ModelResolver(cache, hidden_models, aliases={"auto-kiro": "auto"})
-        >>> resolution = resolver.resolve("auto-kiro")
+        >>> resolver = ModelResolver(cache, hidden_models, aliases={"auto-trae": "auto"})
+        >>> resolution = resolver.resolve("auto-trae")
         >>> resolution.internal_id
         'auto'
         >>> resolution.source
@@ -258,10 +258,10 @@ class ModelResolver:
         
         Args:
             cache: ModelInfoCache instance for dynamic model lookup
-            hidden_models: Dict mapping display names to internal Kiro IDs.
+            hidden_models: Dict mapping display names to internal Trae IDs.
                           Display names should use dot format (e.g., "claude-3.7-sonnet")
             aliases: Dict mapping alias names to real model IDs.
-                    Example: {"auto-kiro": "auto", "my-opus": "claude-opus-4.5"}
+                    Example: {"auto-trae": "auto", "my-opus": "claude-opus-4.5"}
             hidden_from_list: List of model IDs to hide from /v1/models endpoint.
                              These models still work but are not shown in the list.
         """
@@ -272,11 +272,11 @@ class ModelResolver:
     
     def resolve(self, external_model: str) -> ModelResolution:
         """
-        Resolve external model name to internal Kiro ID.
+        Resolve external model name to internal Trae ID.
         
         NEVER raises - always returns a resolution.
-        If model is not in cache/hidden, we pass it through to Kiro.
-        Kiro will be the final judge.
+        If model is not in cache/hidden, we pass it through to Trae.
+        Trae will be the final judge.
         
         Args:
             external_model: Model name from client request
@@ -323,18 +323,18 @@ class ModelResolver:
                 is_verified=True
             )
         
-        # Layer 4: Pass-through - let Kiro decide!
-        # We don't know all models, Kiro might have hidden ones
+        # Layer 4: Pass-through - let Trae decide!
+        # We don't know all models, Trae might have hidden ones
         logger.info(
             f"Model '{external_model}' (normalized: '{normalized}') not in cache, "
-            f"passing through to Kiro API"
+            f"passing through to Trae API"
         )
         return ModelResolution(
-            internal_id=normalized,  # Send normalized name to Kiro
+            internal_id=normalized,  # Send normalized name to Trae
             source="passthrough",
             original_request=external_model,
             normalized=normalized,
-            is_verified=False  # Not verified locally, Kiro will judge
+            is_verified=False  # Not verified locally, Trae will judge
         )
     
     def get_available_models(self) -> List[str]:
@@ -342,12 +342,12 @@ class ModelResolver:
         Get list of all available model IDs for /v1/models endpoint.
         
         Combines:
-        - Models from dynamic cache (Kiro API)
+        - Models from dynamic cache (Trae API)
         - Hidden models (manual config)
         - Alias names (custom mappings)
         
         Excludes:
-        - Models in hidden_from_list (e.g., "auto" when showing "auto-kiro")
+        - Models in hidden_from_list (e.g., "auto" when showing "auto-trae")
         
         Returns:
             List of model IDs in consistent format (with dots)

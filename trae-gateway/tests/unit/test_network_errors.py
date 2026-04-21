@@ -10,7 +10,7 @@ import pytest
 
 import httpx
 
-from kiro.network_errors import (
+from trae.network_errors import (
     ErrorCategory,
     NetworkErrorInfo,
     classify_network_error,

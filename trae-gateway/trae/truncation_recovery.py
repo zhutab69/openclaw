@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
-# Kiro Gateway
-# https://github.com/jwadow/kiro-gateway
+# Trae Gateway
+# (Trae Gateway - based on Kiro Gateway)
 # Copyright (C) 2025 Jwadow
 #
 # This program is free software: you can redistribute it and/or modify
@@ -18,12 +18,12 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 """
-Truncation recovery system for handling upstream Kiro API limitations.
+Truncation recovery system for handling upstream Trae API limitations.
 
 Generates synthetic messages to inform the model about truncation.
 ONLY activates when truncation is actually detected.
 
-This module addresses Issue #56 - Kiro API truncates large tool call payloads
+This module addresses Issue #56 - Trae API truncates large tool call payloads
 and content mid-stream. Since this is an upstream limitation that cannot be
 prevented, we inform the model about the truncation so it can adapt its approach.
 """
@@ -40,7 +40,7 @@ def should_inject_recovery() -> bool:
     Returns:
         True if recovery should be injected, False otherwise
     """
-    from kiro.config import TRUNCATION_RECOVERY
+    from trae.config import TRUNCATION_RECOVERY
     return TRUNCATION_RECOVERY
 
 

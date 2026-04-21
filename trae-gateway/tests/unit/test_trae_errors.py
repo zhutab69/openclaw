@@ -1,15 +1,15 @@
 # -*- coding: utf-8 -*-
 
 """
-Unit tests for Kiro API error enhancement system.
-Tests enhance_kiro_error() function and KiroErrorInfo dataclass.
+Unit tests for Trae API error enhancement system.
+Tests enhance_trae_error() function and TraeErrorInfo dataclass.
 """
 
 import pytest
 
-from kiro.kiro_errors import (
-    KiroErrorInfo,
-    enhance_kiro_error
+from trae.trae_errors import (
+    TraeErrorInfo,
+    enhance_trae_error
 )
 
 
@@ -28,7 +28,7 @@ class TestEnhanceKiroErrorContentLength:
         }
         
         print("Action: Enhancing error...")
-        error_info = enhance_kiro_error(error_json)
+        error_info = enhance_trae_error(error_json)
         
         print("Verification: User message is enhanced...")
         print(f"Comparing user_message: Expected 'Model context limit reached...', Got '{error_info.user_message}'")
@@ -48,7 +48,7 @@ class TestEnhanceKiroErrorContentLength:
         }
         
         print("Action: Enhancing error...")
-        error_info = enhance_kiro_error(error_json)
+        error_info = enhance_trae_error(error_json)
         
         print("Verification: Original message preserved...")
         assert error_info.original_message == "Input is too long."
@@ -66,7 +66,7 @@ class TestEnhanceKiroErrorContentLength:
         }
         
         print("Action: Enhancing error...")
-        error_info = enhance_kiro_error(error_json)
+        error_info = enhance_trae_error(error_json)
         
         print("Verification: Reason is correct string value...")
         assert error_info.reason == "CONTENT_LENGTH_EXCEEDS_THRESHOLD"
@@ -84,7 +84,7 @@ class TestEnhanceKiroErrorContentLength:
         }
         
         print("Action: Enhancing error...")
-        error_info = enhance_kiro_error(error_json)
+        error_info = enhance_trae_error(error_json)
         
         print("Verification: No (reason: ...) in user message...")
         assert "(reason:" not in error_info.user_message
@@ -106,7 +106,7 @@ class TestEnhanceKiroErrorMonthlyLimit:
         }
         
         print("Action: Enhancing error...")
-        error_info = enhance_kiro_error(error_json)
+        error_info = enhance_trae_error(error_json)
         
         print("Verification: User message is enhanced...")
         assert error_info.user_message == "Monthly request limit exceeded. Account has reached its monthly quota."
@@ -125,7 +125,7 @@ class TestEnhanceKiroErrorMonthlyLimit:
         }
         
         print("Action: Enhancing error...")
-        error_info = enhance_kiro_error(error_json)
+        error_info = enhance_trae_error(error_json)
         
         print("Verification: No (reason: ...) in user message...")
         assert "(reason:" not in error_info.user_message
@@ -147,7 +147,7 @@ class TestEnhanceKiroErrorUnknown:
         }
         
         print("Action: Enhancing error...")
-        error_info = enhance_kiro_error(error_json)
+        error_info = enhance_trae_error(error_json)
         
         print("Verification: Original message with reason suffix...")
         print(f"User message: {error_info.user_message}")
@@ -167,7 +167,7 @@ class TestEnhanceKiroErrorUnknown:
         }
         
         print("Action: Enhancing error...")
-        error_info = enhance_kiro_error(error_json)
+        error_info = enhance_trae_error(error_json)
         
         print("Verification: Reason preserved as original string...")
         assert error_info.reason == "RATE_LIMIT_EXCEEDED"
@@ -184,7 +184,7 @@ class TestEnhanceKiroErrorUnknown:
         }
         
         print("Action: Enhancing error...")
-        error_info = enhance_kiro_error(error_json)
+        error_info = enhance_trae_error(error_json)
         
         print("Verification: Reason is UNKNOWN, no suffix in message...")
         assert error_info.reason == "UNKNOWN"
@@ -203,7 +203,7 @@ class TestEnhanceKiroErrorUnknown:
         }
         
         print("Action: Enhancing error...")
-        error_info = enhance_kiro_error(error_json)
+        error_info = enhance_trae_error(error_json)
         
         print("Verification: No redundant (reason: UNKNOWN) suffix...")
         assert error_info.user_message == "Unknown error."
@@ -222,7 +222,7 @@ class TestEnhanceKiroErrorEdgeCases:
         error_json = {}
         
         print("Action: Enhancing error...")
-        error_info = enhance_kiro_error(error_json)
+        error_info = enhance_trae_error(error_json)
         
         print("Verification: Default values used...")
         assert error_info.original_message == "Unknown error"
@@ -240,7 +240,7 @@ class TestEnhanceKiroErrorEdgeCases:
         }
         
         print("Action: Enhancing error...")
-        error_info = enhance_kiro_error(error_json)
+        error_info = enhance_trae_error(error_json)
         
         print("Verification: Default message used, but enhancement still applied...")
         assert error_info.original_message == "Unknown error"
@@ -259,7 +259,7 @@ class TestEnhanceKiroErrorEdgeCases:
         }
         
         print("Action: Enhancing error...")
-        error_info = enhance_kiro_error(error_json)
+        error_info = enhance_trae_error(error_json)
         
         print("Verification: Empty string preserved...")
         assert error_info.original_message == ""
@@ -277,7 +277,7 @@ class TestEnhanceKiroErrorEdgeCases:
         }
         
         print("Action: Enhancing error...")
-        error_info = enhance_kiro_error(error_json)
+        error_info = enhance_trae_error(error_json)
         
         print("Verification: Defaults used for None values...")
         assert error_info.original_message == "Unknown error"
@@ -297,7 +297,7 @@ class TestEnhanceKiroErrorEdgeCases:
         }
         
         print("Action: Enhancing error...")
-        error_info = enhance_kiro_error(error_json)
+        error_info = enhance_trae_error(error_json)
         
         print("Verification: Extra fields don't affect enhancement...")
         assert error_info.user_message == "Model context limit reached. Conversation size exceeds model capacity."
@@ -315,7 +315,7 @@ class TestEnhanceKiroErrorEdgeCases:
         }
         
         print("Action: Enhancing error...")
-        error_info = enhance_kiro_error(error_json)
+        error_info = enhance_trae_error(error_json)
         
         print("Verification: Lowercase reason not matched, passed through as-is...")
         assert error_info.reason == "content_length_exceeds_threshold"
@@ -337,7 +337,7 @@ class TestEnhanceKiroErrorMessageQuality:
         }
         
         print("Action: Enhancing error...")
-        error_info = enhance_kiro_error(error_json)
+        error_info = enhance_trae_error(error_json)
         
         print("Verification: Message is user-friendly...")
         message = error_info.user_message
@@ -361,7 +361,7 @@ class TestEnhanceKiroErrorMessageQuality:
         }
         
         print("Action: Enhancing error...")
-        error_info = enhance_kiro_error(error_json)
+        error_info = enhance_trae_error(error_json)
         
         print("Verification: Message indicates model limitation...")
         message = error_info.user_message
@@ -380,23 +380,23 @@ class TestEnhanceKiroErrorMessageQuality:
         }
         
         print("Action: Enhancing error...")
-        error_info = enhance_kiro_error(error_json)
+        error_info = enhance_trae_error(error_json)
         
         print("Verification: Original message preserved with reason...")
         assert "Service temporarily unavailable" in error_info.user_message
         assert "SERVICE_UNAVAILABLE" in error_info.user_message
 
 
-class TestKiroErrorInfoDataclass:
-    """Tests for KiroErrorInfo dataclass."""
+class TestTraeErrorInfoDataclass:
+    """Tests for TraeErrorInfo dataclass."""
     
-    def test_kiro_error_info_creation(self):
+    def test_trae_error_info_creation(self):
         """
-        What it does: Verifies KiroErrorInfo can be created with all fields.
+        What it does: Verifies TraeErrorInfo can be created with all fields.
         Purpose: Ensure dataclass structure is correct.
         """
-        print("Setup: Creating KiroErrorInfo...")
-        error_info = KiroErrorInfo(
+        print("Setup: Creating TraeErrorInfo...")
+        error_info = TraeErrorInfo(
             reason="CONTENT_LENGTH_EXCEEDS_THRESHOLD",
             user_message="Test message",
             original_message="Original message"
@@ -407,13 +407,13 @@ class TestKiroErrorInfoDataclass:
         assert error_info.user_message == "Test message"
         assert error_info.original_message == "Original message"
     
-    def test_kiro_error_info_fields_accessible(self):
+    def test_trae_error_info_fields_accessible(self):
         """
-        What it does: Verifies KiroErrorInfo fields can be accessed.
+        What it does: Verifies TraeErrorInfo fields can be accessed.
         Purpose: Ensure error info structure is usable.
         """
-        print("Setup: Creating KiroErrorInfo...")
-        error_info = KiroErrorInfo(
+        print("Setup: Creating TraeErrorInfo...")
+        error_info = TraeErrorInfo(
             reason="UNKNOWN",
             user_message="Message",
             original_message="Original"
@@ -430,10 +430,10 @@ class TestEnhanceKiroErrorIntegration:
     
     def test_real_world_content_length_error(self):
         """
-        What it does: Verifies enhancement works with real Kiro API error format.
+        What it does: Verifies enhancement works with real Trae API error format.
         Purpose: Ensure compatibility with actual Amazon API responses (issue #63).
         """
-        print("Setup: Creating real-world error JSON from Kiro API...")
+        print("Setup: Creating real-world error JSON from Trae API...")
         # This is the actual format from issue #63
         error_json = {
             "message": "Input is too long.",
@@ -441,7 +441,7 @@ class TestEnhanceKiroErrorIntegration:
         }
         
         print("Action: Enhancing error...")
-        error_info = enhance_kiro_error(error_json)
+        error_info = enhance_trae_error(error_json)
         
         print("Verification: Real-world error enhanced correctly...")
         assert "Model context limit reached" in error_info.user_message
@@ -459,9 +459,9 @@ class TestEnhanceKiroErrorIntegration:
         error3 = {"message": "Error 3"}
         
         print("Action: Enhancing all errors...")
-        info1 = enhance_kiro_error(error1)
-        info2 = enhance_kiro_error(error2)
-        info3 = enhance_kiro_error(error3)
+        info1 = enhance_trae_error(error1)
+        info2 = enhance_trae_error(error2)
+        info3 = enhance_trae_error(error3)
         
         print("Verification: Each error enhanced independently...")
         assert info1.user_message == "Model context limit reached. Conversation size exceeds model capacity."

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
-# Kiro Gateway
-# https://github.com/jwadow/kiro-gateway
+# Trae Gateway
+# (Trae Gateway - based on Kiro Gateway)
 # Copyright (C) 2025 Jwadow
 #
 # This program is free software: you can redistribute it and/or modify
@@ -18,7 +18,7 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 """
-Utility functions for Kiro Gateway.
+Utility functions for Trae Gateway.
 
 Contains functions for fingerprint generation, header formatting,
 and other common utilities.
@@ -32,7 +32,7 @@ from typing import TYPE_CHECKING, List, Dict, Any
 from loguru import logger
 
 if TYPE_CHECKING:
-    from kiro.auth import KiroAuthManager
+    from trae.auth import TraeAuthManager
 
 
 def get_machine_fingerprint() -> str:
@@ -42,7 +42,7 @@ def get_machine_fingerprint() -> str:
     Used for User-Agent formation to identify a specific gateway installation.
     
     Returns:
-        SHA256 hash of the string "{hostname}-{username}-kiro-gateway"
+        SHA256 hash of the string "{hostname}-{username}-trae-gateway"
     """
     try:
         import socket
@@ -50,17 +50,17 @@ def get_machine_fingerprint() -> str:
         
         hostname = socket.gethostname()
         username = getpass.getuser()
-        unique_string = f"{hostname}-{username}-kiro-gateway"
+        unique_string = f"{hostname}-{username}-trae-gateway"
         
         return hashlib.sha256(unique_string.encode()).hexdigest()
     except Exception as e:
         logger.warning(f"Failed to get machine fingerprint: {e}")
-        return hashlib.sha256(b"default-kiro-gateway").hexdigest()
+        return hashlib.sha256(b"default-trae-gateway").hexdigest()
 
 
-def get_kiro_headers(auth_manager: "KiroAuthManager", token: str) -> dict:
+def get_trae_headers(auth_manager: "TraeAuthManager", token: str) -> dict:
     """
-    Builds headers for Kiro API requests.
+    Builds headers for Trae API requests.
     
     Includes all necessary headers for authentication and identification:
     - Authorization with Bearer token
@@ -79,10 +79,10 @@ def get_kiro_headers(auth_manager: "KiroAuthManager", token: str) -> dict:
     return {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
-        "User-Agent": f"aws-sdk-js/1.0.27 ua/2.1 os/win32#10.0.19044 lang/js md/nodejs#22.21.1 api/codewhispererstreaming#1.0.27 m/E KiroIDE-0.7.45-{fingerprint}",
-        "x-amz-user-agent": f"aws-sdk-js/1.0.27 KiroIDE-0.7.45-{fingerprint}",
+        "User-Agent": f"aws-sdk-js/1.0.27 ua/2.1 os/win32#10.0.19044 lang/js md/nodejs#22.21.1 api/codewhispererstreaming#1.0.27 m/E TraeIDE-0.7.45-{fingerprint}",
+        "x-amz-user-agent": f"aws-sdk-js/1.0.27 TraeIDE-0.7.45-{fingerprint}",
         "x-amzn-codewhisperer-optout": "true",
-        "x-amzn-kiro-agent-mode": "vibe",
+        "x-amzn-trae-agent-mode": "vibe",
         "amz-sdk-invocation-id": str(uuid.uuid4()),
         "amz-sdk-request": "attempt=1; max=3",
     }

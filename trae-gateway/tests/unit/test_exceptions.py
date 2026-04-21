@@ -20,7 +20,7 @@ class TestSanitizeValidationErrors:
         Purpose: Ensure JSON serialization works for bytes objects.
         """
         print("Setup: Creating error with bytes in input field...")
-        from kiro.exceptions import sanitize_validation_errors
+        from trae.exceptions import sanitize_validation_errors
         
         errors = [
             {
@@ -44,7 +44,7 @@ class TestSanitizeValidationErrors:
         Purpose: Ensure nested bytes are handled.
         """
         print("Setup: Creating error with bytes in list...")
-        from kiro.exceptions import sanitize_validation_errors
+        from trae.exceptions import sanitize_validation_errors
         
         errors = [
             {
@@ -67,7 +67,7 @@ class TestSanitizeValidationErrors:
         Purpose: Ensure normal values are not modified.
         """
         print("Setup: Creating error with normal values...")
-        from kiro.exceptions import sanitize_validation_errors
+        from trae.exceptions import sanitize_validation_errors
         
         errors = [
             {
@@ -96,7 +96,7 @@ class TestValidationExceptionHandler:
         Purpose: Ensure proper HTTP status for validation errors.
         """
         print("Setup: Creating mock request and exception...")
-        from kiro.exceptions import validation_exception_handler
+        from trae.exceptions import validation_exception_handler
         
         mock_request = MagicMock(spec=Request)
         mock_request.body = AsyncMock(return_value=b'{"invalid": json}')
@@ -107,7 +107,7 @@ class TestValidationExceptionHandler:
         ]
         
         # Patch debug_logger at the source module
-        with patch('kiro.debug_logger.debug_logger') as mock_logger:
+        with patch('trae.debug_logger.debug_logger') as mock_logger:
             print("Action: Calling validation_exception_handler...")
             response = await validation_exception_handler(mock_request, mock_exc)
             
@@ -121,7 +121,7 @@ class TestValidationExceptionHandler:
         Purpose: Ensure debug logs are flushed for validation errors.
         """
         print("Setup: Creating mock request and exception...")
-        from kiro.exceptions import validation_exception_handler
+        from trae.exceptions import validation_exception_handler
         
         mock_request = MagicMock(spec=Request)
         mock_request.body = AsyncMock(return_value=b'{"test": "data"}')
@@ -132,7 +132,7 @@ class TestValidationExceptionHandler:
         ]
         
         # Patch debug_logger at the source module
-        with patch('kiro.debug_logger.debug_logger') as mock_logger:
+        with patch('trae.debug_logger.debug_logger') as mock_logger:
             print("Action: Calling validation_exception_handler...")
             await validation_exception_handler(mock_request, mock_exc)
             
@@ -148,7 +148,7 @@ class TestValidationExceptionHandler:
         Purpose: Ensure error details are returned to client.
         """
         print("Setup: Creating mock request and exception...")
-        from kiro.exceptions import validation_exception_handler
+        from trae.exceptions import validation_exception_handler
         import json
         
         mock_request = MagicMock(spec=Request)
@@ -159,7 +159,7 @@ class TestValidationExceptionHandler:
             {"type": "missing", "loc": ["body", "model"], "msg": "Field required", "input": {}}
         ]
         
-        with patch('kiro.debug_logger.debug_logger'):
+        with patch('trae.debug_logger.debug_logger'):
             print("Action: Calling validation_exception_handler...")
             response = await validation_exception_handler(mock_request, mock_exc)
             
@@ -178,7 +178,7 @@ class TestValidationExceptionHandler:
         Purpose: Ensure large bodies don't bloat error responses.
         """
         print("Setup: Creating mock request with large body...")
-        from kiro.exceptions import validation_exception_handler
+        from trae.exceptions import validation_exception_handler
         import json
         
         large_body = b'{"data": "' + b'x' * 1000 + b'"}'
@@ -191,7 +191,7 @@ class TestValidationExceptionHandler:
             {"type": "json_invalid", "loc": ["body"], "msg": "Invalid", "input": {}}
         ]
         
-        with patch('kiro.debug_logger.debug_logger'):
+        with patch('trae.debug_logger.debug_logger'):
             print("Action: Calling validation_exception_handler...")
             response = await validation_exception_handler(mock_request, mock_exc)
             
@@ -212,7 +212,7 @@ class TestValidationExceptionHandlerLogging:
         Purpose: Ensure errors are visible in logs.
         """
         print("Setup: Creating mock request and exception...")
-        from kiro.exceptions import validation_exception_handler
+        from trae.exceptions import validation_exception_handler
         
         mock_request = MagicMock(spec=Request)
         mock_request.body = AsyncMock(return_value=b'{"test": "data"}')
@@ -222,8 +222,8 @@ class TestValidationExceptionHandlerLogging:
             {"type": "missing", "loc": ["body", "model"], "msg": "Field required", "input": {}}
         ]
         
-        with patch('kiro.debug_logger.debug_logger'):
-            with patch('kiro.exceptions.logger') as mock_logger:
+        with patch('trae.debug_logger.debug_logger'):
+            with patch('trae.exceptions.logger') as mock_logger:
                 print("Action: Calling validation_exception_handler...")
                 await validation_exception_handler(mock_request, mock_exc)
                 
@@ -241,7 +241,7 @@ class TestValidationExceptionHandlerEdgeCases:
         Purpose: Ensure edge case doesn't cause crash.
         """
         print("Setup: Creating mock request with empty errors...")
-        from kiro.exceptions import validation_exception_handler
+        from trae.exceptions import validation_exception_handler
         import json
         
         mock_request = MagicMock(spec=Request)
@@ -250,7 +250,7 @@ class TestValidationExceptionHandlerEdgeCases:
         mock_exc = MagicMock(spec=RequestValidationError)
         mock_exc.errors.return_value = []
         
-        with patch('kiro.debug_logger.debug_logger'):
+        with patch('trae.debug_logger.debug_logger'):
             print("Action: Calling validation_exception_handler...")
             response = await validation_exception_handler(mock_request, mock_exc)
             
@@ -267,7 +267,7 @@ class TestValidationExceptionHandlerEdgeCases:
         Purpose: Ensure international characters are handled.
         """
         print("Setup: Creating mock request with unicode body...")
-        from kiro.exceptions import validation_exception_handler
+        from trae.exceptions import validation_exception_handler
         import json
         
         unicode_body = '{"message": "Привет мир 🌍"}'.encode('utf-8')
@@ -280,7 +280,7 @@ class TestValidationExceptionHandlerEdgeCases:
             {"type": "missing", "loc": ["body", "model"], "msg": "Field required", "input": {}}
         ]
         
-        with patch('kiro.debug_logger.debug_logger'):
+        with patch('trae.debug_logger.debug_logger'):
             print("Action: Calling validation_exception_handler...")
             response = await validation_exception_handler(mock_request, mock_exc)
             

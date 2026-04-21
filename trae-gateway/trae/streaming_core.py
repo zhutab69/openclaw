@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
-# Kiro Gateway
-# https://github.com/jwadow/kiro-gateway
+# Trae Gateway
+# (Trae Gateway - based on Kiro Gateway)
 # Copyright (C) 2025 Jwadow
 #
 # This program is free software: you can redistribute it and/or modify
@@ -18,16 +18,16 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 """
-Core streaming logic for parsing Kiro API responses.
+Core streaming logic for parsing Trae API responses.
 
 This module contains shared logic used by both OpenAI and Anthropic streaming:
-- KiroEvent dataclass for unified events
-- Kiro SSE stream parsing
+- TraeEvent dataclass for unified events
+- Trae SSE stream parsing
 - Full response collection
 - First token timeout handling
 
 The core layer provides a unified interface that API-specific formatters use
-to convert Kiro events to their respective SSE formats.
+to convert Trae events to their respective SSE formats.
 """
 
 import asyncio
@@ -37,21 +37,21 @@ from typing import TYPE_CHECKING, Any, AsyncGenerator, Callable, Awaitable, Dict
 import httpx
 from loguru import logger
 
-from kiro.parsers import AwsEventStreamParser, parse_bracket_tool_calls, deduplicate_tool_calls
-from kiro.config import (
+from trae.parsers import AwsEventStreamParser, parse_bracket_tool_calls, deduplicate_tool_calls
+from trae.config import (
     FIRST_TOKEN_TIMEOUT,
     FIRST_TOKEN_MAX_RETRIES,
     FAKE_REASONING_ENABLED,
     FAKE_REASONING_HANDLING,
 )
-from kiro.thinking_parser import ThinkingParser
+from trae.thinking_parser import ThinkingParser
 
 if TYPE_CHECKING:
-    from kiro.cache import ModelInfoCache
+    from trae.cache import ModelInfoCache
 
 # Import debug_logger for logging
 try:
-    from kiro.debug_logger import debug_logger
+    from trae.debug_logger import debug_logger
 except ImportError:
     debug_logger = None
 
@@ -61,9 +61,9 @@ except ImportError:
 # ==================================================================================================
 
 @dataclass
-class KiroEvent:
+class TraeEvent:
     """
-    Unified event from Kiro API stream.
+    Unified event from Trae API stream.
     
     This format is API-agnostic and can be converted to both OpenAI and Anthropic formats.
     
@@ -97,7 +97,7 @@ class StreamResult:
         thinking_content: Full thinking/reasoning content
         tool_calls: List of tool calls
         usage: Usage information
-        context_usage_percentage: Context usage percentage from Kiro API
+        context_usage_percentage: Context usage percentage from Trae API
     """
     content: str = ""
     thinking_content: str = ""
@@ -112,19 +112,19 @@ class FirstTokenTimeoutError(Exception):
 
 
 # ==================================================================================================
-# Kiro Stream Parsing
+# Trae Stream Parsing
 # ==================================================================================================
 
-async def parse_kiro_stream(
+async def parse_trae_stream(
     response: httpx.Response,
     first_token_timeout: float = FIRST_TOKEN_TIMEOUT,
     enable_thinking_parser: bool = True
-) -> AsyncGenerator[KiroEvent, None]:
+) -> AsyncGenerator[TraeEvent, None]:
     """
-    Parses Kiro SSE stream and yields unified events.
+    Parses Trae SSE stream and yields unified events.
     
-    This is the core parsing function that converts Kiro's AWS SSE format
-    into unified KiroEvent objects that can be formatted for any API.
+    This is the core parsing function that converts Trae's AWS SSE format
+    into unified TraeEvent objects that can be formatted for any API.
     
     Args:
         response: HTTP response with data stream
@@ -132,7 +132,7 @@ async def parse_kiro_stream(
         enable_thinking_parser: Whether to enable thinking block parsing
     
     Yields:
-        KiroEvent objects representing stream events
+        TraeEvent objects representing stream events
     
     Raises:
         FirstTokenTimeoutError: If first token not received within timeout
@@ -163,7 +163,7 @@ async def parse_kiro_stream(
             raise FirstTokenTimeoutError(f"No response within {first_token_timeout} seconds")
         except StopAsyncIteration:
             # Empty response - this is normal, just finish
-            logger.debug("Empty response from Kiro API")
+            logger.debug("Empty response from Trae API")
             return
         
         # Process first chunk
@@ -194,7 +194,7 @@ async def parse_kiro_stream(
                     final_result.is_last_thinking_chunk,
                 )
                 if processed_thinking:
-                    yield KiroEvent(
+                    yield TraeEvent(
                         type="thinking",
                         thinking_content=processed_thinking,
                         is_first_thinking_chunk=final_result.is_first_thinking_chunk,
@@ -202,7 +202,7 @@ async def parse_kiro_stream(
                     )
             
             if final_result.regular_content:
-                yield KiroEvent(type="content", content=final_result.regular_content)
+                yield TraeEvent(type="content", content=final_result.regular_content)
             
             if thinking_parser.found_thinking_block:
                 logger.debug("Thinking block processing completed")
@@ -213,7 +213,7 @@ async def parse_kiro_stream(
         
         # Yield tool calls if any
         for tc in all_tool_calls:
-            yield KiroEvent(type="tool_use", tool_use=tc)
+            yield TraeEvent(type="tool_use", tool_use=tc)
             
     except FirstTokenTimeoutError:
         raise
@@ -231,9 +231,9 @@ async def _process_chunk(
     parser: AwsEventStreamParser,
     chunk: bytes,
     thinking_parser: Optional[ThinkingParser]
-) -> AsyncGenerator[KiroEvent, None]:
+) -> AsyncGenerator[TraeEvent, None]:
     """
-    Process a single chunk from Kiro stream.
+    Process a single chunk from Trae stream.
     
     Args:
         parser: AWS event stream parser
@@ -241,7 +241,7 @@ async def _process_chunk(
         thinking_parser: Optional thinking parser for fake reasoning
     
     Yields:
-        KiroEvent objects
+        TraeEvent objects
     """
     events = parser.feed(chunk)
     
@@ -261,7 +261,7 @@ async def _process_chunk(
                         parse_result.is_last_thinking_chunk,
                     )
                     if processed_thinking:
-                        yield KiroEvent(
+                        yield TraeEvent(
                             type="thinking",
                             thinking_content=processed_thinking,
                             is_first_thinking_chunk=parse_result.is_first_thinking_chunk,
@@ -270,16 +270,16 @@ async def _process_chunk(
                 
                 # Yield regular content if any
                 if parse_result.regular_content:
-                    yield KiroEvent(type="content", content=parse_result.regular_content)
+                    yield TraeEvent(type="content", content=parse_result.regular_content)
             else:
                 # No thinking parser - pass through as-is
-                yield KiroEvent(type="content", content=content)
+                yield TraeEvent(type="content", content=content)
         
         elif event["type"] == "usage":
-            yield KiroEvent(type="usage", usage=event["data"])
+            yield TraeEvent(type="usage", usage=event["data"])
         
         elif event["type"] == "context_usage":
-            yield KiroEvent(type="context_usage", context_usage_percentage=event["data"])
+            yield TraeEvent(type="context_usage", context_usage_percentage=event["data"])
 
 
 # ==================================================================================================
@@ -292,7 +292,7 @@ async def collect_stream_to_result(
     enable_thinking_parser: bool = True
 ) -> StreamResult:
     """
-    Collects full response from Kiro stream.
+    Collects full response from Trae stream.
     
     This function consumes the entire stream and returns a StreamResult
     with all accumulated data.
@@ -308,7 +308,7 @@ async def collect_stream_to_result(
     result = StreamResult()
     full_content_for_bracket_tools = ""
     
-    async for event in parse_kiro_stream(response, first_token_timeout, enable_thinking_parser):
+    async for event in parse_trae_stream(response, first_token_timeout, enable_thinking_parser):
         if event.type == "content" and event.content:
             result.content += event.content
             full_content_for_bracket_tools += event.content
@@ -341,10 +341,10 @@ def calculate_tokens_from_context_usage(
     model: str
 ) -> Tuple[int, int, str, str]:
     """
-    Calculate token counts from Kiro's context usage percentage.
+    Calculate token counts from Trae's context usage percentage.
     
     Args:
-        context_usage_percentage: Context usage percentage from Kiro API
+        context_usage_percentage: Context usage percentage from Trae API
         completion_tokens: Number of completion tokens (counted via tiktoken)
         model_cache: Model cache for getting max input tokens
         model: Model name
@@ -356,7 +356,7 @@ def calculate_tokens_from_context_usage(
         max_input_tokens = model_cache.get_max_input_tokens(model)
         total_tokens = int((context_usage_percentage / 100) * max_input_tokens)
         prompt_tokens = max(0, total_tokens - completion_tokens)
-        return prompt_tokens, total_tokens, "subtraction", "API Kiro"
+        return prompt_tokens, total_tokens, "subtraction", "Trae API"
     
     # Fallback: no context usage data
     return 0, completion_tokens, "unknown", "tiktoken"
@@ -386,7 +386,7 @@ async def stream_with_first_token_retry(
     Args:
         make_request: Function to create new HTTP request (returns httpx.Response)
         stream_processor: Function that processes response and yields SSE strings.
-                         Must use parse_kiro_stream internally for timeout handling.
+                         Must use parse_trae_stream internally for timeout handling.
         max_retries: Maximum number of attempts
         first_token_timeout: First token wait timeout (seconds)
         on_http_error: Optional callback to create exception for HTTP errors.
@@ -406,7 +406,7 @@ async def stream_with_first_token_retry(
         >>> async def make_req():
         ...     return await http_client.request_with_retry("POST", url, payload, stream=True)
         >>> async def process(response):
-        ...     async for chunk in stream_kiro_to_openai(response, ...):
+        ...     async for chunk in stream_trae_to_openai(response, ...):
         ...         yield chunk
         >>> async for chunk in stream_with_first_token_retry(make_req, process):
         ...     print(chunk)
@@ -435,7 +435,7 @@ async def stream_with_first_token_retry(
                 except Exception:
                     pass
                 
-                logger.error(f"Error from Kiro API: {response.status_code} - {error_text}")
+                logger.error(f"Error from Trae API: {response.status_code} - {error_text}")
                 
                 if on_http_error:
                     raise on_http_error(response.status_code, error_text)

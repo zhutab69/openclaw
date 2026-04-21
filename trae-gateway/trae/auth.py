@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
-# Kiro Gateway
-# https://github.com/jwadow/kiro-gateway
+# Trae Gateway
+# (Trae Gateway - based on Kiro Gateway)
 # Copyright (C) 2025 Jwadow
 #
 # This program is free software: you can redistribute it and/or modify
@@ -18,13 +18,13 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 """
-Authentication manager for Kiro API.
+Authentication manager for Trae API.
 
 Manages the lifecycle of access tokens:
 - Loading credentials from .env or JSON file
 - Automatic token refresh on expiration
 - Thread-safe refresh using asyncio.Lock
-- Support for both Kiro Desktop Auth and AWS SSO OIDC (kiro-cli)
+- Support for both Trae Desktop Auth and AWS SSO OIDC (kiro-cli)
 """
 
 import asyncio
@@ -38,14 +38,14 @@ from typing import Optional
 import httpx
 from loguru import logger
 
-from kiro.config import (
+from trae.config import (
     TOKEN_REFRESH_THRESHOLD,
-    get_kiro_refresh_url,
-    get_kiro_api_host,
-    get_kiro_q_host,
+    get_trae_refresh_url,
+    get_trae_api_host,
+    get_trae_q_host,
     get_aws_sso_oidc_url,
 )
-from kiro.utils import get_machine_fingerprint
+from trae.utils import get_machine_fingerprint
 
 
 # Supported SQLite token keys (searched in priority order)
@@ -66,7 +66,7 @@ class AuthType(Enum):
     """
     Type of authentication mechanism.
     
-    KIRO_DESKTOP: Kiro IDE credentials (default)
+    TRAE_DESKTOP: Trae IDE credentials (default)
         - Uses https://prod.{region}.auth.desktop.kiro.dev/refreshToken
         - JSON body: {"refreshToken": "..."}
     
@@ -75,20 +75,20 @@ class AuthType(Enum):
         - Form body: grant_type=refresh_token&client_id=...&client_secret=...&refresh_token=...
         - Requires clientId and clientSecret from credentials file
     """
-    KIRO_DESKTOP = "kiro_desktop"
+    TRAE_DESKTOP = "trae_desktop"
     AWS_SSO_OIDC = "aws_sso_oidc"
 
 
-class KiroAuthManager:
+class TraeAuthManager:
     """
-    Manages the token lifecycle for accessing Kiro API.
+    Manages the token lifecycle for accessing Trae API.
     
     Supports:
     - Loading credentials from .env or JSON file
     - Automatic token refresh on expiration
     - Expiration time validation (expiresAt)
     - Saving updated tokens to file
-    - Both Kiro Desktop Auth and AWS SSO OIDC (kiro-cli) authentication
+    - Both Trae Desktop Auth and AWS SSO OIDC (kiro-cli) authentication
     
     Attributes:
         profile_arn: AWS CodeWhisperer profile ARN
@@ -96,18 +96,18 @@ class KiroAuthManager:
         api_host: API host for the current region
         q_host: Q API host for the current region
         fingerprint: Unique machine fingerprint
-        auth_type: Type of authentication (KIRO_DESKTOP or AWS_SSO_OIDC)
+        auth_type: Type of authentication (TRAE_DESKTOP or AWS_SSO_OIDC)
     
     Example:
-        >>> # Kiro Desktop Auth (default)
-        >>> auth_manager = KiroAuthManager(
+        >>> # Trae Desktop Auth (default)
+        >>> auth_manager = TraeAuthManager(
         ...     refresh_token="your_refresh_token",
         ...     region="us-east-1"
         ... )
         >>> token = await auth_manager.get_access_token()
         
         >>> # AWS SSO OIDC (kiro-cli) - auto-detected from credentials file
-        >>> auth_manager = KiroAuthManager(
+        >>> auth_manager = TraeAuthManager(
         ...     creds_file="~/.aws/sso/cache/your-cache.json"
         ... )
         >>> token = await auth_manager.get_access_token()
@@ -159,12 +159,12 @@ class KiroAuthManager:
         self._lock = asyncio.Lock()
         
         # Auth type will be determined after loading credentials
-        self._auth_type: AuthType = AuthType.KIRO_DESKTOP
+        self._auth_type: AuthType = AuthType.TRAE_DESKTOP
         
         # Dynamic URLs based on region
-        self._refresh_url = get_kiro_refresh_url(region)
-        self._api_host = get_kiro_api_host(region)
-        self._q_host = get_kiro_q_host(region)
+        self._refresh_url = get_trae_refresh_url(region)
+        self._api_host = get_trae_api_host(region)
+        self._q_host = get_trae_q_host(region)
         
         # Log initialized endpoints for diagnostics (helps with DNS issues like #58)
         logger.info(f"Auth manager initialized: region={region}, api_host={self._api_host}, q_host={self._q_host}")
@@ -193,7 +193,7 @@ class KiroAuthManager:
             self._auth_type = AuthType.AWS_SSO_OIDC
             logger.info("Detected auth type: AWS SSO OIDC (kiro-cli)")
         else:
-            self._auth_type = AuthType.KIRO_DESKTOP
+            self._auth_type = AuthType.TRAE_DESKTOP
             logger.info("Detected auth type: Kiro Desktop")
     
     def _load_credentials_from_sqlite(self, db_path: str) -> None:
@@ -344,9 +344,9 @@ class KiroAuthManager:
             if 'region' in data:
                 self._region = data['region']
                 # Update URLs for new region
-                self._refresh_url = get_kiro_refresh_url(self._region)
-                self._api_host = get_kiro_api_host(self._region)
-                self._q_host = get_kiro_q_host(self._region)
+                self._refresh_url = get_trae_refresh_url(self._region)
+                self._api_host = get_trae_api_host(self._region)
+                self._q_host = get_trae_q_host(self._region)
                 logger.info(f"Region updated from credentials file: region={self._region}, api_host={self._api_host}, q_host={self._q_host}")
             
             # Load clientIdHash and device registration for Enterprise Kiro IDE
@@ -559,7 +559,7 @@ class KiroAuthManager:
         Performs a token refresh request.
         
         Routes to appropriate refresh method based on auth type:
-        - KIRO_DESKTOP: Uses Kiro Desktop Auth endpoint
+        - TRAE_DESKTOP: Uses Trae Desktop Auth endpoint
         - AWS_SSO_OIDC: Uses AWS SSO OIDC endpoint
         
         Raises:
@@ -569,11 +569,11 @@ class KiroAuthManager:
         if self._auth_type == AuthType.AWS_SSO_OIDC:
             await self._refresh_token_aws_sso_oidc()
         else:
-            await self._refresh_token_kiro_desktop()
+            await self._refresh_token_trae_desktop()
     
-    async def _refresh_token_kiro_desktop(self) -> None:
+    async def _refresh_token_trae_desktop(self) -> None:
         """
-        Refreshes token using Kiro Desktop Auth endpoint.
+        Refreshes token using Trae Desktop Auth endpoint.
         
         Endpoint: https://prod.{region}.auth.desktop.kiro.dev/refreshToken
         Method: POST
@@ -587,12 +587,12 @@ class KiroAuthManager:
         if not self._refresh_token:
             raise ValueError("Refresh token is not set")
         
-        logger.info("Refreshing Kiro token via Kiro Desktop Auth...")
+        logger.info("Refreshing Kiro token via Trae Desktop Auth...")
         
         payload = {'refreshToken': self._refresh_token}
         headers = {
             "Content-Type": "application/json",
-            "User-Agent": f"KiroIDE-0.7.45-{self._fingerprint}",
+            "User-Agent": f"TraeIDE-0.7.45-{self._fingerprint}",
         }
         
         async with httpx.AsyncClient(timeout=30) as client:
@@ -622,7 +622,7 @@ class KiroAuthManager:
             tz=timezone.utc
         )
         
-        logger.info(f"Token refreshed via Kiro Desktop Auth, expires: {self._expires_at.isoformat()}")
+        logger.info(f"Token refreshed via Trae Desktop Auth, expires: {self._expires_at.isoformat()}")
         
         # Save to file or SQLite depending on configuration
         if self._sqlite_db:
@@ -863,5 +863,5 @@ class KiroAuthManager:
     
     @property
     def auth_type(self) -> AuthType:
-        """Authentication type (KIRO_DESKTOP or AWS_SSO_OIDC)."""
+        """Authentication type (TRAE_DESKTOP or AWS_SSO_OIDC)."""
         return self._auth_type
