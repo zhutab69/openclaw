@@ -144,7 +144,8 @@ def fetch_volcengine_models(base_url, api_key):
         try:
             req = urllib.request.Request(f"{base_url}/chat/completions",
                                         data=payload, headers=headers, method="POST")
-            resp = urllib.request.urlopen(req, timeout=15, context=ctx)
+            # 减少单个请求超时从 15s 到 5s
+            resp = urllib.request.urlopen(req, timeout=5, context=ctx)
             # 200 = 模型存在且可用（不太可能空 messages 返回 200，但以防万一）
             return mid
         except urllib.error.HTTPError as e:
@@ -163,12 +164,18 @@ def fetch_volcengine_models(base_url, api_key):
             return None
 
     available_ids = set()
-    with concurrent.futures.ThreadPoolExecutor(max_workers=15) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
         futures = {executor.submit(probe_model, mid): mid for mid in chat_model_ids}
-        done, _ = concurrent.futures.wait(futures, timeout=90)
+        # 减少超时时间从 90s 到 15s，加快启动速度
+        done, pending = concurrent.futures.wait(futures, timeout=15)
+        
+        # 取消未完成的任务
+        for future in pending:
+            future.cancel()
+        
         for future in done:
             try:
-                result = future.result()
+                result = future.result(timeout=0.1)
                 if result:
                     available_ids.add(result)
             except Exception:
