@@ -16,10 +16,28 @@ HOME = os.environ["USERPROFILE"]
 MAIN_CONFIG = os.path.join(HOME, ".openclaw", "openclaw.json")
 BACKUP_PATH = MAIN_CONFIG + ".sync-bak"
 
-# Profile -> agent_id mapping
-SUB_AGENTS = {
+# 从主配置动态读取 sub-agent 列表
+# Profile -> agent_id 映射从 agents.list 自动生成
+def _load_sub_agents():
+    """从 openclaw.json 动态读取 sub-agent 列表，不硬编码。"""
+    try:
+        with open(MAIN_CONFIG, "r", encoding="utf-8-sig") as f:
+            cfg = json.load(f)
+        mapping = {}
+        for agent in cfg.get("agents", {}).get("list", []):
+            aid = agent.get("id", "")
+            if aid and aid != "main":
+                # 从 agent id 提取 profile 名称（去掉 -agent 后缀）
+                profile = aid.replace("-agent", "") if aid.endswith("-agent") else aid
+                mapping[profile] = aid
+        return mapping if mapping else None
+    except Exception:
+        return None
+
+SUB_AGENTS = _load_sub_agents() or {
+    # Fallback：仅在配置文件不可读时使用
     "writer": "writer-agent",
-    "dev":    "dev-agent",
+    "coder":  "coder-agent",
     "info":   "info-agent",
     "image":  "image-agent",
 }
@@ -56,6 +74,10 @@ def fetch_gateway_models(gateway_url, gateway_name, auth_token=None):
         
         models = []
         for m in resp["data"]:
+            # 跳过非真实模型（如 auto-kiro、auto 等别名/虚拟模型）
+            mid = m["id"]
+            if mid.startswith("auto") or mid == "auto-kiro":
+                continue
             models.append({
                 "id": m["id"],
                 "name": m.get("name", m["id"]),

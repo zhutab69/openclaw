@@ -31,7 +31,7 @@
          ┌─────────────────────┼─────────────────────┐
          │                     │                     │
     ┌────▼────┐          ┌────▼────┐          ┌────▼────┐
-    │ Writer  │          │   Dev   │          │  Info   │
+    │ Writer  │          │  Coder  │          │  Info   │
     │  3010   │          │  3020   │          │  3030   │
     └─────────┘          └─────────┘          └─────────┘
          │                     │                     │
@@ -44,7 +44,7 @@
 ┌──────────────────────────────────────────────────────────────────┐
 │                        辅助服务                                    │
 ├──────────────────────────────────────────────────────────────────┤
-│  Multi-Agent Hub (8899)  │  Bot Review Center (8900)             │
+│  Multi-Agent (8899)  │  Bot Review Center (8900)             │
 │  多智能体管理中心          │  (子项目 4)                            │
 └──────────────────────────────────────────────────────────────────┘
 ```
@@ -52,7 +52,7 @@
 ### 子项目说明
 - **子项目 1**: `kiro-gateway/` - Kiro 模型代理
 - **子项目 2**: `trae-gateway/` - Trae 模型代理
-- **子项目 3**: `node-v22.22.1-win-x64/` - OpenClaw 主项目（含 Multi-Agent Hub）
+- **子项目 3**: `node-v22.22.1-win-x64/` - OpenClaw 主项目（含 Multi-Agent）
 - **子项目 4**: `OpenClaw-bot-review/` - Bot 审查中心
 
 ---
@@ -86,7 +86,7 @@ powershell -ExecutionPolicy Bypass -File OpenClaw.ps1
 - ✅ Trae Gateway (端口 9010)
 - ✅ OpenClaw Main Agent (端口 18789)
 - ✅ OpenClaw Sub-Agents (端口 3010, 3020, 3030, 3040)
-- ✅ Multi-Agent Hub (端口 8899)
+- ✅ Multi-Agent (端口 8899)
 - ✅ Bot Review Center (端口 8900)
 
 ### 同步模型
@@ -104,7 +104,7 @@ python sync_models.py
 
 ### 访问服务
 - **OpenClaw Main**: http://127.0.0.1:18789/
-- **Multi-Agent Hub**: http://127.0.0.1:8899/
+- **Multi-Agent**: http://127.0.0.1:8899/
 - **Bot Review Center**: http://127.0.0.1:8900/
 - **Kiro Gateway**: http://127.0.0.1:9000/v1/models
 - **Trae Gateway**: http://127.0.0.1:9010/v1/models
@@ -174,10 +174,10 @@ testopenclaw/                      # 项目根目录
 - **主要服务**:
   - **Main Agent** (端口 18789) - OpenClaw 主网关
   - **Writer Agent** (端口 3010) - 写作 Agent
-  - **Dev Agent** (端口 3020) - 开发 Agent
+  - **Coder Agent** (端口 3020) - 开发 Agent
   - **Info Agent** (端口 3030) - 信息 Agent
   - **Image Agent** (端口 3040) - 图像 Agent
-  - **Multi-Agent Hub** (端口 8899) - 多智能体管理中心
+  - **Multi-Agent** (端口 8899) - 多智能体管理中心
 - **功能**: 聚合所有 provider 的模型，提供统一接口
 - **模型数**: 31 个（聚合）
 - **状态**: ✅ 完全可用
@@ -192,7 +192,7 @@ testopenclaw/                      # 项目根目录
 - **OpenClaw 主配置**: `C:\Users\zhuyulin\.openclaw\openclaw.json`
 - **Sub-Agents 配置**:
   - Writer: `C:\Users\zhuyulin\.openclaw-writer\openclaw.json`
-  - Dev: `C:\Users\zhuyulin\.openclaw-dev\openclaw.json`
+  - Dev: `C:\Users\zhuyulin\.openclaw-coder\openclaw.json`
   - Info: `C:\Users\zhuyulin\.openclaw-info\openclaw.json`
   - Image: `C:\Users\zhuyulin\.openclaw-image\openclaw.json`
 - **Kiro Gateway**: `kiro-gateway/.env`
@@ -275,10 +275,10 @@ openai/gpt-3.5-turbo
 |------|------|--------|------|------|
 | **Main Agent** | 18789 | node-v22.22.1-win-x64 | ✅ 运行中 | OpenClaw 主网关 |
 | **Writer Agent** | 3010 | node-v22.22.1-win-x64 | ✅ 运行中 | 写作 Agent |
-| **Dev Agent** | 3020 | node-v22.22.1-win-x64 | ✅ 运行中 | 开发 Agent |
+| **Coder Agent** | 3020 | node-v22.22.1-win-x64 | ✅ 运行中 | 开发 Agent |
 | **Info Agent** | 3030 | node-v22.22.1-win-x64 | ✅ 运行中 | 信息 Agent |
 | **Image Agent** | 3040 | node-v22.22.1-win-x64 | ✅ 运行中 | 图像 Agent |
-| **Multi-Agent Hub** | 8899 | node-v22.22.1-win-x64 | ✅ 运行中 | 多智能体管理中心 |
+| **Multi-Agent** | 8899 | node-v22.22.1-win-x64 | ✅ 运行中 | 多智能体管理中心 |
 
 ### 辅助服务
 
