@@ -130,7 +130,15 @@ with open(fpath, 'w', encoding='utf-8') as f:
 - 多步骤修改中，每步完成后确认再进行下一步
 - 如果修改涉及构建步骤（如 Bot Review 的 `npm run build`），必须重新构建后才算完成
 
-## 7. 项目文件结构
+## 7. Cron 定时任务规则
+
+- **任务内部禁止调用 message 工具发送通知**，通知统一交给 `delivery` 配置
+- 根因：WSClient 断连 → message 失败 → job status=error → 调度器 backoff 漂移
+- `wakeMode` 必须设为 `"now"`（避免依赖心跳周期）
+- `staggerMs` 设为 `0`（不需要随机延迟）
+- 任务执行结果通过 `delivery.mode: "announce"` 发送，与任务逻辑解耦
+
+## 8. 项目文件结构
 
 - `OpenClaw.ps1` — 一键启动脚本（主要维护文件）
 - `StartOpenClaw.bat` — 启动入口（调用 ps1）
