@@ -112,16 +112,42 @@ Get-ChildItem "node_modules\openclaw\dist" -Filter "model-preflight.runtime-*.js
 
 **文件**：`node_modules/openclaw/dist/update-startup-*.js`
 
-**修改**：将 `UPDATE_CHECK_INTERVAL_MS` 改为 365 天。
+**修改**：将 `UPDATE_CHECK_INTERVAL_MS` 改为 24 天（不能超过 2^31-1 ms ≈ 24.8天，否则 setTimeout 溢出）。
 
 ```javascript
 // 找到这一行：
 const UPDATE_CHECK_INTERVAL_MS = 24 * 3600 * 1e3;
 // 改为：
-const UPDATE_CHECK_INTERVAL_MS = 365 * 86400 * 1e3;
+const UPDATE_CHECK_INTERVAL_MS = 24 * 864e5;
 ```
 
-**注意**：同样在升级后需要重新应用。
+**注意**：不能设为 365 天！`setTimeout` 最大值是 2^31-1 = 2147483647ms ≈ 24.8天，超过会溢出为 1ms 并刷屏 `TimeoutOverflowWarning`。
+
+### 1.6 Provider Discovery Timeout 补丁（最关键！）
+
+**文件**：`node_modules/openclaw/dist/models-config-*.js`
+
+**问题**：`runProviderCatalogWithTimeout` 函数在没有 `OPENCLAW_LIVE_GATEWAY=1` 环境变量时，`timeoutMs` 为 `null`，导致 provider catalog 操作**无超时等待**。bundled extensions（96个）中的某些 provider 尝试连接外部服务，无限等待导致 model-resolution 耗时 20-30s。
+
+**修改**：
+
+```javascript
+// 找到这一行（在 runProviderCatalogWithTimeout 函数内）：
+const timeoutMs = params.timeoutMs ?? void 0;
+// 改为：
+const timeoutMs = params.timeoutMs ?? 5000;
+```
+
+**查找方法**：
+```powershell
+# 搜索包含 runProviderCatalogWithTimeout 的文件
+Get-ChildItem "node_modules\openclaw\dist" -Filter "models-config-*.js" |
+  Select-String "runProviderCatalogWithTimeout"
+```
+
+**效果**：model-resolution 从 20-31s → <5s（每个 provider catalog 最多等 5s）。
+
+**这是最关键的补丁**，直接决定了每次对话请求的响应速度。
 
 ---
 
@@ -296,8 +322,9 @@ $env:OPENCLAW_DISABLE_BONJOUR = "1"  # 禁用 Bonjour 网络发现
 - [ ] 2. 执行升级（`openclaw update` 或手动替换）
 - [ ] 3. 验证 `openclaw.json` schema（启动测试，看是否报 "Unrecognized key"）
 - [ ] 4. 重新应用 preflight cache TTL 补丁（`model-preflight.runtime-*.js`）
-- [ ] 5. 重新应用 update check 补丁（`update-startup-*.js`）
-- [ ] 6. 运行 models.json 清理脚本（移除无效 providers）
+- [ ] 5. 重新应用 update check 补丁（`update-startup-*.js`，注意不超过 24 天）
+- [ ] 6. **重新应用 provider discovery timeout 补丁**（`models-config-*.js`，最关键！）
+- [ ] 7. 运行 models.json 清理脚本（移除无效 providers）
 - [ ] 7. 确认 `FAKE_REASONING=off` 在 `kiro-gateway/.env`
 - [ ] 8. 确认启动脚本中**没有** `OPENCLAW_SKIP_STARTUP_MODEL_PREWARM`
 - [ ] 9. 确认 `plugins.bundledDiscovery = "allowlist"`
