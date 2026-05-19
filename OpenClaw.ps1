@@ -218,7 +218,7 @@ if (-not $script:gwToken -or $script:gwToken -eq "no_change") {
 # Main Gateway
 $psi2 = New-Object System.Diagnostics.ProcessStartInfo
 $psi2.FileName = "cmd.exe"
-$psi2.Arguments = "/c set OPENCLAW_DISABLE_BONJOUR=1 && `"$NODE`" `"$OPENCLAW_MJS`" gateway --force"
+$psi2.Arguments = "/k set OPENCLAW_DISABLE_BONJOUR=1 && `"$NODE`" `"$OPENCLAW_MJS`" gateway --force"
 $psi2.WorkingDirectory = $WORKDIR
 $psi2.UseShellExecute = $true
 $psi2.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Minimized
@@ -401,6 +401,7 @@ $kiroFailCount = 0
 $mainFailCount = 0
 $upstreamFailCount = 0
 $lastUpstreamOk = $true
+$watchdogStartTime = Get-Date
 while ($true) {
     if ([Console]::KeyAvailable) { 
         $null = [Console]::ReadKey($true)
@@ -408,7 +409,7 @@ while ($true) {
     }
     
     $checkCount++
-    if ($checkCount % 15 -eq 0) {
+    if ($checkCount % 15 -eq 0 -and ((Get-Date) - $watchdogStartTime).TotalSeconds -gt 90) {
         # Check Kiro Gateway (health endpoint, not just TCP)
         $kiroOk = $false
         try {
@@ -497,7 +498,7 @@ while ($true) {
             }
             $psi2r = New-Object System.Diagnostics.ProcessStartInfo
             $psi2r.FileName = "cmd.exe"
-            $psi2r.Arguments = "/c set OPENCLAW_DISABLE_BONJOUR=1 && `"$NODE`" `"$OPENCLAW_MJS`" gateway --force"
+            $psi2r.Arguments = "/k set OPENCLAW_DISABLE_BONJOUR=1 && `"$NODE`" `"$OPENCLAW_MJS`" gateway --force"
             $psi2r.WorkingDirectory = $WORKDIR
             $psi2r.UseShellExecute = $true
             $psi2r.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Minimized
