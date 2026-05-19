@@ -127,27 +127,43 @@ const UPDATE_CHECK_INTERVAL_MS = 24 * 864e5;
 
 **文件**：`node_modules/openclaw/dist/models-config-*.js`
 
-**问题**：`runProviderCatalogWithTimeout` 函数在没有 `OPENCLAW_LIVE_GATEWAY=1` 环境变量时，`timeoutMs` 为 `null`，导致 provider catalog 操作**无超时等待**。bundled extensions（96个）中的某些 provider 尝试连接外部服务，无限等待导致 model-resolution 耗时 20-30s。
+**问题**：`resolveImplicitProviders` 函数会对所有 bundled provider extensions（96个中的活跃部分，约 8-9 个）执行 catalog 操作。每个操作无超时，导致 model-resolution 耗时 30-42s。
 
-**修改**：
+**修改方案（二选一，推荐方案 A）**：
+
+**方案 A（推荐）：跳过隐式 provider discovery**
 
 ```javascript
-// 找到这一行（在 runProviderCatalogWithTimeout 函数内）：
+// 找到这一行：
+async function resolveImplicitProviders(params) {
+	const providers = {};
+// 改为（在 const providers 前插入 early return）：
+async function resolveImplicitProviders(params) {
+	const env = params.env ?? process.env;
+	if (!(env.OPENCLAW_LIVE_TEST === "1" || env.OPENCLAW_LIVE_GATEWAY === "1" || env.LIVE === "1")) return {};
+	const providers = {};
+```
+
+**安全性**：我们只使用 `openclaw.json` 中显式配置的 `kiro-gw` provider，不需要隐式发现。
+
+**方案 B（备选）：给每个 provider catalog 加超时**
+
+```javascript
+// 找到 runProviderCatalogWithTimeout 函数内：
 const timeoutMs = params.timeoutMs ?? void 0;
 // 改为：
 const timeoutMs = params.timeoutMs ?? 5000;
 ```
 
-**查找方法**：
+注意：方案 B 仍会等待 N×5s（N=活跃 provider 数），方案 A 直接跳过整个 discovery。
+
+**效果**：model-resolution 从 30-42s → <1s。
+
+**查找文件**：
 ```powershell
-# 搜索包含 runProviderCatalogWithTimeout 的文件
 Get-ChildItem "node_modules\openclaw\dist" -Filter "models-config-*.js" |
-  Select-String "runProviderCatalogWithTimeout"
+  Where-Object { $_.Length -gt 10000 }
 ```
-
-**效果**：model-resolution 从 20-31s → <5s（每个 provider catalog 最多等 5s）。
-
-**这是最关键的补丁**，直接决定了每次对话请求的响应速度。
 
 ---
 
