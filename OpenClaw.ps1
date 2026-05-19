@@ -469,13 +469,25 @@ while ($true) {
             }
         }
         
-        # Check Main Gateway
+        # Check Main Gateway (only restart if process actually crashed, not just busy)
         $mainOk = $false
-        try { $tcp = New-Object System.Net.Sockets.TcpClient; $tcp.Connect("127.0.0.1", 18789); $tcp.Close(); $mainOk = $true; $mainFailCount = 0 } catch {}
+        if ($script:p2 -and $script:p2.HasExited) {
+            # Process actually crashed - definitely need restart
+            $mainFailCount = 99
+        } else {
+            # Process running - check TCP with longer timeout
+            try { 
+                $tcp = New-Object System.Net.Sockets.TcpClient
+                $tcp.Connect("127.0.0.1", 18789)
+                $tcp.Close()
+                $mainOk = $true
+                $mainFailCount = 0
+            } catch {
+                $mainFailCount++
+            }
+        }
         
-        if (-not $mainOk) {
-            $mainFailCount++
-            if ($mainFailCount -ge 2) {
+        if (-not $mainOk -and $mainFailCount -ge 5) {
                 Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Main Gateway down ($mainFailCount consecutive failures), restarting..." -ForegroundColor Yellow
                 if ($script:p2 -and !$script:p2.HasExited) { $script:p2.Kill(); Start-Sleep -Milliseconds 500 }
                 $lockDir = "$env:TEMP\openclaw"
