@@ -488,29 +488,28 @@ while ($true) {
         }
         
         if (-not $mainOk -and $mainFailCount -ge 5) {
-                Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Main Gateway down ($mainFailCount consecutive failures), restarting..." -ForegroundColor Yellow
-                if ($script:p2 -and !$script:p2.HasExited) { $script:p2.Kill(); Start-Sleep -Milliseconds 500 }
-                $lockDir = "$env:TEMP\openclaw"
-                if (Test-Path $lockDir) {
-                    Get-ChildItem $lockDir -Filter "gateway.*.lock" -ErrorAction SilentlyContinue |
-                        ForEach-Object { Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue }
+            Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Main Gateway down ($mainFailCount consecutive failures), restarting..." -ForegroundColor Yellow
+            if ($script:p2 -and !$script:p2.HasExited) { $script:p2.Kill(); Start-Sleep -Milliseconds 500 }
+            $lockDir = "$env:TEMP\openclaw"
+            if (Test-Path $lockDir) {
+                Get-ChildItem $lockDir -Filter "gateway.*.lock" -ErrorAction SilentlyContinue |
+                    ForEach-Object { Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue }
+            }
+            $psi2r = New-Object System.Diagnostics.ProcessStartInfo
+            $psi2r.FileName = "cmd.exe"
+            $psi2r.Arguments = "/c set OPENCLAW_DISABLE_BONJOUR=1 && `"$NODE`" `"$OPENCLAW_MJS`" gateway --force"
+            $psi2r.WorkingDirectory = $WORKDIR
+            $psi2r.UseShellExecute = $true
+            $psi2r.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Minimized
+            $script:p2 = [System.Diagnostics.Process]::Start($psi2r)
+            if (Wait-ForPort 18789 45) {
+                Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Main Gateway recovered" -ForegroundColor Green
+                $mainFailCount = 0
+                if ($script:gwToken -and $script:gwToken -ne "no_change") { 
+                    cmd /c start "" "http://127.0.0.1:18789/?token=$($script:gwToken)" 2>$null
                 }
-                $psi2r = New-Object System.Diagnostics.ProcessStartInfo
-                $psi2r.FileName = "cmd.exe"
-                $psi2r.Arguments = "/c set OPENCLAW_DISABLE_BONJOUR=1 && `"$NODE`" `"$OPENCLAW_MJS`" gateway --force"
-                $psi2r.WorkingDirectory = $WORKDIR
-                $psi2r.UseShellExecute = $true
-                $psi2r.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Minimized
-                $script:p2 = [System.Diagnostics.Process]::Start($psi2r)
-                if (Wait-ForPort 18789 45) {
-                    Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Main Gateway recovered" -ForegroundColor Green
-                    $mainFailCount = 0
-                    if ($script:gwToken -and $script:gwToken -ne "no_change") { 
-                        cmd /c start "" "http://127.0.0.1:18789/?token=$($script:gwToken)" 2>$null
-                    }
-                } else { 
-                    Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Main Gateway restart failed!" -ForegroundColor Red 
-                }
+            } else { 
+                Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Main Gateway restart failed!" -ForegroundColor Red 
             }
         }
     }
