@@ -13,13 +13,21 @@ HOME = os.environ["USERPROFILE"]
 MAIN_CONFIG = os.path.join(HOME, ".openclaw", "openclaw.json")
 BACKUP_PATH = MAIN_CONFIG + ".sync-bak"
 
-# Agent names - used to fix encoding corruption from config.patch
+# Agent names and emojis - used to fix encoding corruption from config.patch
 AGENT_NAMES = {
     "main": "先知",
     "writer-agent": "文墨",
     "coder-agent": "码农",
     "info-agent": "讯探",
     "image-agent": "绘影",
+}
+
+AGENT_EMOJIS = {
+    "main": "\U0001f52e",        # 🔮
+    "writer-agent": "\u270d\ufe0f",  # ✍️
+    "coder-agent": "\U0001f4bb",     # 💻
+    "info-agent": "\U0001f50d",      # 🔍
+    "image-agent": "\U0001f3a8",     # 🎨
 }
 
 
@@ -30,15 +38,21 @@ def _load_config():
 
 
 def _fix_agent_names(config):
-    """Fix garbled agent names caused by config.patch encoding bug."""
+    """Fix garbled agent names and emojis caused by config.patch encoding bug."""
     agents = config.get("agents", {}).get("list", [])
     fixed = False
     for agent in agents:
         aid = agent.get("id", "")
-        correct = AGENT_NAMES.get(aid)
-        if correct and agent.get("name") != correct:
-            agent["name"] = correct
+        correct_name = AGENT_NAMES.get(aid)
+        if correct_name and agent.get("name") != correct_name:
+            agent["name"] = correct_name
             fixed = True
+        correct_emoji = AGENT_EMOJIS.get(aid)
+        if correct_emoji:
+            current_emoji = agent.get("identity", {}).get("emoji", "")
+            if current_emoji != correct_emoji:
+                agent.setdefault("identity", {})["emoji"] = correct_emoji
+                fixed = True
     return fixed
 
 
