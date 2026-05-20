@@ -13,11 +13,33 @@ HOME = os.environ["USERPROFILE"]
 MAIN_CONFIG = os.path.join(HOME, ".openclaw", "openclaw.json")
 BACKUP_PATH = MAIN_CONFIG + ".sync-bak"
 
+# Agent names - used to fix encoding corruption from config.patch
+AGENT_NAMES = {
+    "main": "先知",
+    "writer-agent": "文墨",
+    "coder-agent": "码农",
+    "info-agent": "讯探",
+    "image-agent": "绘影",
+}
+
 
 def _load_config():
     """Load main openclaw.json."""
     with open(MAIN_CONFIG, "r", encoding="utf-8-sig") as f:
         return json.load(f)
+
+
+def _fix_agent_names(config):
+    """Fix garbled agent names caused by config.patch encoding bug."""
+    agents = config.get("agents", {}).get("list", [])
+    fixed = False
+    for agent in agents:
+        aid = agent.get("id", "")
+        correct = AGENT_NAMES.get(aid)
+        if correct and agent.get("name") != correct:
+            agent["name"] = correct
+            fixed = True
+    return fixed
 
 
 def _load_sub_agents(config):
@@ -62,6 +84,13 @@ def _fetch_models(base_url, api_key=None, timeout=10):
 def sync():
     """Main sync logic."""
     config = _load_config()
+
+    # Fix agent names (encoding corruption from config.patch)
+    if _fix_agent_names(config):
+        # Save immediately so names are correct for this run
+        with open(MAIN_CONFIG, "w", encoding="utf-8") as f:
+            json.dump(config, f, indent=2, ensure_ascii=False)
+
     sub_agents = _load_sub_agents(config)
     sync_results = []
 

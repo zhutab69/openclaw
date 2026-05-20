@@ -262,6 +262,40 @@ OpenClaw 2026.5.7 有严格的 schema 验证，以下字段**不存在**：
 - ❌ `browser.profiles.*.persistent` / `headless` / `attachOnly` — managed profile 只支持 `cdpPort` 和 `color`
 - ❌ `channels.openclaw-weixin.startDelay` — 不存在此字段
 
+### 2.6 Agent 名称编码问题（反复出现）
+
+**问题**：OpenClaw agent 通过 `config.patch` 或 `gateway tool` 修改 `openclaw.json` 时，中文字符会被双重编码（UTF-8 → Latin-1 → UTF-8），导致名称变成乱码（如 `先知` → `鍏堢煡`）。
+
+**触发条件**：agent 在 webchat 中执行 `config.patch` 修改 `agents.list`。
+
+**修复方法**：用 Python 重写正确的名称：
+
+```python
+import os, json
+
+CORRECT_NAMES = {
+    "main": "先知",
+    "writer-agent": "文墨",
+    "coder-agent": "码农",
+    "info-agent": "讯探",
+    "image-agent": "绘影",
+}
+
+cfg_path = os.path.join(os.environ["USERPROFILE"], ".openclaw", "openclaw.json")
+with open(cfg_path, "r", encoding="utf-8") as f:
+    data = json.load(f)
+
+for agent in data.get("agents", {}).get("list", []):
+    correct = CORRECT_NAMES.get(agent.get("id", ""))
+    if correct:
+        agent["name"] = correct
+
+with open(cfg_path, "w", encoding="utf-8") as f:
+    json.dump(data, f, indent=2, ensure_ascii=False)
+```
+
+**预防**：在启动脚本中加入名称校验（已添加到 `sync_models.py` 流程中）。
+
 ---
 
 ## 三、启动脚本优化
