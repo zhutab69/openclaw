@@ -121,7 +121,11 @@ try {
     $config = Get-Content $OPENCLAW_CONFIG -Raw -Encoding UTF8 | ConvertFrom-Json
     foreach ($agent in $config.agents.list) {
         if ($agent.id -ne "main") {
-            $profileName = if ($agent.profile) { $agent.profile } else { $agent.id -replace '-agent$', '' }
+            # Read profile from agent-profiles.json
+            $profilesFile = "C:\Users\zhuyulin\.openclaw\agent-profiles.json"
+            $profileMap = @{}
+            if (Test-Path $profilesFile) { $profileMap = Get-Content $profilesFile -Raw -Encoding UTF8 | ConvertFrom-Json }
+            $profileName = if ($profileMap.($agent.id)) { $profileMap.($agent.id) } else { $agent.id -replace '-agent$', '' }
             $subAgents += @{ id = $agent.id; profile = $profileName }
             $profileCfg = "C:\Users\zhuyulin\.openclaw-$profileName\openclaw.json"
             try {

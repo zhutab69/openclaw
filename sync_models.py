@@ -72,14 +72,24 @@ def _fix_agent_names(config):
     return fixed
 
 
+def _load_profiles():
+    """Load agent-to-profile mapping from agent-profiles.json."""
+    profiles_path = os.path.join(HOME, ".openclaw", "agent-profiles.json")
+    try:
+        with open(profiles_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
 def _load_sub_agents(config):
     """从 openclaw.json 动态读取 sub-agent 列表。"""
+    profiles = _load_profiles()
     mapping = {}
     for agent in config.get("agents", {}).get("list", []):
         aid = agent.get("id", "")
         if aid and aid != "main":
-            # Use explicit profile field if available, otherwise derive from id
-            profile = agent.get("profile") or (aid.replace("-agent", "") if aid.endswith("-agent") else aid)
+            profile = profiles.get(aid) or (aid.replace("-agent", "") if aid.endswith("-agent") else aid)
             mapping[profile] = aid
     return mapping
 
