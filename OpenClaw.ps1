@@ -122,6 +122,9 @@ try {
     foreach ($agent in $config.agents.list) {
         if ($agent.id -ne "main") {
             $profileName = $agent.id -replace '-agent$', ''
+            # Profile name overrides
+            if ($profileName -eq "info") { $profileName = "infoer" }
+            if ($profileName -eq "image") { $profileName = "imager" }
             $subAgents += @{ id = $agent.id; profile = $profileName }
             $profileCfg = "C:\Users\zhuyulin\.openclaw-$profileName\openclaw.json"
             try {

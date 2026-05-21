@@ -72,13 +72,20 @@ def _fix_agent_names(config):
     return fixed
 
 
+# Profile name overrides (when profile != id minus "-agent")
+PROFILE_OVERRIDES = {
+    "info-agent": "infoer",
+    "image-agent": "imager",
+}
+
+
 def _load_sub_agents(config):
     """从 openclaw.json 动态读取 sub-agent 列表。"""
     mapping = {}
     for agent in config.get("agents", {}).get("list", []):
         aid = agent.get("id", "")
         if aid and aid != "main":
-            profile = aid.replace("-agent", "") if aid.endswith("-agent") else aid
+            profile = PROFILE_OVERRIDES.get(aid, aid.replace("-agent", "") if aid.endswith("-agent") else aid)
             mapping[profile] = aid
     return mapping
 
