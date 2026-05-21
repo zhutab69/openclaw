@@ -30,6 +30,15 @@ AGENT_EMOJIS = {
     "image-agent": "\U0001f3a8",     # 🎨
 }
 
+# Agent model assignments - protected from config.patch corruption
+AGENT_MODELS = {
+    "main": "kiro-gw/claude-opus-4.6",
+    "writer-agent": "kiro-gw/claude-sonnet-4.6",
+    "coder-agent": "kiro-gw/claude-opus-4.6",
+    "info-agent": "kiro-gw/claude-sonnet-4.6",
+    "image-agent": "kiro-gw/claude-sonnet-4.6",
+}
+
 
 def _load_config():
     """Load main openclaw.json."""
@@ -38,21 +47,28 @@ def _load_config():
 
 
 def _fix_agent_names(config):
-    """Fix garbled agent names and emojis caused by config.patch encoding bug."""
+    """Fix garbled agent names, emojis, and models caused by config.patch."""
     agents = config.get("agents", {}).get("list", [])
     fixed = False
     for agent in agents:
         aid = agent.get("id", "")
+        # Fix name
         correct_name = AGENT_NAMES.get(aid)
         if correct_name and agent.get("name") != correct_name:
             agent["name"] = correct_name
             fixed = True
+        # Fix emoji
         correct_emoji = AGENT_EMOJIS.get(aid)
         if correct_emoji:
             current_emoji = agent.get("identity", {}).get("emoji", "")
             if current_emoji != correct_emoji:
                 agent.setdefault("identity", {})["emoji"] = correct_emoji
                 fixed = True
+        # Fix model
+        correct_model = AGENT_MODELS.get(aid)
+        if correct_model and agent.get("model") != correct_model:
+            agent["model"] = correct_model
+            fixed = True
     return fixed
 
 
