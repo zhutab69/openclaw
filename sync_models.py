@@ -268,36 +268,21 @@ def sync():
             with open(cfg_path, "r", encoding="utf-8-sig") as f:
                 sub_cfg = json.load(f)
 
-            # Get sub-agent's own model
-            sub_own_model = None
-            for a in sub_cfg.get("agents", {}).get("list", []):
-                if a.get("id") == agent_id and a.get("model"):
-                    sub_own_model = a["model"]
-                    break
-
-            # Determine effective model (sub-agent own > main config > default)
-            main_model = main_agent_models.get(agent_id)
-            if sub_own_model:
-                effective_model = sub_own_model
-                model_source = "own"
-            elif main_model:
-                effective_model = main_model
-                model_source = "from_main"
-            else:
-                effective_model = primary_model
-                model_source = "default"
+            # Force correct model from AGENT_MODELS (protection against config.patch)
+            correct_model = AGENT_MODELS.get(agent_id)
+            effective_model = correct_model or primary_model
+            model_source = "protected"
 
             # Update sub-agent config
             sub_cfg.setdefault("agents", {}).setdefault("defaults", {}).setdefault("model", {})
             sub_cfg["agents"]["defaults"]["models"] = all_models_map
             sub_cfg["agents"]["defaults"]["model"]["fallbacks"] = fallback_models
 
-            # Only update agents.list model if sub-agent has no own model
-            if model_source == "from_main":
-                for a in sub_cfg.get("agents", {}).get("list", []):
-                    if a.get("id") == agent_id:
-                        a["model"] = effective_model
-                        break
+            # Always enforce correct model
+            for a in sub_cfg.get("agents", {}).get("list", []):
+                if a.get("id") == agent_id:
+                    a["model"] = effective_model
+                    break
 
             with open(cfg_path, "w", encoding="utf-8") as f:
                 json.dump(sub_cfg, f, indent=4, ensure_ascii=False)
