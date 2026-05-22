@@ -450,7 +450,10 @@ while ($true) {
         if (-not $kiroOk) {
             $kiroFailCount++
             if ($kiroFailCount -ge 2) {
-                Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Kiro Gateway down ($kiroFailCount consecutive failures), restarting..." -ForegroundColor Yellow
+                Write-Host ""
+                Write-Host "  ┌─────────────────────────────────────────────────" -ForegroundColor DarkYellow
+                Write-Host "  │ [$(Get-Date -Format 'HH:mm:ss')] KIRO GATEWAY DOWN ($kiroFailCount failures)" -ForegroundColor Yellow
+                Write-Host "  │ Restarting..." -ForegroundColor Yellow -NoNewline
                 if ($script:p1 -and !$script:p1.HasExited) { $script:p1.Kill(); Start-Sleep -Milliseconds 1000 }
                 $psi1r = New-Object System.Diagnostics.ProcessStartInfo
                 $psi1r.FileName = "python"; $psi1r.Arguments = "main.py --port 9000"
@@ -459,11 +462,15 @@ while ($true) {
                 $script:p1 = [System.Diagnostics.Process]::Start($psi1r)
                 # Wait for health
                 if (Wait-ForHealth "http://127.0.0.1:9000/health" 30) {
-                    Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Kiro Gateway recovered" -ForegroundColor Green
+                    Write-Host " OK" -ForegroundColor Green
+                    Write-Host "  │ [$(Get-Date -Format 'HH:mm:ss')] Recovered" -ForegroundColor Green
                     $kiroFailCount = 0
                 } else {
-                    Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Kiro Gateway restart failed!" -ForegroundColor Red
+                    Write-Host " FAILED" -ForegroundColor Red
+                    Write-Host "  │ [$(Get-Date -Format 'HH:mm:ss')] Restart failed!" -ForegroundColor Red
                 }
+                Write-Host "  └─────────────────────────────────────────────────" -ForegroundColor DarkYellow
+                Write-Host ""
             }
         }
         
@@ -477,18 +484,26 @@ while ($true) {
                 $upstreamOk = $true
                 $upstreamFailCount = 0
                 if (-not $lastUpstreamOk) {
-                    Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Kiro API upstream recovered" -ForegroundColor Green
+                    Write-Host "  ┌─────────────────────────────────────────────────" -ForegroundColor Green
+                    Write-Host "  │ [$(Get-Date -Format 'HH:mm:ss')] NETWORK: Kiro API recovered" -ForegroundColor Green
+                    Write-Host "  └─────────────────────────────────────────────────" -ForegroundColor Green
+                    Write-Host ""
                     $lastUpstreamOk = $true
                 }
             } catch {
                 $upstreamFailCount++
                 if ($upstreamFailCount -ge 2 -and $lastUpstreamOk) {
-                    Write-Host "[$(Get-Date -Format 'HH:mm:ss')] [WARN] Kiro API upstream unreachable ($upstreamFailCount failures) - network issue" -ForegroundColor Yellow
+                    Write-Host ""
+                    Write-Host "  ┌─────────────────────────────────────────────────" -ForegroundColor DarkYellow
+                    Write-Host "  │ [$(Get-Date -Format 'HH:mm:ss')] NETWORK: Kiro API unreachable ($upstreamFailCount failures)" -ForegroundColor Yellow
+                    Write-Host "  └─────────────────────────────────────────────────" -ForegroundColor DarkYellow
                     $lastUpstreamOk = $false
                 }
                 # After 5 consecutive failures, try restarting Kiro Gateway (token refresh)
                 if ($upstreamFailCount -eq 5) {
-                    Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Restarting Kiro Gateway to refresh auth token..." -ForegroundColor Yellow
+                    Write-Host ""
+                    Write-Host "  ┌─────────────────────────────────────────────────" -ForegroundColor Magenta
+                    Write-Host "  │ [$(Get-Date -Format 'HH:mm:ss')] TOKEN REFRESH: Restarting Kiro Gateway..." -ForegroundColor Magenta -NoNewline
                     if ($script:p1 -and !$script:p1.HasExited) { $script:p1.Kill(); Start-Sleep -Milliseconds 1000 }
                     $psi1r = New-Object System.Diagnostics.ProcessStartInfo
                     $psi1r.FileName = "python"; $psi1r.Arguments = "main.py --port 9000"
@@ -496,6 +511,9 @@ while ($true) {
                     $psi1r.UseShellExecute = $false; $psi1r.CreateNoWindow = $true
                     $script:p1 = [System.Diagnostics.Process]::Start($psi1r)
                     Wait-ForHealth "http://127.0.0.1:9000/health" 30 | Out-Null
+                    Write-Host " done" -ForegroundColor Green
+                    Write-Host "  └─────────────────────────────────────────────────" -ForegroundColor Magenta
+                    Write-Host ""
                 }
             }
         }
@@ -519,7 +537,10 @@ while ($true) {
         }
         
         if (-not $mainOk -and $mainFailCount -ge 5) {
-            Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Main Gateway down ($mainFailCount consecutive failures), restarting..." -ForegroundColor Yellow
+            Write-Host ""
+            Write-Host "  ┌─────────────────────────────────────────────────" -ForegroundColor Red
+            Write-Host "  │ [$(Get-Date -Format 'HH:mm:ss')] MAIN GATEWAY DOWN ($mainFailCount failures)" -ForegroundColor Red
+            Write-Host "  │ Restarting..." -ForegroundColor Red -NoNewline
             if ($script:p2 -and !$script:p2.HasExited) { $script:p2.Kill(); Start-Sleep -Milliseconds 500 }
             $lockDir = "$env:TEMP\openclaw"
             if (Test-Path $lockDir) {
@@ -534,14 +555,18 @@ while ($true) {
             $psi2r.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Minimized
             $script:p2 = [System.Diagnostics.Process]::Start($psi2r)
             if (Wait-ForPort 18789 45) {
-                Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Main Gateway recovered" -ForegroundColor Green
+                Write-Host " OK" -ForegroundColor Green
+                Write-Host "  │ [$(Get-Date -Format 'HH:mm:ss')] Recovered" -ForegroundColor Green
                 $mainFailCount = 0
                 if ($script:gwToken -and $script:gwToken -ne "no_change") { 
                     cmd /c start "" "http://127.0.0.1:18789/?token=$($script:gwToken)" 2>$null
                 }
             } else { 
-                Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Main Gateway restart failed!" -ForegroundColor Red 
+                Write-Host " FAILED" -ForegroundColor Red
+                Write-Host "  │ [$(Get-Date -Format 'HH:mm:ss')] Restart failed!" -ForegroundColor Red
             }
+            Write-Host "  └─────────────────────────────────────────────────" -ForegroundColor Red
+            Write-Host ""
         }
     }
     Start-Sleep 2
