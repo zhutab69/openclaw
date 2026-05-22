@@ -269,7 +269,7 @@ $script:perfStats["launch"] = (Get-Date) - $t0
 # [4/6] Wait for all services (with retry for Main Gateway)
 # ============================================
 $t0 = Get-Date
-Write-Host "[4/5] Waiting for services..."
+Write-Host "[4/5] Waiting for services..." -NoNewline
 
 $allPorts = @(18789, 8899, 8900)
 $portNames = @{ 18789 = "Main Gateway"; 8899 = "Multi-Agent"; 8900 = "Bot Review" }
@@ -287,6 +287,20 @@ $deadline = (Get-Date).AddSeconds(60)
 $pendingPorts = [System.Collections.Generic.List[int]]::new()
 foreach ($p in $allPorts) { $pendingPorts.Add($p) }
 $mainRetries = 0
+$doneCount = 0
+
+# Progress bar animation
+Write-Host ""
+$barWidth = 30
+function Show-Progress($done, $total) {
+    $pct = [math]::Round(($done / $total) * 100)
+    $filled = [math]::Round(($done / $total) * $barWidth)
+    $empty = $barWidth - $filled
+    $bar = ("=" * $filled) + ("." * $empty)
+    Write-Host "`r  [$bar] $pct%" -NoNewline
+}
+
+Show-Progress 0 $totalPorts
 
 while ($pendingPorts.Count -gt 0 -and (Get-Date) -lt $deadline) {
     $readyPorts = @()
@@ -296,9 +310,8 @@ while ($pendingPorts.Count -gt 0 -and (Get-Date) -lt $deadline) {
             $tcp.Connect("127.0.0.1", $port)
             $tcp.Close()
             $readyPorts += $port
-            $done = $totalPorts - $pendingPorts.Count + $readyPorts.Count
-            $pct = [math]::Round(($done / $totalPorts) * 100)
-            Write-Host "  [OK] $($portNames[$port]) ($port) [$pct%]" -ForegroundColor Green
+            $doneCount++
+            Show-Progress $doneCount $totalPorts
         } catch {}
     }
     foreach ($port in $readyPorts) { $pendingPorts.Remove($port) | Out-Null }
@@ -327,8 +340,18 @@ while ($pendingPorts.Count -gt 0 -and (Get-Date) -lt $deadline) {
 }
 
 if ($pendingPorts.Count -gt 0) {
+    Write-Host ""
     foreach ($port in $pendingPorts) {
-        Write-Host "  [FAIL] $($portNames[$port]) ($port) not ready" -ForegroundColor Red
+        Write-Host "  [FAIL] $($portNames[$port]) ($port)" -ForegroundColor Red
+    }
+} else {
+    Write-Host ""
+    # Show all services aligned
+    $maxNameLen = ($portNames.Values | ForEach-Object { $_.Length } | Measure-Object -Maximum).Maximum
+    foreach ($port in $allPorts) {
+        $name = $portNames[$port]
+        $pad = " " * ($maxNameLen - $name.Length)
+        Write-Host "  [OK] $name$pad  :$port" -ForegroundColor Green
     }
 }
 $script:perfStats["wait"] = (Get-Date) - $t0
