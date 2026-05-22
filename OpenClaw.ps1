@@ -282,6 +282,7 @@ foreach ($agent in $subAgents) {
     }
 }
 
+$totalPorts = $allPorts.Count
 $deadline = (Get-Date).AddSeconds(60)
 $pendingPorts = [System.Collections.Generic.List[int]]::new()
 foreach ($p in $allPorts) { $pendingPorts.Add($p) }
@@ -295,7 +296,9 @@ while ($pendingPorts.Count -gt 0 -and (Get-Date) -lt $deadline) {
             $tcp.Connect("127.0.0.1", $port)
             $tcp.Close()
             $readyPorts += $port
-            Write-Host "  [OK] $($portNames[$port]) ($port)" -ForegroundColor Green
+            $done = $totalPorts - $pendingPorts.Count + $readyPorts.Count
+            $pct = [math]::Round(($done / $totalPorts) * 100)
+            Write-Host "  [OK] $($portNames[$port]) ($port) [$pct%]" -ForegroundColor Green
         } catch {}
     }
     foreach ($port in $readyPorts) { $pendingPorts.Remove($port) | Out-Null }
@@ -457,7 +460,7 @@ while ($true) {
             } catch {
                 $upstreamFailCount++
                 if ($upstreamFailCount -ge 2 -and $lastUpstreamOk) {
-                    Write-Host "[$(Get-Date -Format 'HH:mm:ss')] 鈿狅笍  Kiro API upstream unreachable ($upstreamFailCount failures) - network issue" -ForegroundColor Yellow
+                    Write-Host "[$(Get-Date -Format 'HH:mm:ss')] [WARN] Kiro API upstream unreachable ($upstreamFailCount failures) - network issue" -ForegroundColor Yellow
                     $lastUpstreamOk = $false
                 }
                 # After 5 consecutive failures, try restarting Kiro Gateway (token refresh)
