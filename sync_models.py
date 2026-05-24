@@ -132,6 +132,13 @@ def sync():
         with open(MAIN_CONFIG, "w", encoding="utf-8") as f:
             json.dump(config, f, indent=2, ensure_ascii=False)
 
+    # Also protect defaults.model.primary
+    defaults_primary = config.get("agents", {}).get("defaults", {}).get("model", {}).get("primary", "")
+    if defaults_primary != "kiro-gw/claude-sonnet-4.6":
+        config.setdefault("agents", {}).setdefault("defaults", {}).setdefault("model", {})["primary"] = "kiro-gw/claude-sonnet-4.6"
+        with open(MAIN_CONFIG, "w", encoding="utf-8") as f:
+            json.dump(config, f, indent=2, ensure_ascii=False)
+
     sub_agents = _load_sub_agents(config)
     sync_results = []
 
