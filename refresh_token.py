@@ -54,5 +54,16 @@ except urllib.error.HTTPError as e:
     body = e.read().decode()
     print(f"\nRefresh FAILED: {e.code}")
     print(f"Response: {body[:300]}")
+    
+    # If refresh token is revoked (invalid_grant), prompt re-login
+    if e.code == 400 and "invalid_grant" in body:
+        print("\n" + "=" * 50)
+        print("Refresh token revoked (re-login detected).")
+        print("Opening Kiro SSO login page...")
+        print("After login, restart OpenClaw.")
+        print("=" * 50)
+        import webbrowser
+        webbrowser.open("https://d-90660bc4c1.awsapps.com/start")
+        
 except Exception as e:
     print(f"\nRefresh ERROR: {e}")
