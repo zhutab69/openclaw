@@ -179,6 +179,14 @@ $script:perfStats["init"] = (Get-Date) - $t0
 $t0 = Get-Date
 Write-Host "[2/5] Kiro Gateway..." -NoNewline
 
+# Refresh Kiro auth token before starting Gateway
+try {
+    $refreshResult = python "D:\Kiro\testopenclaw\refresh_token.py" 2>&1
+    if ($refreshResult -match "Refresh SUCCESS") {
+        Write-Host " token refreshed..." -NoNewline -ForegroundColor DarkGray
+    }
+} catch {}
+
 $psi1 = New-Object System.Diagnostics.ProcessStartInfo
 $psi1.FileName = "python"
 $psi1.Arguments = "main.py --port 9000"
