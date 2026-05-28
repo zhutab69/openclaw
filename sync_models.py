@@ -7,7 +7,7 @@ All configuration is read dynamically from openclaw.json:
 
 No hardcoded values. If a provider is unreachable, existing config is preserved.
 """
-import urllib.request, json, os, shutil
+import urllib.request, json, os, shutil, time, glob
 
 HOME = os.environ["USERPROFILE"]
 MAIN_CONFIG = os.path.join(HOME, ".openclaw", "openclaw.json")
@@ -31,15 +31,11 @@ AGENT_EMOJIS = {
 }
 
 # Agent model assignments - protected from config.patch corruption
-AGENT_MODELS = {
-    "main": "kiro-gw/claude-opus-4.6",
-    "writer-agent": "kiro-gw/claude-sonnet-4.6",
-    "coder-agent": "kiro-gw/claude-opus-4.6",
-    "info-agent": "kiro-gw/claude-sonnet-4.6",
-    "image-agent": "kiro-gw/claude-sonnet-4.6",
-}
-
-
+# Agent model assignments - NOT hardcoded
+# Models are managed by the user via OpenClaw webchat UI (agents page).
+# sync_models.py only protects names/emojis from config.patch encoding corruption,
+# it does NOT override model assignments.
+AGENT_MODELS = {}
 def _load_config():
     """Load main openclaw.json."""
     with open(MAIN_CONFIG, "r", encoding="utf-8-sig") as f:
@@ -64,11 +60,6 @@ def _fix_agent_names(config):
             if current_emoji != correct_emoji:
                 agent.setdefault("identity", {})["emoji"] = correct_emoji
                 fixed = True
-        # Fix model
-        correct_model = AGENT_MODELS.get(aid)
-        if correct_model and agent.get("model") != correct_model:
-            agent["model"] = correct_model
-            fixed = True
     return fixed
 
 
@@ -92,6 +83,286 @@ def _load_sub_agents(config):
             profile = profiles.get(aid) or (aid.replace("-agent", "") if aid.endswith("-agent") else aid)
             mapping[profile] = aid
     return mapping
+
+
+# ============================================================
+# Session Cleanup (runs before model sync on every startup)
+# ============================================================
+
+# Sessions older than this are force-closed (seconds)
+SESSION_MAX_AGE_S = 2 * 3600  # 2 hours
+
+# Keep at most this many .jsonl files per agent
+SESSION_MAX_FILES = 50
+
+# Session keys that should be reset (new session created) on startup
+# These are "sticky" sessions that OpenClaw reuses for webchat/wecom
+STICKY_SESSION_KEYS = ["agent:main:main"]
+
+# Sticky session is reset if older than this (seconds)
+STICKY_RESET_AGE_S = 4 * 3600  # 4 hours
+
+# Sticky session with pendingFinalDelivery is removed if pending older than this
+PENDING_DELIVERY_MAX_AGE_S = 30 * 60  # 30 minutes
+
+# Subagent/dashboard entries with abortedLastRun=True are orphan-recovery candidates;
+# remove them if older than this regardless of status
+ORPHAN_CANDIDATE_MAX_AGE_S = 3600  # 1 hour
+
+# Old completed entries (status in done/failed/timeout) that bloat sessions.json
+# are removed if older than this
+OLD_ENTRY_MAX_AGE_S = 24 * 3600  # 24 hours
+
+
+def _cleanup_sessions():
+    """Clean up stale/zombie sessions for all agents.
+
+    1. Fix sessions.json: mark running+aborted sessions as done
+    2. Remove sessions older than SESSION_MAX_AGE_S
+    3. Reset sticky sessions (webchat main) to force new session creation
+    4. Delete orphan .lock files
+    5. Trim session files to SESSION_MAX_FILES (oldest deleted first)
+    6. Clean orphan trajectory files
+    """
+    config = _load_config()
+    agents = config.get("agents", {}).get("list", [])
+    profiles = _load_profiles()
+
+    # Build list of session directories to clean
+    session_dirs = []
+    # Main agent
+    main_dir = os.path.join(HOME, ".openclaw", "agents", "main", "sessions")
+    if os.path.isdir(main_dir):
+        session_dirs.append(("main", main_dir))
+    # Sub-agents
+    for agent in agents:
+        aid = agent.get("id", "")
+        if aid and aid != "main":
+            sub_dir = os.path.join(HOME, ".openclaw", "agents", aid, "sessions")
+            if os.path.isdir(sub_dir):
+                session_dirs.append((aid, sub_dir))
+
+    now_ms = int(time.time() * 1000)
+    now_s = time.time()
+    total_fixed = 0
+    total_reset = 0
+    total_deleted = 0
+    total_locks = 0
+
+    for agent_id, sess_dir in session_dirs:
+        # --- Step 1: Fix sessions.json ---
+        sessions_json = os.path.join(sess_dir, "sessions.json")
+        if os.path.isfile(sessions_json):
+            try:
+                with open(sessions_json, "r", encoding="utf-8-sig") as f:
+                    sdata = json.load(f)
+
+                modified = False
+                keys_to_remove = []
+
+                if isinstance(sdata, dict):
+                    for key, entry in sdata.items():
+                        if not isinstance(entry, dict):
+                            continue
+                        status = entry.get("status", "")
+                        aborted = entry.get("abortedLastRun", False)
+                        last_active = entry.get("updatedAt", 0) or entry.get("lastInteractionAt", 0)
+                        pending_created = entry.get("pendingFinalDeliveryCreatedAt", 0)
+                        has_pending = bool(entry.get("pendingFinalDelivery") or entry.get("pendingPayload"))
+
+                        # Rule 1: running + aborted → remove key entirely (zombie from crash)
+                        if status == "running" and aborted:
+                            keys_to_remove.append(key)
+                            total_fixed += 1
+                            continue
+
+                        # Rule 2: any session older than max age and still running → remove
+                        if status == "running" and last_active > 0:
+                            age_ms = now_ms - last_active
+                            if age_ms > SESSION_MAX_AGE_S * 1000:
+                                keys_to_remove.append(key)
+                                total_fixed += 1
+                                continue
+
+                        # Rule 3: sticky sessions (webchat main) - reset if stale
+                        # This prevents OpenClaw from reusing old sessions that may be corrupted
+                        if key in STICKY_SESSION_KEYS and last_active > 0:
+                            age_ms = now_ms - last_active
+                            if age_ms > STICKY_RESET_AGE_S * 1000:
+                                keys_to_remove.append(key)
+                                total_reset += 1
+                                continue
+
+                        # Rule 4: sticky sessions with stuck pending delivery
+                        # If pendingFinalDelivery exists and is older than threshold, remove
+                        if key in STICKY_SESSION_KEYS and has_pending and pending_created > 0:
+                            pending_age_ms = now_ms - pending_created
+                            if pending_age_ms > PENDING_DELIVERY_MAX_AGE_S * 1000:
+                                keys_to_remove.append(key)
+                                total_reset += 1
+                                continue
+
+                        # Rule 5: orphan-recovery candidates
+                        # Subagent entries with abortedLastRun=True are picked up by
+                        # subagent-orphan-recovery on restart - remove if old
+                        if aborted and last_active > 0 and ":subagent:" in key:
+                            age_ms = now_ms - last_active
+                            if age_ms > ORPHAN_CANDIDATE_MAX_AGE_S * 1000:
+                                keys_to_remove.append(key)
+                                total_fixed += 1
+                                continue
+
+                        # Rule 6: old completed entries (cleanup bloat)
+                        # Remove done/failed/timeout entries older than 24h
+                        if status in ("done", "failed", "timeout") and last_active > 0:
+                            age_ms = now_ms - last_active
+                            if age_ms > OLD_ENTRY_MAX_AGE_S * 1000:
+                                # Don't remove sticky keys this way (handled by Rule 3)
+                                if key not in STICKY_SESSION_KEYS:
+                                    keys_to_remove.append(key)
+                                    total_fixed += 1
+                                    continue
+
+                    # Remove stale keys
+                    # Distinguish between "reset" (keep files for memory) and "purge" (delete files)
+                    reset_keys = set()  # Rule 3, 4: only remove mapping, keep .jsonl for memory/startupContext
+                    for key in keys_to_remove:
+                        session_id = sdata[key].get("sessionId", "")
+
+                        # Rules 3 & 4 are "reset" — keep session files for OpenClaw's
+                        # memoryFlush/startupContext to extract. Files will be cleaned
+                        # by OpenClaw's own sessionRetention ("24h") or our trim logic.
+                        is_reset = key in STICKY_SESSION_KEYS
+
+                        if session_id and not is_reset:
+                            # Purge: delete session files (zombie/orphan/old entries)
+                            for ext in [".jsonl", ".trajectory.jsonl", ".trajectory-path.json"]:
+                                fpath = os.path.join(sess_dir, session_id + ext)
+                                if os.path.isfile(fpath):
+                                    try:
+                                        os.remove(fpath)
+                                        total_deleted += 1
+                                    except Exception:
+                                        pass
+
+                        del sdata[key]
+                        modified = True
+
+                if modified:
+                    with open(sessions_json, "w", encoding="utf-8") as f:
+                        json.dump(sdata, f, indent=2, ensure_ascii=False)
+            except Exception:
+                pass  # Don't break startup if sessions.json is corrupt
+
+        # --- Step 2: Delete orphan .lock files ---
+        for lock_file in glob.glob(os.path.join(sess_dir, "*.lock")):
+            try:
+                os.remove(lock_file)
+                total_locks += 1
+            except Exception:
+                pass
+
+        # --- Step 3: Trim old session files ---
+        jsonl_files = glob.glob(os.path.join(sess_dir, "*.jsonl"))
+        # Also include trajectory files in the count
+        traj_files = glob.glob(os.path.join(sess_dir, "*.trajectory.jsonl"))
+        path_files = glob.glob(os.path.join(sess_dir, "*.trajectory-path.json"))
+
+        # Sort by modification time (newest first)
+        all_session_files = []
+        for f in jsonl_files:
+            if ".trajectory." not in f:
+                all_session_files.append(f)
+        all_session_files.sort(key=lambda x: os.path.getmtime(x), reverse=True)
+
+        # Keep only the newest SESSION_MAX_FILES
+        if len(all_session_files) > SESSION_MAX_FILES:
+            to_delete = all_session_files[SESSION_MAX_FILES:]
+            for f in to_delete:
+                base = f.rsplit(".", 1)[0]  # Remove .jsonl extension
+                # Delete the session file and its associated trajectory/path files
+                for pattern in [f, base + ".trajectory.jsonl", base + ".trajectory-path.json"]:
+                    if os.path.isfile(pattern):
+                        try:
+                            os.remove(pattern)
+                            total_deleted += 1
+                        except Exception:
+                            pass
+
+        # --- Step 4: Clean orphan trajectory files (no matching .jsonl) ---
+        remaining_ids = set()
+        for f in glob.glob(os.path.join(sess_dir, "*.jsonl")):
+            bn = os.path.basename(f)
+            if ".trajectory." not in bn:
+                remaining_ids.add(bn.replace(".jsonl", ""))
+        for f in glob.glob(os.path.join(sess_dir, "*.trajectory.jsonl")):
+            sid = os.path.basename(f).replace(".trajectory.jsonl", "")
+            if sid not in remaining_ids:
+                try:
+                    os.remove(f)
+                    total_deleted += 1
+                except Exception:
+                    pass
+        for f in glob.glob(os.path.join(sess_dir, "*.trajectory-path.json")):
+            sid = os.path.basename(f).replace(".trajectory-path.json", "")
+            if sid not in remaining_ids:
+                try:
+                    os.remove(f)
+                    total_deleted += 1
+                except Exception:
+                    pass
+
+    # Report
+    parts = []
+    if total_fixed:
+        parts.append(f"fixed={total_fixed}")
+    if total_reset:
+        parts.append(f"reset={total_reset}")
+    if total_deleted:
+        parts.append(f"trimmed={total_deleted}")
+    if total_locks:
+        parts.append(f"locks={total_locks}")
+    if parts:
+        print(f"[sessions] cleanup: {', '.join(parts)}")
+
+
+def _sync_sub_agent_models(config, sub_agents, all_models_map, fallback_models, primary_model):
+    """Sync model assignments from main config to sub-agent configs.
+    
+    Reads the model for each agent from config.agents.list and writes it
+    to the corresponding sub-agent profile config. This ensures webchat UI
+    changes are propagated to sub-agents on every startup.
+    """
+    main_agent_models = {}
+    for a in config.get("agents", {}).get("list", []):
+        if a.get("model"):
+            main_agent_models[a["id"]] = a["model"]
+
+    for profile, agent_id in sub_agents.items():
+        cfg_path = os.path.join(HOME, f".openclaw-{profile}", "openclaw.json")
+        if not os.path.exists(cfg_path):
+            continue
+        try:
+            with open(cfg_path, "r", encoding="utf-8-sig") as f:
+                sub_cfg = json.load(f)
+
+            effective_model = main_agent_models.get(agent_id) or primary_model
+
+            # Update sub-agent config
+            sub_cfg.setdefault("agents", {}).setdefault("defaults", {}).setdefault("model", {})
+            sub_cfg["agents"]["defaults"]["models"] = all_models_map
+            sub_cfg["agents"]["defaults"]["model"]["fallbacks"] = fallback_models
+
+            # Sync model from main config
+            for a in sub_cfg.get("agents", {}).get("list", []):
+                if a.get("id") == agent_id:
+                    a["model"] = effective_model
+                    break
+
+            with open(cfg_path, "w", encoding="utf-8") as f:
+                json.dump(sub_cfg, f, indent=4, ensure_ascii=False)
+        except Exception:
+            pass
 
 
 def _fetch_models(base_url, api_key=None, timeout=10):
@@ -124,6 +395,12 @@ def _fetch_models(base_url, api_key=None, timeout=10):
 
 def sync():
     """Main sync logic."""
+    # Session cleanup FIRST (before model sync, prevents zombie recovery on restart)
+    try:
+        _cleanup_sessions()
+    except Exception as e:
+        print(f"[sessions] cleanup error: {e}")
+
     config = _load_config()
 
     # Fix agent names (encoding corruption from config.patch)
@@ -231,6 +508,8 @@ def sync():
         print(f"OK:{len(all_models_map)}:{primary_display}:no_change")
         for r in sync_results:
             print(r)
+        # Still sync sub-agent models (user may have changed via webchat)
+        _sync_sub_agent_models(config, sub_agents, all_models_map, fallback_models, primary_model)
         return
 
     # === Update main config ===
@@ -279,10 +558,9 @@ def sync():
             with open(cfg_path, "r", encoding="utf-8-sig") as f:
                 sub_cfg = json.load(f)
 
-            # Force correct model from AGENT_MODELS (protection against config.patch)
-            correct_model = AGENT_MODELS.get(agent_id)
-            effective_model = correct_model or primary_model
-            model_source = "protected"
+            # Use model from main config (user-managed, not hardcoded)
+            effective_model = main_agent_models.get(agent_id) or primary_model
+            model_source = "config"
 
             # Update sub-agent config
             sub_cfg.setdefault("agents", {}).setdefault("defaults", {}).setdefault("model", {})
