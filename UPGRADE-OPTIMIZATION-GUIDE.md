@@ -1,3 +1,36 @@
+
+========================================
+  OpenClaw Launcher v4
+  Node v22.22.1 / npm 11.14.1 / Python 3.14.4
+  OpenClaw 2026.5.7 / Next.js 16.1.6
+  mcporter 0.9.0
+========================================
+
+[1/5] Config + Cleanup... 4 agents (ports: 3020, 3040, 3060, 3080) (241ms)
+[2/5] Kiro Gateway... token refreshed... ready (7.01s)
+[3/5] Launch all services... 14 models, all launched (26.22s)
+[4/5] Waiting for services...
+  [==========================....] 86%
+  [FAIL] Multi-Agent (8899)
+  [WARMUP] Triggering model cache... sent
+[5/5] Opening browsers... done (399ms)
+
+========================================
+  All services running! (96.5s)
+========================================
+
+  Init:        260ms
+  Kiro GW:     7.02s
+  Launch All:  26.22s
+  Wait Ready:  62.02s
+  Browsers:    401ms
+
+  Main Dashboard: http://127.0.0.1:18789/
+  Multi-Agent:    http://127.0.0.1:8899
+  Bot Review:     http://127.0.0.1:8900
+
+  Press any key to stop all services
+
 # OpenClaw 升级优化指南
 
 > 记录 OpenClaw 2026.3.13 → 2026.5.7 升级后的所有优化操作，供下次升级参考。
@@ -382,6 +415,9 @@ $env:OPENCLAW_DISABLE_BONJOUR = "1"  # 禁用 Bonjour 网络发现
 - [ ] 11. 启动并验证 webchat 加载时间 < 10s
 - [ ] 12. 发送测试消息，确认响应时间 < 10s
 - [ ] 13. 检查 cron 任务是否正常执行
+- [ ] 14. **检查 skills 状态**：升级可能重置 `skills.entries`，导致所有 skill 变为 enabled（默认）。升级后立即检查并禁用不需要的 skill。
+
+> ⚠️ **Skill 配置丢失风险**：升级时如果 `openclaw.json` 的 `skills.entries` 被重写或清除，所有 skill 会变为默认状态（enabled）。建议升级前备份 skills 配置段，升级后对比恢复。
 
 ---
 

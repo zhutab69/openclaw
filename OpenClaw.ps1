@@ -49,6 +49,12 @@ function Cleanup {
     Write-Host "  Stopping all services..." -ForegroundColor Yellow
     Write-Host "========================================" -ForegroundColor Cyan
     
+    # Memory flush: save active session summary to daily memory before shutdown
+    try {
+        $flushResult = python "D:\Kiro\testopenclaw\memory_flush.py" 2>&1
+        if ($flushResult) { Write-Host "  $flushResult" -ForegroundColor DarkGray }
+    } catch {}
+    
     if ($script:p1 -and !$script:p1.HasExited) { 
         # Kill Kiro Gateway and all its child worker processes
         cmd /c "taskkill /F /T /PID $($script:p1.Id) >nul 2>&1"
@@ -212,9 +218,12 @@ Write-Host "[3/5] Launch all services..." -NoNewline
 try {
     $result = python "D:\Kiro\testopenclaw\sync_models.py" 2>&1
     $lines = @($result)
-    if ($lines[0] -match "^OK:(\d+):([^:]+):(.*)$") {
-        $script:gwToken = $Matches[3]
-        $modelCount = $Matches[1]
+    foreach ($line in $lines) {
+        if ($line -match "^OK:(\d+):([^:]+):(.*)$") {
+            $script:gwToken = $Matches[3]
+            $modelCount = $Matches[1]
+            break
+        }
     }
 } catch {}
 
@@ -236,19 +245,25 @@ $psi2.UseShellExecute = $true
 $psi2.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Minimized
 $script:p2 = [System.Diagnostics.Process]::Start($psi2)
 
-# Sub-Agents (stagger 1s to reduce CPU spike)
+# Wait for Main Gateway to be ready before starting sub-agents
+# This avoids cold-start race conditions (wecom/weixin channel init + sub-agent CPU spike)
+if (Wait-ForPort 18789 45) {
+    Start-Sleep -Milliseconds 3000  # Extra 3s for channels to fully initialize
+}
+
+# Sub-Agents (stagger 2s to reduce CPU spike during main gateway channel init)
 $script:subCmdProcs = @()
 foreach ($agent in $subAgents) {
     $cmdArgs = "/k title $($agent.id) && set OPENCLAW_DISABLE_BONJOUR=1 && `"$NODE`" `"$OPENCLAW_MJS`" --profile $($agent.profile) gateway --force"
     $proc = Start-Process "cmd.exe" -ArgumentList $cmdArgs -WorkingDirectory $WORKDIR -WindowStyle Minimized -PassThru
     $script:subCmdProcs += $proc
-    Start-Sleep -Milliseconds 1000
+    Start-Sleep -Milliseconds 2000
 }
 
 # Multi-Agent + Bot Review (lightweight)
 $psiMA = New-Object System.Diagnostics.ProcessStartInfo
 $psiMA.FileName = $NODE
-$psiMA.Arguments = "`"$env:USERPROFILE\.openclaw\workspace\dashboard-server.js`""
+$psiMA.Arguments = "`"$env:USERPROFILE\.openclaw\workspace\dashboard-server.cjs`""
 $psiMA.WorkingDirectory = "$env:USERPROFILE\.openclaw\workspace"
 $psiMA.UseShellExecute = $false
 $psiMA.CreateNoWindow = $true
@@ -447,6 +462,12 @@ while ($true) {
     }
     
     $checkCount++
+    
+    # Fast crash detection: check every 2s if Main Gateway process has exited
+    if ($script:p2 -and $script:p2.HasExited -and ((Get-Date) - $watchdogStartTime).TotalSeconds -gt 90) {
+        $mainFailCount = 99  # Trigger immediate restart
+    }
+    
     if ($checkCount % 15 -eq 0 -and ((Get-Date) - $watchdogStartTime).TotalSeconds -gt 90) {
         # Check Kiro Gateway (health endpoint, not just TCP)
         $kiroOk = $false
@@ -460,22 +481,33 @@ while ($true) {
             if ($kiroFailCount -ge 2) {
                 Write-Host ""
                 Write-Host "  ┌─────────────────────────────────────────────────" -ForegroundColor DarkYellow
-                Write-Host "  │ [$(Get-Date -Format 'HH:mm:ss')] KIRO GATEWAY DOWN ($kiroFailCount failures)" -ForegroundColor Yellow
-                Write-Host "  │ Restarting..." -ForegroundColor Yellow -NoNewline
+                Write-Host "  │ " -NoNewline -ForegroundColor DarkYellow
+                Write-Host "[$(Get-Date -Format 'HH:mm:ss')] " -NoNewline -ForegroundColor Gray
+                Write-Host "KIRO GATEWAY " -NoNewline -ForegroundColor Yellow
+                Write-Host "DOWN ($kiroFailCount failures)" -ForegroundColor White
+                Write-Host "  │ " -NoNewline -ForegroundColor DarkYellow
+                Write-Host "[1/3] Stopping old process..." -NoNewline -ForegroundColor Yellow
                 if ($script:p1 -and !$script:p1.HasExited) { $script:p1.Kill(); Start-Sleep -Milliseconds 1000 }
+                Write-Host " done" -ForegroundColor DarkGray
+                Write-Host "  │ " -NoNewline -ForegroundColor DarkYellow
+                Write-Host "[2/3] Starting new instance..." -NoNewline -ForegroundColor Yellow
                 $psi1r = New-Object System.Diagnostics.ProcessStartInfo
                 $psi1r.FileName = "python"; $psi1r.Arguments = "main.py --port 9000"
                 $psi1r.WorkingDirectory = "D:\Kiro\testopenclaw\kiro-gateway"
                 $psi1r.UseShellExecute = $false; $psi1r.CreateNoWindow = $true
                 $script:p1 = [System.Diagnostics.Process]::Start($psi1r)
-                # Wait for health
+                Write-Host " pid=$($script:p1.Id)" -ForegroundColor DarkGray
+                Write-Host "  │ " -NoNewline -ForegroundColor DarkYellow
+                Write-Host "[3/3] Waiting for health..." -NoNewline -ForegroundColor Yellow
                 if (Wait-ForHealth "http://127.0.0.1:9000/health" 30) {
                     Write-Host " OK" -ForegroundColor Green
-                    Write-Host "  │ [$(Get-Date -Format 'HH:mm:ss')] Recovered" -ForegroundColor Green
+                    Write-Host "  │ " -NoNewline -ForegroundColor DarkYellow
+                    Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Recovered" -ForegroundColor Green
                     $kiroFailCount = 0
                 } else {
                     Write-Host " FAILED" -ForegroundColor Red
-                    Write-Host "  │ [$(Get-Date -Format 'HH:mm:ss')] Restart failed!" -ForegroundColor Red
+                    Write-Host "  │ " -NoNewline -ForegroundColor DarkYellow
+                    Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Restart failed!" -ForegroundColor Red
                 }
                 Write-Host "  └─────────────────────────────────────────────────" -ForegroundColor DarkYellow
                 Write-Host ""
@@ -511,13 +543,24 @@ while ($true) {
                 if ($upstreamFailCount -eq 5) {
                     Write-Host ""
                     Write-Host "  ┌─────────────────────────────────────────────────" -ForegroundColor Magenta
-                    Write-Host "  │ [$(Get-Date -Format 'HH:mm:ss')] TOKEN REFRESH: Restarting Kiro Gateway..." -ForegroundColor Magenta -NoNewline
+                    Write-Host "  │ " -NoNewline -ForegroundColor Magenta
+                    Write-Host "[$(Get-Date -Format 'HH:mm:ss')] " -NoNewline -ForegroundColor Gray
+                    Write-Host "TOKEN REFRESH " -NoNewline -ForegroundColor Magenta
+                    Write-Host "API unreachable 5x" -ForegroundColor White
+                    Write-Host "  │ " -NoNewline -ForegroundColor Magenta
+                    Write-Host "[1/3] Stopping Kiro Gateway..." -NoNewline -ForegroundColor Magenta
                     if ($script:p1 -and !$script:p1.HasExited) { $script:p1.Kill(); Start-Sleep -Milliseconds 1000 }
+                    Write-Host " done" -ForegroundColor DarkGray
+                    Write-Host "  │ " -NoNewline -ForegroundColor Magenta
+                    Write-Host "[2/3] Starting fresh instance..." -NoNewline -ForegroundColor Magenta
                     $psi1r = New-Object System.Diagnostics.ProcessStartInfo
                     $psi1r.FileName = "python"; $psi1r.Arguments = "main.py --port 9000"
                     $psi1r.WorkingDirectory = "D:\Kiro\testopenclaw\kiro-gateway"
                     $psi1r.UseShellExecute = $false; $psi1r.CreateNoWindow = $true
                     $script:p1 = [System.Diagnostics.Process]::Start($psi1r)
+                    Write-Host " pid=$($script:p1.Id)" -ForegroundColor DarkGray
+                    Write-Host "  │ " -NoNewline -ForegroundColor Magenta
+                    Write-Host "[3/3] Waiting for health..." -NoNewline -ForegroundColor Magenta
                     Wait-ForHealth "http://127.0.0.1:9000/health" 30 | Out-Null
                     Write-Host " done" -ForegroundColor Green
                     Write-Host "  └─────────────────────────────────────────────────" -ForegroundColor Magenta
@@ -547,14 +590,24 @@ while ($true) {
         if (-not $mainOk -and $mainFailCount -ge 5) {
             Write-Host ""
             Write-Host "  ┌─────────────────────────────────────────────────" -ForegroundColor Red
-            Write-Host "  │ [$(Get-Date -Format 'HH:mm:ss')] MAIN GATEWAY DOWN ($mainFailCount failures)" -ForegroundColor Red
-            Write-Host "  │ Restarting..." -ForegroundColor Red -NoNewline
+            Write-Host "  │ " -NoNewline -ForegroundColor Red
+            Write-Host "[$(Get-Date -Format 'HH:mm:ss')] " -NoNewline -ForegroundColor Gray
+            Write-Host "MAIN GATEWAY " -NoNewline -ForegroundColor Red
+            Write-Host "DOWN ($mainFailCount failures)" -ForegroundColor White
+            Write-Host "  │ " -NoNewline -ForegroundColor Red
+            Write-Host "[1/4] Stopping old process..." -NoNewline -ForegroundColor Red
             if ($script:p2 -and !$script:p2.HasExited) { $script:p2.Kill(); Start-Sleep -Milliseconds 500 }
+            Write-Host " done" -ForegroundColor DarkGray
+            Write-Host "  │ " -NoNewline -ForegroundColor Red
+            Write-Host "[2/4] Cleaning locks..." -NoNewline -ForegroundColor Red
             $lockDir = "$env:TEMP\openclaw"
             if (Test-Path $lockDir) {
                 Get-ChildItem $lockDir -Filter "gateway.*.lock" -ErrorAction SilentlyContinue |
                     ForEach-Object { Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue }
             }
+            Write-Host " done" -ForegroundColor DarkGray
+            Write-Host "  │ " -NoNewline -ForegroundColor Red
+            Write-Host "[3/4] Starting new instance..." -NoNewline -ForegroundColor Red
             $psi2r = New-Object System.Diagnostics.ProcessStartInfo
             $psi2r.FileName = "cmd.exe"
             $psi2r.Arguments = "/k set OPENCLAW_DISABLE_BONJOUR=1 && `"$NODE`" `"$OPENCLAW_MJS`" gateway --force"
@@ -562,21 +615,72 @@ while ($true) {
             $psi2r.UseShellExecute = $true
             $psi2r.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Minimized
             $script:p2 = [System.Diagnostics.Process]::Start($psi2r)
+            Write-Host " pid=$($script:p2.Id)" -ForegroundColor DarkGray
+            Write-Host "  │ " -NoNewline -ForegroundColor Red
+            Write-Host "[4/4] Waiting for port 18789..." -NoNewline -ForegroundColor Red
             if (Wait-ForPort 18789 45) {
                 Write-Host " OK" -ForegroundColor Green
-                Write-Host "  │ [$(Get-Date -Format 'HH:mm:ss')] Recovered" -ForegroundColor Green
+                Write-Host "  │ " -NoNewline -ForegroundColor Red
+                Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Recovered" -ForegroundColor Green
                 $mainFailCount = 0
                 if ($script:gwToken -and $script:gwToken -ne "no_change") { 
                     cmd /c start "" "http://127.0.0.1:18789/?token=$($script:gwToken)" 2>$null
                 }
             } else { 
                 Write-Host " FAILED" -ForegroundColor Red
-                Write-Host "  │ [$(Get-Date -Format 'HH:mm:ss')] Restart failed!" -ForegroundColor Red
+                Write-Host "  │ " -NoNewline -ForegroundColor Red
+                Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Restart failed!" -ForegroundColor Red
             }
             Write-Host "  └─────────────────────────────────────────────────" -ForegroundColor Red
             Write-Host ""
         }
     }
+    
+    # Main Gateway crash restart (also triggered by fast crash detection outside the 30s check)
+    if ($mainFailCount -ge 5 -and ($checkCount % 15 -ne 0)) {
+        Write-Host ""
+        Write-Host "  ┌─────────────────────────────────────────────────" -ForegroundColor Red
+        Write-Host "  │ " -NoNewline -ForegroundColor Red
+        Write-Host "[$(Get-Date -Format 'HH:mm:ss')] " -NoNewline -ForegroundColor Gray
+        Write-Host "MAIN GATEWAY " -NoNewline -ForegroundColor Red
+        Write-Host "CRASHED (fast detect)" -ForegroundColor White
+        Write-Host "  │ " -NoNewline -ForegroundColor Red
+        Write-Host "[1/3] Cleaning locks..." -NoNewline -ForegroundColor Red
+        $lockDir = "$env:TEMP\openclaw"
+        if (Test-Path $lockDir) {
+            Get-ChildItem $lockDir -Filter "gateway.*.lock" -ErrorAction SilentlyContinue |
+                ForEach-Object { Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue }
+        }
+        Write-Host " done" -ForegroundColor DarkGray
+        Write-Host "  │ " -NoNewline -ForegroundColor Red
+        Write-Host "[2/3] Starting new instance..." -NoNewline -ForegroundColor Red
+        $psi2r = New-Object System.Diagnostics.ProcessStartInfo
+        $psi2r.FileName = "cmd.exe"
+        $psi2r.Arguments = "/k set OPENCLAW_DISABLE_BONJOUR=1 && `"$NODE`" `"$OPENCLAW_MJS`" gateway --force"
+        $psi2r.WorkingDirectory = $WORKDIR
+        $psi2r.UseShellExecute = $true
+        $psi2r.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Minimized
+        $script:p2 = [System.Diagnostics.Process]::Start($psi2r)
+        Write-Host " pid=$($script:p2.Id)" -ForegroundColor DarkGray
+        Write-Host "  │ " -NoNewline -ForegroundColor Red
+        Write-Host "[3/3] Waiting for port 18789..." -NoNewline -ForegroundColor Red
+        if (Wait-ForPort 18789 45) {
+            Write-Host " OK" -ForegroundColor Green
+            Write-Host "  │ " -NoNewline -ForegroundColor Red
+            Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Recovered" -ForegroundColor Green
+            $mainFailCount = 0
+            if ($script:gwToken -and $script:gwToken -ne "no_change") { 
+                cmd /c start "" "http://127.0.0.1:18789/?token=$($script:gwToken)" 2>$null
+            }
+        } else { 
+            Write-Host " FAILED" -ForegroundColor Red
+            Write-Host "  │ " -NoNewline -ForegroundColor Red
+            Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Restart failed!" -ForegroundColor Red
+        }
+        Write-Host "  └─────────────────────────────────────────────────" -ForegroundColor Red
+        Write-Host ""
+    }
+    
     Start-Sleep 2
 }
 

@@ -100,7 +100,9 @@ SESSION_MAX_FILES = 50
 STICKY_SESSION_KEYS = ["agent:main:main"]
 
 # Sticky session is reset if older than this (seconds)
-STICKY_RESET_AGE_S = 4 * 3600  # 4 hours
+# Daily reset ensures fresh context while dailyMemory preserves important info
+# Based on sessionStartedAt (creation time), not updatedAt
+STICKY_RESET_AGE_S = 8 * 3600  # 8 hours (reset on next startup after a work day)
 
 # Sticky session with pendingFinalDelivery is removed if pending older than this
 PENDING_DELIVERY_MAX_AGE_S = 30 * 60  # 30 minutes
@@ -184,14 +186,16 @@ def _cleanup_sessions():
                                 total_fixed += 1
                                 continue
 
-                        # Rule 3: sticky sessions (webchat main) - reset if stale
-                        # This prevents OpenClaw from reusing old sessions that may be corrupted
-                        if key in STICKY_SESSION_KEYS and last_active > 0:
-                            age_ms = now_ms - last_active
-                            if age_ms > STICKY_RESET_AGE_S * 1000:
-                                keys_to_remove.append(key)
-                                total_reset += 1
-                                continue
+                        # Rule 3: sticky sessions (webchat main) - reset if session is old
+                        # Uses sessionStartedAt (creation time) not updatedAt (which refreshes on every interaction)
+                        if key in STICKY_SESSION_KEYS:
+                            session_started = entry.get("sessionStartedAt", 0)
+                            if session_started > 0:
+                                session_age_ms = now_ms - session_started
+                                if session_age_ms > STICKY_RESET_AGE_S * 1000:
+                                    keys_to_remove.append(key)
+                                    total_reset += 1
+                                    continue
 
                         # Rule 4: sticky sessions with stuck pending delivery
                         # If pendingFinalDelivery exists and is older than threshold, remove
@@ -348,16 +352,25 @@ def _sync_sub_agent_models(config, sub_agents, all_models_map, fallback_models, 
 
             effective_model = main_agent_models.get(agent_id) or primary_model
 
+            # Fix agent name/emoji in sub-agent config (same protection as main config)
+            for a in sub_cfg.get("agents", {}).get("list", []):
+                if a.get("id") == agent_id:
+                    correct_name = AGENT_NAMES.get(agent_id)
+                    if correct_name and a.get("name") != correct_name:
+                        a["name"] = correct_name
+                    correct_emoji = AGENT_EMOJIS.get(agent_id)
+                    if correct_emoji:
+                        current_emoji = a.get("identity", {}).get("emoji", "")
+                        if current_emoji != correct_emoji:
+                            a.setdefault("identity", {})["emoji"] = correct_emoji
+                    a["model"] = effective_model
+                    break
+
             # Update sub-agent config
             sub_cfg.setdefault("agents", {}).setdefault("defaults", {}).setdefault("model", {})
             sub_cfg["agents"]["defaults"]["models"] = all_models_map
             sub_cfg["agents"]["defaults"]["model"]["fallbacks"] = fallback_models
-
-            # Sync model from main config
-            for a in sub_cfg.get("agents", {}).get("list", []):
-                if a.get("id") == agent_id:
-                    a["model"] = effective_model
-                    break
+            sub_cfg["agents"]["defaults"]["model"]["primary"] = effective_model
 
             with open(cfg_path, "w", encoding="utf-8") as f:
                 json.dump(sub_cfg, f, indent=4, ensure_ascii=False)
@@ -566,6 +579,7 @@ def sync():
             sub_cfg.setdefault("agents", {}).setdefault("defaults", {}).setdefault("model", {})
             sub_cfg["agents"]["defaults"]["models"] = all_models_map
             sub_cfg["agents"]["defaults"]["model"]["fallbacks"] = fallback_models
+            sub_cfg["agents"]["defaults"]["model"]["primary"] = effective_model
 
             # Always enforce correct model
             for a in sub_cfg.get("agents", {}).get("list", []):
