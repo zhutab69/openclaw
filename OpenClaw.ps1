@@ -6,6 +6,8 @@ $host.UI.RawUI.WindowTitle = "OpenClaw Launcher"
 
 $NODE = "D:\Kiro\testopenclaw\node-v22.22.1-win-x64\node.exe"
 $OPENCLAW_MJS = "D:\Kiro\testopenclaw\node-v22.22.1-win-x64\node_modules\openclaw\openclaw.mjs"
+# openclaw 包目录（供 Bot Review 扫描内置 skill 用，避免技能页只显示自定义 skill）
+$OPENCLAW_PKG_DIR = Split-Path $OPENCLAW_MJS -Parent
 $WORKDIR = "D:\Kiro\testopenclaw"
 $OPENCLAW_CONFIG = "C:\Users\zhuyulin\.openclaw\openclaw.json"
 
@@ -271,7 +273,7 @@ $script:pMultiAgent = [System.Diagnostics.Process]::Start($psiMA)
 
 $psiBot = New-Object System.Diagnostics.ProcessStartInfo
 $psiBot.FileName = "cmd.exe"
-$psiBot.Arguments = "/c set PORT=8900&& set OPENCLAW_HOME=$env:USERPROFILE\.openclaw&& set NODE_ENV=production&& `"$NODE`" `"D:\Kiro\testopenclaw\OpenClaw-bot-review\.next\standalone\server.js`""
+$psiBot.Arguments = "/c set PORT=8900&& set HOSTNAME=127.0.0.1&& set OPENCLAW_HOME=$env:USERPROFILE\.openclaw&& set OPENCLAW_PACKAGE_DIR=$OPENCLAW_PKG_DIR&& set OPENCLAW_ALLOW_UNAUTHENTICATED_LOCAL_OPERATOR_UI=true&& set NODE_ENV=production&& `"$NODE`" `"D:\Kiro\testopenclaw\OpenClaw-bot-review\.next\standalone\server.js`""
 $psiBot.WorkingDirectory = "D:\Kiro\testopenclaw\OpenClaw-bot-review\.next\standalone"
 $psiBot.UseShellExecute = $false
 $psiBot.CreateNoWindow = $true
