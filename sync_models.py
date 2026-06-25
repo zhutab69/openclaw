@@ -36,6 +36,10 @@ AGENT_EMOJIS = {
 # sync_models.py only protects names/emojis from config.patch encoding corruption,
 # it does NOT override model assignments.
 AGENT_MODELS = {}
+
+# OpenClaw 运行时故障转移链最大长度（不含 primary）。上游网络中断时，过长的 fallback 会逐一超时，
+# 把单次失败拖到数分钟。3 个足以覆盖"某个模型临时不可用"，又不至于在整体不可达时雪崩。
+MAX_FALLBACK_MODELS = int(os.environ.get("MAX_FALLBACK_MODELS", "3"))
 def _load_config():
     """Load main openclaw.json."""
     with open(MAIN_CONFIG, "r", encoding="utf-8-sig") as f:
@@ -93,7 +97,9 @@ def _load_sub_agents(config):
 SESSION_MAX_AGE_S = 2 * 3600  # 2 hours
 
 # Keep at most this many .jsonl files per agent
-SESSION_MAX_FILES = 50
+# B3 rollup (stats-daily.json) preserves统计数据，删文件不再丢统计，
+# 因此原始 session 文件保持精简以最小化启动加载；此值仅影响 session 详情可回溯条数。
+SESSION_MAX_FILES = 100
 
 # Session keys that should be reset (new session created) on startup
 # These are "sticky" sessions that OpenClaw reuses for webchat/wecom
@@ -330,6 +336,188 @@ def _cleanup_sessions():
         print(f"[sessions] cleanup: {', '.join(parts)}")
 
 
+# ============================================================
+# Stats Rollup (B3) — 持久化每日统计，删 session 文件不丢统计
+# ============================================================
+# 设计：每个 agent 维护 stats-daily.json = {lockedByDay, files}
+#   - files[sid] = {mtime, byDay}  : 当前磁盘上存在的 session 文件的逐日统计（用于检测被删后归档）
+#   - lockedByDay[date] = {...}     : 已被删除文件的逐日统计（永久保留）
+# 维护逻辑（在 cleanup 之后运行，本轮被 cleanup 删除的文件立即归档，无可见性缺口）：
+#   1. tracked 中已不在磁盘的文件 → 把其 byDay 累加进 lockedByDay，并从 tracked 移除
+#   2. 磁盘上新增/mtime 变化的文件 → 重新解析 byDay 写入 tracked（mtime 未变则跳过，最小化启动开销）
+# Bot Review 端读取 = lockedByDay + 实时解析当前存在的文件（两者文件集互斥，不重复计数）。
+
+def _iso_to_ms(ts):
+    """Parse ISO timestamp string to epoch milliseconds. Returns None on failure."""
+    try:
+        from datetime import datetime
+        return datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp() * 1000
+    except Exception:
+        return None
+
+
+def _empty_day():
+    return {"input": 0, "output": 0, "messageCount": 0, "rtSum": 0, "rtCount": 0}
+
+
+def _merge_day(target, date, src):
+    d = target.setdefault(date, _empty_day())
+    d["input"] += src.get("input", 0)
+    d["output"] += src.get("output", 0)
+    d["messageCount"] += src.get("messageCount", 0)
+    d["rtSum"] += src.get("rtSum", 0)
+    d["rtCount"] += src.get("rtCount", 0)
+
+
+def _parse_session_by_day(filepath):
+    """Parse a session .jsonl into per-day stats.
+
+    Returns {date: {input, output, messageCount, rtSum, rtCount}}.
+    Mirrors Bot Review 的解析口径：token 来自 assistant.usage；
+    响应时间为 user → 下一个 stopReason=stop 的 assistant，区间 (0, 600000) ms。
+    """
+    by_day = {}
+    try:
+        with open(filepath, "r", encoding="utf-8") as f:
+            content = f.read().strip()
+    except Exception:
+        return by_day
+    if not content:
+        return by_day
+
+    messages = []  # (role, ts, stopReason)
+    for line in content.split("\n"):
+        try:
+            entry = json.loads(line)
+        except Exception:
+            continue
+        if entry.get("type") != "message":
+            continue
+        msg = entry.get("message")
+        ts = entry.get("timestamp")
+        if not msg or not ts:
+            continue
+        role = msg.get("role")
+        messages.append((role, ts, msg.get("stopReason")))
+        if role == "assistant" and msg.get("usage"):
+            date = ts[:10]
+            usage = msg["usage"]
+            d = by_day.setdefault(date, _empty_day())
+            d["input"] += usage.get("input", 0) or 0
+            d["output"] += usage.get("output", 0) or 0
+            d["messageCount"] += 1
+
+    last_user_ts = None
+    for role, ts, stop in messages:
+        if role == "user":
+            last_user_ts = ts
+        elif role == "assistant" and stop == "stop" and last_user_ts:
+            a = _iso_to_ms(ts)
+            u = _iso_to_ms(last_user_ts)
+            if a is not None and u is not None:
+                diff = a - u
+                if 0 < diff < 600000:
+                    date = last_user_ts[:10]
+                    d = by_day.setdefault(date, _empty_day())
+                    d["rtSum"] += diff
+                    d["rtCount"] += 1
+            last_user_ts = None
+    return by_day
+
+
+def _update_one_rollup(sess_dir):
+    """Maintain stats-daily.json for a single agent's sessions dir."""
+    rollup_path = os.path.join(os.path.dirname(sess_dir), "stats-daily.json")
+    rollup = {"lockedByDay": {}, "files": {}}
+    if os.path.isfile(rollup_path):
+        try:
+            with open(rollup_path, "r", encoding="utf-8-sig") as f:
+                loaded = json.load(f)
+            if isinstance(loaded, dict):
+                rollup["lockedByDay"] = loaded.get("lockedByDay", {}) or {}
+                rollup["files"] = loaded.get("files", {}) or {}
+        except Exception:
+            pass
+
+    locked = rollup["lockedByDay"]
+    tracked = rollup["files"]
+
+    # 当前磁盘上的 session 文件（排除 trajectory 与已删除标记）
+    present = {}
+    for fp in glob.glob(os.path.join(sess_dir, "*.jsonl")):
+        bn = os.path.basename(fp)
+        if ".trajectory." in bn or ".deleted." in bn:
+            continue
+        sid = bn[:-len(".jsonl")]
+        try:
+            present[sid] = os.path.getmtime(fp)
+        except Exception:
+            pass
+
+    changed = False
+
+    # Step 1: 已消失的 tracked 文件 → 归档到 locked
+    for sid in list(tracked.keys()):
+        if sid not in present:
+            for date, c in (tracked[sid].get("byDay") or {}).items():
+                _merge_day(locked, date, c)
+            del tracked[sid]
+            changed = True
+
+    # Step 2: 新增/变化的当前文件 → 解析写入 tracked（mtime 未变则跳过）
+    for sid, mtime in present.items():
+        prev = tracked.get(sid)
+        if prev and abs(float(prev.get("mtime", 0)) - mtime) < 0.001:
+            continue
+        tracked[sid] = {"mtime": mtime, "byDay": _parse_session_by_day(os.path.join(sess_dir, sid + ".jsonl"))}
+        changed = True
+
+    if changed:
+        try:
+            tmp = rollup_path + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(rollup, f, ensure_ascii=False)
+            os.replace(tmp, rollup_path)
+        except Exception:
+            pass
+    return changed
+
+
+def _update_stats_rollups():
+    """Update stats-daily.json for main + all sub-agents across instances.
+
+    Runs AFTER _cleanup_sessions so files trimmed this run are archived this run.
+    Iterates the correct per-profile instance dirs (sub-agents live in
+    ~/.openclaw-<profile>/agents/<agent-id>/sessions).
+    """
+    config = _load_config()
+    sub_agents = _load_sub_agents(config)  # {profile: agent_id}
+
+    dirs = []
+    main_dir = os.path.join(HOME, ".openclaw", "agents", "main", "sessions")
+    if os.path.isdir(main_dir):
+        dirs.append(main_dir)
+    for profile, agent_id in sub_agents.items():
+        sub_dir = os.path.join(HOME, f".openclaw-{profile}", "agents", agent_id, "sessions")
+        if os.path.isdir(sub_dir):
+            dirs.append(sub_dir)
+        else:
+            # Fallback: 同实例布局（向后兼容）
+            legacy = os.path.join(HOME, ".openclaw", "agents", agent_id, "sessions")
+            if os.path.isdir(legacy):
+                dirs.append(legacy)
+
+    updated = 0
+    for sess_dir in dirs:
+        try:
+            if _update_one_rollup(sess_dir):
+                updated += 1
+        except Exception:
+            pass
+    if updated:
+        print(f"[sessions] stats rollup updated: {updated} agent(s)")
+
+
 def _sync_sub_agent_models(config, sub_agents, all_models_map, fallback_models, primary_model):
     """Sync model assignments from main config to sub-agent configs.
     
@@ -414,6 +602,13 @@ def sync():
     except Exception as e:
         print(f"[sessions] cleanup error: {e}")
 
+    # Stats rollup (B3): archive per-day stats so trimmed/deleted sessions don't lose history.
+    # Runs AFTER cleanup so files trimmed this run are locked into stats-daily.json this run.
+    try:
+        _update_stats_rollups()
+    except Exception as e:
+        print(f"[sessions] stats rollup error: {e}")
+
     config = _load_config()
 
     # Fix agent names (encoding corruption from config.patch)
@@ -494,7 +689,10 @@ def sync():
         # Current primary no longer available, pick first
         primary_model = all_model_ids[0] if all_model_ids else None
 
-    fallback_models = [m for m in all_model_ids if m != primary_model]
+    # OpenClaw 运行时故障转移链：只取前 N 个，避免上游网络中断时逐一尝试全部模型
+    # 造成数分钟卡顿（所有模型共用同一 kiro-gw/Kiro 后端，后端不可达时多余的 fallback 只会拖慢失败）。
+    # 注意：agents.defaults.models（完整模型表）仍保留全部，kiro-gw 的 FALLBACK_MODELS 也不受影响。
+    fallback_models = [m for m in all_model_ids if m != primary_model][:MAX_FALLBACK_MODELS]
 
     # Check if anything changed
     old_models_map = config.get("agents", {}).get("defaults", {}).get("models", {})
