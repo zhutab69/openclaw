@@ -11,6 +11,19 @@ $OPENCLAW_PKG_DIR = Split-Path $OPENCLAW_MJS -Parent
 $WORKDIR = "D:\Kiro\testopenclaw"
 $OPENCLAW_CONFIG = "C:\Users\zhuyulin\.openclaw\openclaw.json"
 
+# External web server projects (single source of truth: webservers.json)
+# Both this launcher and the Multi-Agent dashboard read this file. Add projects there, no code change.
+$WEBSERVERS_JSON = "$env:USERPROFILE\.openclaw\workspace\webservers.json"
+$script:webServers = @()
+$script:webProcs = @()
+try {
+    if (Test-Path $WEBSERVERS_JSON) {
+        $wsCfg = Get-Content $WEBSERVERS_JSON -Raw -Encoding UTF8 | ConvertFrom-Json
+        if ($wsCfg.webservers) { $script:webServers = @($wsCfg.webservers) }
+    }
+} catch {}
+$script:webPorts = @($script:webServers | ForEach-Object { $_.port } | Where-Object { $_ })
+
 # Allow model prewarm at startup (populates in-memory registry, avoids 20-30s delay on first request)
 # $env:OPENCLAW_SKIP_STARTUP_MODEL_PREWARM = "1"  # DISABLED - causes 20-30s cold start on first request
 
@@ -66,6 +79,14 @@ function Cleanup {
     if ($script:pMultiAgent -and !$script:pMultiAgent.HasExited) { $script:pMultiAgent.Kill() }
     if ($script:pBot -and !$script:pBot.HasExited) { $script:pBot.Kill() }
     
+    if ($script:webProcs) {
+        foreach ($proc in $script:webProcs) {
+            if ($proc -and !$proc.HasExited) {
+                cmd /c "taskkill /F /T /PID $($proc.Id) >nul 2>&1"
+            }
+        }
+    }
+    
     if ($script:subCmdProcs) {
         foreach ($proc in $script:subCmdProcs) {
             if ($proc -and !$proc.HasExited) {
@@ -74,7 +95,7 @@ function Cleanup {
         }
     }
     
-    $targetPorts = @(18789, 8899, 8900, 9000) + ($script:agentPorts.Values | Where-Object { $_ })
+    $targetPorts = @(18789, 8899, 8900, 9000) + ($script:agentPorts.Values | Where-Object { $_ }) + $script:webPorts
     $lines = cmd /c "netstat -ano 2>nul"
     foreach ($line in $lines) {
         if ($line -notmatch "LISTENING") { continue }
@@ -154,7 +175,7 @@ try {
 }
 
 # Cleanup stale processes
-$targetPorts = @(18789, 8899, 8900, 9000) + ($script:agentPorts.Values | Where-Object { $_ })
+$targetPorts = @(18789, 8899, 8900, 9000) + ($script:agentPorts.Values | Where-Object { $_ }) + $script:webPorts
 $pidsToKill = @()
 $lines = cmd /c "netstat -ano 2>nul"
 foreach ($line in $lines) {
@@ -279,6 +300,28 @@ $psiBot.UseShellExecute = $false
 $psiBot.CreateNoWindow = $true
 $script:pBot = [System.Diagnostics.Process]::Start($psiBot)
 
+# External web server projects (from webservers.json): rental 8901, spider-monitor 8902, ...
+$script:webProcs = @()
+foreach ($ws in $script:webServers) {
+    try {
+        # 防御：启动前释放该端口，避免上次未正常关闭导致的残留占用
+        $wsLines = cmd /c "netstat -ano 2>nul"
+        foreach ($wsLine in $wsLines) {
+            if ($wsLine -match "LISTENING" -and $wsLine -match ":$($ws.port)\s" -and $wsLine -match '\s(\d+)\s*$') {
+                Stop-Process -Id $Matches[1] -Force -ErrorAction SilentlyContinue
+            }
+        }
+        $psiWs = New-Object System.Diagnostics.ProcessStartInfo
+        $psiWs.FileName = $NODE
+        $psiWs.Arguments = "`"$($ws.script)`""
+        $psiWs.WorkingDirectory = $ws.cwd
+        $psiWs.UseShellExecute = $false
+        $psiWs.CreateNoWindow = $true
+        $psiWs.EnvironmentVariables["PORT"] = "$($ws.port)"
+        $script:webProcs += [System.Diagnostics.Process]::Start($psiWs)
+    } catch {}
+}
+
 # mcporter daemon
 try {
     $daemonStatus = cmd /c "mcporter daemon status 2>&1"
@@ -305,6 +348,9 @@ foreach ($agent in $subAgents) {
         $name = ($agent.id -replace '-agent$', '')
         $portNames[$port] = $name.Substring(0,1).ToUpper() + $name.Substring(1)
     }
+}
+foreach ($ws in $script:webServers) {
+    if ($ws.port) { $allPorts += $ws.port; $portNames[$ws.port] = $ws.name }
 }
 
 $totalPorts = $allPorts.Count
@@ -409,13 +455,25 @@ $t0 = Get-Date
 Write-Host "[5/5] Opening browsers..." -NoNewline
 
 try {
-    if ($script:gwToken -and $script:gwToken -ne "no_change") {
-        cmd /c start "" "http://127.0.0.1:18789/?token=$($script:gwToken)" 2>$null
+    $gwUrl = if ($script:gwToken -and $script:gwToken -ne "no_change") { "http://127.0.0.1:18789/?token=$($script:gwToken)" } else { "http://127.0.0.1:18789/" }
+    $openUrls = @($gwUrl, "http://127.0.0.1:8899/", "http://127.0.0.1:8900/")
+    $openUrls += @($script:webServers | ForEach-Object { $_.url } | Where-Object { $_ })
+
+    # Open ALL tabs in ONE default-browser invocation (avoids cold-start tab race / blank tabs)
+    $browserExe = $null
+    try {
+        $progId = (Get-ItemProperty "HKCU:\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\http\UserChoice" -ErrorAction Stop).ProgId
+        $openCmd = (Get-ItemProperty "Registry::HKEY_CLASSES_ROOT\$progId\shell\open\command" -ErrorAction Stop)."(default)"
+        if ($openCmd -match '"([^"]+\.exe)"') { $browserExe = $Matches[1] }
+        elseif ($openCmd -match '^\s*([^"\s]+\.exe)') { $browserExe = $Matches[1] }
+    } catch {}
+
+    if ($browserExe -and (Test-Path $browserExe)) {
+        Start-Process -FilePath $browserExe -ArgumentList $openUrls -ErrorAction SilentlyContinue
     } else {
-        cmd /c start "" "http://127.0.0.1:18789/" 2>$null
+        # Fallback: open one by one with spacing
+        foreach ($u in $openUrls) { cmd /c start "" "$u" 2>$null; Start-Sleep -Milliseconds 800 }
     }
-    Start-Process "http://127.0.0.1:8899/" -ErrorAction SilentlyContinue
-    Start-Process "http://127.0.0.1:8900/" -ErrorAction SilentlyContinue
     Write-Host " done ($(Elapsed $t0))" -ForegroundColor Green
 } catch {
     Write-Host " partial ($(Elapsed $t0))" -ForegroundColor Yellow
@@ -444,6 +502,7 @@ Write-Host ""
 Write-Host "  Main Dashboard: http://127.0.0.1:18789/" -ForegroundColor Cyan
 Write-Host "  Multi-Agent:    http://127.0.0.1:8899" -ForegroundColor Cyan
 Write-Host "  Bot Review:     http://127.0.0.1:8900" -ForegroundColor Cyan
+foreach ($ws in $script:webServers) { Write-Host "  $($ws.name): $($ws.url)" -ForegroundColor Cyan }
 Write-Host ""
 Write-Host "  Press any key to stop all services" -ForegroundColor DarkGray
 Write-Host ""
