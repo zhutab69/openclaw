@@ -113,6 +113,10 @@ STICKY_RESET_AGE_S = 8 * 3600  # 8 hours (reset on next startup after a work day
 # Sticky session with pendingFinalDelivery is removed if pending older than this
 PENDING_DELIVERY_MAX_AGE_S = 30 * 60  # 30 minutes
 
+# Terminal deliveries older than this cannot be safely replayed. Clear only their
+# pending-delivery fields while preserving the session and its transcript.
+TERMINAL_PENDING_DELIVERY_MAX_AGE_S = 2 * 3600  # 2 hours
+
 # Subagent/dashboard entries with abortedLastRun=True are orphan-recovery candidates;
 # remove them if older than this regardless of status
 ORPHAN_CANDIDATE_MAX_AGE_S = 3600  # 1 hour
@@ -154,6 +158,7 @@ def _cleanup_sessions():
     now_s = time.time()
     total_fixed = 0
     total_reset = 0
+    total_pending_cleared = 0
     total_deleted = 0
     total_locks = 0
 
@@ -177,6 +182,24 @@ def _cleanup_sessions():
                         last_active = entry.get("updatedAt", 0) or entry.get("lastInteractionAt", 0)
                         pending_created = entry.get("pendingFinalDeliveryCreatedAt", 0)
                         has_pending = bool(entry.get("pendingFinalDelivery") or entry.get("pendingPayload"))
+
+                        # Rule 0: terminal pending deliveries older than two hours are
+                        # stale recovery records. Preserve the session/transcript, but
+                        # remove only delivery fields so they cannot replay to a now
+                        # invalid channel target on every Gateway restart.
+                        if (
+                            has_pending
+                            and status in ("done", "failed", "timeout")
+                            and pending_created > 0
+                            and now_ms - pending_created > TERMINAL_PENDING_DELIVERY_MAX_AGE_S * 1000
+                        ):
+                            for pending_field in tuple(entry):
+                                if pending_field.startswith("pendingFinalDelivery") or pending_field == "pendingPayload":
+                                    entry.pop(pending_field, None)
+                            has_pending = False
+                            pending_created = 0
+                            total_pending_cleared += 1
+                            modified = True
 
                         # Rule 1: running + aborted → remove key entirely (zombie from crash)
                         if status == "running" and aborted:
@@ -328,6 +351,8 @@ def _cleanup_sessions():
         parts.append(f"fixed={total_fixed}")
     if total_reset:
         parts.append(f"reset={total_reset}")
+    if total_pending_cleared:
+        parts.append(f"stale_pending_deliveries={total_pending_cleared}")
     if total_deleted:
         parts.append(f"trimmed={total_deleted}")
     if total_locks:
@@ -578,16 +603,29 @@ def _fetch_models(base_url, api_key=None, timeout=10):
         models = []
         for m in resp.get("data", []):
             mid = m.get("id", "")
-            # Skip virtual/alias models
+            # Skip virtual/alias models. GPT-5.6 is intentionally included in
+            # the visible model list for manual selection, but excluded below
+            # from automatic fallback selection.
             if mid.startswith("auto") or mid == "auto-kiro" or not mid:
                 continue
+            if m.get("metadata_source") != "upstream":
+                return [], f"model metadata for {mid} is {m.get('metadata_source', 'missing')}; preserving existing configuration"
+            context_window = m.get("context_window")
+            max_tokens = m.get("max_tokens")
+            input_modes = m.get("input")
+            if not isinstance(context_window, int) or context_window <= 0:
+                return [], f"model metadata for {mid} has no valid context_window; preserving existing configuration"
+            if not isinstance(max_tokens, int) or max_tokens <= 0:
+                return [], f"model metadata for {mid} has no valid max_tokens; preserving existing configuration"
+            if not isinstance(input_modes, list) or not input_modes or not all(isinstance(mode, str) for mode in input_modes):
+                return [], f"model metadata for {mid} has no valid input modes; preserving existing configuration"
             models.append({
                 "id": mid,
                 "name": m.get("name", mid),
                 "reasoning": True,
-                "input": ["text", "image"],
-                "contextWindow": m.get("context_window", 200000),
-                "maxTokens": m.get("max_tokens", 64000),
+                "input": input_modes,
+                "contextWindow": context_window,
+                "maxTokens": max_tokens,
             })
         return models, None
     except Exception as e:
@@ -614,13 +652,6 @@ def sync():
     # Fix agent names (encoding corruption from config.patch)
     if _fix_agent_names(config):
         # Save immediately so names are correct for this run
-        with open(MAIN_CONFIG, "w", encoding="utf-8") as f:
-            json.dump(config, f, indent=2, ensure_ascii=False)
-
-    # Also protect defaults.model.primary
-    defaults_primary = config.get("agents", {}).get("defaults", {}).get("model", {}).get("primary", "")
-    if defaults_primary != "kiro-gw/claude-sonnet-4.6":
-        config.setdefault("agents", {}).setdefault("defaults", {}).setdefault("model", {})["primary"] = "kiro-gw/claude-sonnet-4.6"
         with open(MAIN_CONFIG, "w", encoding="utf-8") as f:
             json.dump(config, f, indent=2, ensure_ascii=False)
 
@@ -676,23 +707,39 @@ def sync():
         print("SKIP: no models available from any provider")
         return
 
-    # Determine primary model and fallbacks
-    # Use existing primary if still valid, otherwise pick first available
+    # Preserve the configured default when valid. If it disappeared, prefer the
+    # dynamically configured main-agent model before falling back to the first model.
     current_primary = (
         config.get("agents", {}).get("defaults", {}).get("model", {}).get("primary", "")
+    )
+    main_agent_model = next(
+        (
+            agent.get("model", "")
+            for agent in config.get("agents", {}).get("list", [])
+            if agent.get("id") == "main"
+        ),
+        "",
     )
     all_model_ids = list(all_models_map.keys())
 
     if current_primary in all_model_ids:
         primary_model = current_primary
+    elif main_agent_model in all_model_ids:
+        primary_model = main_agent_model
     else:
-        # Current primary no longer available, pick first
         primary_model = all_model_ids[0] if all_model_ids else None
 
     # OpenClaw 运行时故障转移链：只取前 N 个，避免上游网络中断时逐一尝试全部模型
     # 造成数分钟卡顿（所有模型共用同一 kiro-gw/Kiro 后端，后端不可达时多余的 fallback 只会拖慢失败）。
+    # GPT-5.6 remains visible for manual selection but is deliberately excluded
+    # from automatic fallback because it is not part of the stable runtime path.
     # 注意：agents.defaults.models（完整模型表）仍保留全部，kiro-gw 的 FALLBACK_MODELS 也不受影响。
-    fallback_models = [m for m in all_model_ids if m != primary_model][:MAX_FALLBACK_MODELS]
+    fallback_models = [
+        model_id
+        for model_id in all_model_ids
+        if model_id != primary_model
+        and not model_id.rsplit("/", 1)[-1].lower().startswith("gpt-5.6")
+    ][:MAX_FALLBACK_MODELS]
 
     # Check if anything changed
     old_models_map = config.get("agents", {}).get("defaults", {}).get("models", {})
@@ -709,7 +756,8 @@ def sync():
             new_provider_model_ids.add(m.get("id", ""))
 
     models_changed = (
-        old_provider_model_ids != new_provider_model_ids
+        current_primary != primary_model
+        or old_provider_model_ids != new_provider_model_ids
         or old_models_map != all_models_map
         or old_fallbacks != fallback_models
     )

@@ -35,6 +35,91 @@ function Elapsed($start) {
     return "$([math]::Round($ms/1000, 2))s"
 }
 
+function Show-LaunchProgress {
+    param(
+        [int]$Percent,
+        [string]$Status,
+        [switch]$Complete,
+        [switch]$Warning
+    )
+
+    $Percent = [math]::Max(0, [math]::Min(100, $Percent))
+    $activity = "[3/5] Launch all services..."
+    $indicator = if ($Complete) { if ($Warning) { "!" } else { "OK" } } else {
+        $frames = @("|", "/", "-", "\")
+        $frame = $frames[$script:launchSpinnerFrame % $frames.Count]
+        $script:launchSpinnerFrame++
+        $frame
+    }
+
+    # Kiro records carriage-return redraws as separate text fragments and renders
+    # Write-Progress at the top of the window. On a real Windows console, reserve
+    # the current row and repaint it through the screen-buffer API instead.
+    try {
+        if ($script:launchProgressConsoleMode -ne $false -and -not [Console]::IsOutputRedirected) {
+            $width = [Console]::WindowWidth
+            if ($width -lt 60) { throw "Console is too narrow for an inline progress row" }
+
+            $barWidth = [math]::Min(30, [math]::Max(10, $width - 56))
+            $filled = [int][math]::Round(($Percent / 100) * $barWidth)
+            $bar = ("█" * $filled) + ("." * ($barWidth - $filled))
+            $prefix = "[3/5] Launch: [$bar] $Percent% $indicator "
+            $maxStatusLength = [math]::Max(0, $width - 1 - $prefix.Length)
+            $shortStatus = [string]$Status
+            if ($shortStatus.Length -gt $maxStatusLength) {
+                $shortStatus = if ($maxStatusLength -gt 3) {
+                    $shortStatus.Substring(0, $maxStatusLength - 3) + "..."
+                } else {
+                    $shortStatus.Substring(0, $maxStatusLength)
+                }
+            }
+            $line = ($prefix + $shortStatus)
+            if ($line.Length -gt $width - 1) { $line = $line.Substring(0, $width - 1) }
+            $line = $line.PadRight($width - 1)
+
+            if (-not $script:launchProgressConsoleActive) {
+                $script:launchProgressConsoleRow = [Console]::CursorTop
+                [Console]::Write($line)
+                $script:launchProgressConsoleActive = $true
+            } else {
+                $restoreLeft = [Console]::CursorLeft
+                $restoreTop = [Console]::CursorTop
+                [Console]::SetCursorPosition(0, $script:launchProgressConsoleRow)
+                [Console]::Write($line)
+                if ($Complete) {
+                    $nextRow = [math]::Min($script:launchProgressConsoleRow + 1, [Console]::BufferHeight - 1)
+                    [Console]::SetCursorPosition(0, $nextRow)
+                    $script:launchProgressConsoleActive = $false
+                } else {
+                    [Console]::SetCursorPosition($restoreLeft, $restoreTop)
+                }
+            }
+
+            if ($Complete -and $script:launchProgressConsoleActive) {
+                $nextRow = [math]::Min($script:launchProgressConsoleRow + 1, [Console]::BufferHeight - 1)
+                [Console]::SetCursorPosition(0, $nextRow)
+                $script:launchProgressConsoleActive = $false
+            }
+            return
+        }
+    } catch {
+        # Fall through once to durable text-only status when the host exposes no
+        # Windows console screen buffer (for example, redirected output).
+        $script:launchProgressConsoleMode = $false
+        $script:launchProgressConsoleActive = $false
+    }
+
+    if (-not $script:launchProgressStarted) {
+        Write-Host "$activity starting"
+        $script:launchProgressStarted = $true
+    }
+    if ($Complete) {
+        $bar = "█" * 30
+        Write-Host "$activity [$bar] $Percent% $indicator $Status"
+        $script:launchProgressStarted = $false
+    }
+}
+
 function Wait-ForPort($port, $timeoutSec = 30) {
     $deadline = (Get-Date).AddSeconds($timeoutSec)
     while ((Get-Date) -lt $deadline) {
@@ -57,6 +142,178 @@ function Wait-ForHealth($url, $timeoutSec = 30) {
         } catch { Start-Sleep -Milliseconds 500 }
     }
     return $false
+}
+
+# Sub-agent gateways expose a lightweight, unauthenticated liveness endpoint.
+# Do not use `openclaw --profile ... health` here: OPENCLAW_GATEWAY_PORT can
+# redirect it to the main gateway, and auth.mode=none still requires a device
+# identity for WebSocket RPC in OpenClaw 2026.5.7.
+function Test-SubAgentHealth($port) {
+    try {
+        $health = Invoke-RestMethod -Uri "http://127.0.0.1:$port/health" -TimeoutSec 2 -ErrorAction Stop
+        return ($health.ok -eq $true -and $health.status -in @("live", "healthy"))
+    } catch {
+        return $false
+    }
+}
+
+function Wait-ForSubAgentHealth($port, $timeoutSec = 45) {
+    $deadline = (Get-Date).AddSeconds($timeoutSec)
+    while ((Get-Date) -lt $deadline) {
+        if (Test-SubAgentHealth $port) { return $true }
+        Start-Sleep -Milliseconds 500
+    }
+    return $false
+}
+
+function Test-OpenClawConfig {
+    $proc = $null
+    try {
+        $psi = New-Object System.Diagnostics.ProcessStartInfo
+        $psi.FileName = $NODE
+        $psi.Arguments = "`"$OPENCLAW_MJS`" config validate"
+        $psi.WorkingDirectory = $WORKDIR
+        $psi.UseShellExecute = $false
+        $psi.CreateNoWindow = $true
+        $psi.RedirectStandardOutput = $true
+        $psi.RedirectStandardError = $true
+        $proc = [System.Diagnostics.Process]::Start($psi)
+        $stdoutTask = $proc.StandardOutput.ReadToEndAsync()
+        $stderrTask = $proc.StandardError.ReadToEndAsync()
+        if (-not $proc.WaitForExit(20000)) {
+            $proc.Kill()
+            $proc.WaitForExit(2000) | Out-Null
+            return [pscustomobject]@{ Ok = $false; Message = "config validation timed out" }
+        }
+        $stdout = $stdoutTask.GetAwaiter().GetResult().Trim()
+        $stderr = $stderrTask.GetAwaiter().GetResult().Trim()
+        $message = if ($stderr) { $stderr } else { $stdout }
+        return [pscustomobject]@{ Ok = ($proc.ExitCode -eq 0); Message = $message }
+    } catch {
+        return [pscustomobject]@{ Ok = $false; Message = $_.Exception.Message }
+    } finally {
+        if ($proc) { $proc.Dispose() }
+    }
+}
+
+function Test-OpenClawReady($profile = "", $requireChannels = $false) {
+    $proc = $null
+    try {
+        $profileArgs = if ($profile) { "--profile `"$profile`" " } else { "" }
+        $psi = New-Object System.Diagnostics.ProcessStartInfo
+        $psi.FileName = $NODE
+        $psi.Arguments = "`"$OPENCLAW_MJS`" ${profileArgs}health --json"
+        $psi.WorkingDirectory = $WORKDIR
+        $psi.UseShellExecute = $false
+        $psi.CreateNoWindow = $true
+        $psi.RedirectStandardOutput = $true
+        $psi.RedirectStandardError = $true
+        $proc = [System.Diagnostics.Process]::Start($psi)
+        $stdoutTask = $proc.StandardOutput.ReadToEndAsync()
+        $stderrTask = $proc.StandardError.ReadToEndAsync()
+        if (-not $proc.WaitForExit(12000)) {
+            $proc.Kill()
+            $proc.WaitForExit(2000) | Out-Null
+            return $false
+        }
+        $output = $stdoutTask.GetAwaiter().GetResult().Trim()
+        $null = $stderrTask.GetAwaiter().GetResult()
+        if ($proc.ExitCode -ne 0) { return $false }
+        $jsonStart = $output.IndexOf('{')
+        if ($jsonStart -gt 0) { $output = $output.Substring($jsonStart) }
+        $health = $output | ConvertFrom-Json
+        if (-not $health.ok) { return $false }
+        if ($requireChannels -and $health.channels) {
+            foreach ($channel in $health.channels.PSObject.Properties) {
+                $status = $channel.Value
+                if ($status.enabled -and $status.configured -and -not $status.running) { return $false }
+            }
+        }
+        return $true
+    } catch {
+        return $false
+    } finally {
+        if ($proc) { $proc.Dispose() }
+    }
+}
+
+function Wait-ForOpenClawReady($profile = "", $timeoutSec = 60, $requireChannels = $false) {
+    $deadline = (Get-Date).AddSeconds($timeoutSec)
+    while ((Get-Date) -lt $deadline) {
+        if (Test-OpenClawReady $profile $requireChannels) { return $true }
+        Start-Sleep -Milliseconds 1000
+    }
+    return $false
+}
+
+function Start-SubAgentGateway($agent, [switch]$Background) {
+    if ($Background) {
+        $psi = New-Object System.Diagnostics.ProcessStartInfo
+        $psi.FileName = $NODE
+        $psi.Arguments = "`"$OPENCLAW_MJS`" --profile `"$($agent.profile)`" gateway --force"
+        $psi.WorkingDirectory = $WORKDIR
+        $psi.UseShellExecute = $false
+        $psi.CreateNoWindow = $true
+        $psi.EnvironmentVariables["OPENCLAW_DISABLE_BONJOUR"] = "1"
+        return [System.Diagnostics.Process]::Start($psi)
+    }
+
+    $cmdArgs = "/c title $($agent.id) && set OPENCLAW_DISABLE_BONJOUR=1 && `"$NODE`" `"$OPENCLAW_MJS`" --profile `"$($agent.profile)`" gateway --force"
+    return Start-Process "cmd.exe" -ArgumentList $cmdArgs -WorkingDirectory $WORKDIR -WindowStyle Minimized -PassThru
+}
+
+function Stop-SubAgentProcessTree($process) {
+    try {
+        if ($process -and -not $process.HasExited) {
+            cmd /c "taskkill /F /T /PID $($process.Id) >nul 2>&1"
+            return $true
+        }
+    } catch {}
+    return $false
+}
+
+function Get-KiroProbeConfig {
+    try {
+        $cfg = Get-Content $OPENCLAW_CONFIG -Raw -Encoding UTF8 | ConvertFrom-Json
+        $availableModels = @(
+            $cfg.agents.defaults.models.PSObject.Properties | ForEach-Object { $_.Name }
+        )
+        $mainAgent = @($cfg.agents.list | Where-Object { $_.id -eq "main" }) | Select-Object -First 1
+        $candidates = @($mainAgent.model, $cfg.agents.defaults.model.primary)
+        $modelRef = $null
+        foreach ($candidate in $candidates) {
+            if ($candidate -and ($availableModels.Count -eq 0 -or $availableModels -contains [string]$candidate)) {
+                $modelRef = [string]$candidate
+                break
+            }
+        }
+        if (-not $modelRef -and $availableModels.Count -gt 0) { $modelRef = [string]$availableModels[0] }
+        if (-not $modelRef) { throw "No probe model is configured" }
+
+        $modelParts = $modelRef -split '/', 2
+        if ($modelParts.Count -eq 2) {
+            $providerId = $modelParts[0]
+            $modelId = $modelParts[1]
+        } else {
+            $providerId = @($cfg.models.providers.PSObject.Properties | ForEach-Object { $_.Name })[0]
+            $modelId = $modelRef
+        }
+        $providerProperty = $cfg.models.providers.PSObject.Properties |
+            Where-Object { $_.Name -eq $providerId } | Select-Object -First 1
+        if (-not $providerProperty) { throw "Provider '$providerId' is not configured" }
+        $provider = $providerProperty.Value
+        $baseUrl = ([string]$provider.baseUrl).TrimEnd('/')
+        if (-not $baseUrl) { throw "Provider '$providerId' has no baseUrl" }
+
+        return [pscustomobject]@{
+            Model = $modelId
+            Uri = "$baseUrl/chat/completions"
+            ApiKey = [string]$provider.apiKey
+        }
+    } catch {
+        Write-Host "  [WARN] Kiro probe config unavailable: $($_.Exception.Message)" -ForegroundColor Yellow
+        return $null
+    }
 }
 
 function Cleanup {
@@ -87,12 +344,20 @@ function Cleanup {
         }
     }
     
-    if ($script:subCmdProcs) {
-        foreach ($proc in $script:subCmdProcs) {
-            if ($proc -and !$proc.HasExited) {
-                cmd /c "taskkill /F /T /PID $($proc.Id) >nul 2>&1"
+    # Stop both initial windowed cmd wrappers and the current background Node roots.
+    $subAgentProcesses = @()
+    if ($script:subCmdProcs) { $subAgentProcesses += @($script:subCmdProcs) }
+    if ($script:subAgentStates) {
+        $subAgentProcesses += @($script:subAgentStates.Values | ForEach-Object { $_.Process })
+    }
+    $seenSubAgentPids = @{}
+    foreach ($proc in $subAgentProcesses) {
+        try {
+            if ($proc -and -not $proc.HasExited -and -not $seenSubAgentPids.ContainsKey($proc.Id)) {
+                $seenSubAgentPids[$proc.Id] = $true
+                Stop-SubAgentProcessTree $proc | Out-Null
             }
-        }
+        } catch {}
     }
     
     $targetPorts = @(18789, 8899, 8900, 9000) + ($script:agentPorts.Values | Where-Object { $_ }) + $script:webPorts
@@ -119,12 +384,42 @@ function Cleanup {
 # ============================================
 # Banner + Version Info
 # ============================================
-$nodeVer = (& $NODE --version 2>$null).Trim()
-$npmVer = (& $NODE -e "console.log(require('child_process').execSync('npm -v').toString().trim())" 2>$null).Trim()
-$pythonVer = (python -V 2>&1 | Out-String).Trim() -replace '^Python\s+', ''
-$nextVer = (& $NODE -e "console.log(require('D:/Kiro/testopenclaw/OpenClaw-bot-review/node_modules/next/package.json').version)" 2>$null).Trim()
-$openclawVer = (& $NODE -e "console.log(require('D:/Kiro/testopenclaw/node-v22.22.1-win-x64/node_modules/openclaw/package.json').version)" 2>$null).Trim()
-$mcporterVer = (& $NODE -e "try{console.log(require('D:/Kiro/testopenclaw/node-v22.22.1-win-x64/node_modules/mcporter/package.json').version)}catch(e){console.log('N/A')}" 2>$null).Trim()
+function Get-CommandOutputOrFallback {
+    param(
+        [string]$FilePath,
+        [string[]]$CommandArgs,
+        [string]$Fallback = "N/A",
+        [switch]$IncludeStdErr
+    )
+
+    try {
+        if ($IncludeStdErr) {
+            $output = & $FilePath @CommandArgs 2>&1
+        } else {
+            $output = & $FilePath @CommandArgs 2>$null
+        }
+        $exitCode = $LASTEXITCODE
+        $text = ($output | Out-String).Trim()
+        # Version probes are informational; never leak a failed probe as the
+        # launcher process exit code.
+        $global:LASTEXITCODE = 0
+        if ($exitCode -ne 0 -or [string]::IsNullOrWhiteSpace($text)) {
+            return $Fallback
+        }
+        return $text
+    } catch {
+        $global:LASTEXITCODE = 0
+        return $Fallback
+    }
+}
+
+$nodeVer = Get-CommandOutputOrFallback -FilePath $NODE -CommandArgs @("--version")
+$npmVer = Get-CommandOutputOrFallback -FilePath $NODE -CommandArgs @("-e", "console.log(require('child_process').execSync('npm -v').toString().trim())")
+$pythonVer = (Get-CommandOutputOrFallback -FilePath "python" -CommandArgs @("-V") -IncludeStdErr) -replace '^Python\s+', ''
+$nextVer = Get-CommandOutputOrFallback -FilePath $NODE -CommandArgs @("-e", "console.log(require('D:/Kiro/testopenclaw/OpenClaw-bot-review/node_modules/next/package.json').version)")
+$openclawVer = Get-CommandOutputOrFallback -FilePath $NODE -CommandArgs @("-e", "console.log(require('D:/Kiro/testopenclaw/node-v22.22.1-win-x64/node_modules/openclaw/package.json').version)")
+$mcporterVer = Get-CommandOutputOrFallback -FilePath $NODE -CommandArgs @("-e", "try{console.log(require('D:/Kiro/testopenclaw/node-v22.22.1-win-x64/node_modules/mcporter/package.json').version)}catch(e){console.log('N/A')}")
+$global:LASTEXITCODE = 0
 
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan
@@ -142,6 +437,16 @@ $launchStart = Get-Date
 $t0 = Get-Date
 Write-Host ""
 Write-Host "[1/5] Config + Cleanup..." -NoNewline
+
+$configValidation = Test-OpenClawConfig
+if (-not $configValidation.Ok) {
+    Write-Host " failed" -ForegroundColor Red
+    Write-Host "  OpenClaw config validation failed before cleanup:" -ForegroundColor Red
+    $validationMessage = [string]$configValidation.Message
+    if ($validationMessage.Length -gt 600) { $validationMessage = $validationMessage.Substring(0, 600) + "..." }
+    Write-Host "  $validationMessage" -ForegroundColor Yellow
+    exit 1
+}
 
 $subAgents = @()
 $script:agentPorts = @{}
@@ -166,12 +471,10 @@ try {
         }
     }
 } catch {
-    $subAgents = @(
-        @{ id = "writer-agent"; profile = "writer" },
-        @{ id = "coder-agent";  profile = "coder" },
-        @{ id = "info-agent";   profile = "info" },
-        @{ id = "image-agent";  profile = "image" }
-    )
+    Write-Host " failed" -ForegroundColor Red
+    Write-Host "  openclaw.json could not be loaded: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "  Fix the configuration before starting; no hard-coded agent fallback will be used." -ForegroundColor Yellow
+    exit 1
 }
 
 # Cleanup stale processes
@@ -235,7 +538,9 @@ $script:perfStats["kiro"] = (Get-Date) - $t0
 # [3/6] Sync Models + Main Gateway
 # ============================================
 $t0 = Get-Date
-Write-Host "[3/5] Launch all services..." -NoNewline
+$script:launchSpinnerFrame = 0
+$script:launchProgressLastLength = 0
+Show-LaunchProgress 0 "Synchronizing model metadata..."
 
 # Sync models (fast, ~1s)
 try {
@@ -249,6 +554,7 @@ try {
         }
     }
 } catch {}
+Show-LaunchProgress 12 "Model metadata synchronized ($modelCount models)..."
 
 # Always read token from config (needed for auth.mode=token)
 if (-not $script:gwToken -or $script:gwToken -eq "no_change") {
@@ -262,27 +568,126 @@ if (-not $script:gwToken -or $script:gwToken -eq "no_change") {
 # Main Gateway
 $psi2 = New-Object System.Diagnostics.ProcessStartInfo
 $psi2.FileName = "cmd.exe"
-$psi2.Arguments = "/k set OPENCLAW_DISABLE_BONJOUR=1 && `"$NODE`" `"$OPENCLAW_MJS`" gateway --force"
+$psi2.Arguments = "/c set OPENCLAW_DISABLE_BONJOUR=1 && `"$NODE`" `"$OPENCLAW_MJS`" gateway --force"
 $psi2.WorkingDirectory = $WORKDIR
 $psi2.UseShellExecute = $true
 $psi2.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Minimized
 $script:p2 = [System.Diagnostics.Process]::Start($psi2)
 
-# Wait for Main Gateway to be ready before starting sub-agents
-# This avoids cold-start race conditions (wecom/weixin channel init + sub-agent CPU spike)
-if (Wait-ForPort 18789 45) {
-    Start-Sleep -Milliseconds 3000  # Extra 3s for channels to fully initialize
+# Gate sub-agent startup on core RPC readiness. Channel authentication is observed
+# separately so a slow external network cannot block otherwise healthy gateways.
+$script:mainReady = $false
+$mainPortReady = $false
+$mainPortStart = Get-Date
+$mainPortDeadline = $mainPortStart.AddSeconds(45)
+while ((Get-Date) -lt $mainPortDeadline -and -not $mainPortReady) {
+    $elapsedPercent = [math]::Min(15, [math]::Floor((((Get-Date) - $mainPortStart).TotalSeconds / 45) * 15))
+    Show-LaunchProgress (15 + $elapsedPercent) "Waiting for Main Gateway port..."
+    try {
+        $tcp = New-Object System.Net.Sockets.TcpClient
+        $tcp.Connect("127.0.0.1", 18789)
+        $tcp.Close()
+        $mainPortReady = $true
+    } catch { Start-Sleep -Milliseconds 300 }
+}
+if ($mainPortReady) {
+    $rpcDeadline = (Get-Date).AddSeconds(90)
+    while ((Get-Date) -lt $rpcDeadline -and -not $script:mainReady) {
+        Show-LaunchProgress 32 "Waiting for Main Gateway RPC..."
+        $script:mainReady = Test-OpenClawReady "" $false
+        if (-not $script:mainReady) { Start-Sleep -Milliseconds 500 }
+    }
+}
+if ($script:mainReady) {
+    # Prime the Gateway's model registry while the existing 20-second stability
+    # window is already in progress. The CLI resolves its authentication from the
+    # dynamic main configuration; no agent, model, or port list is hard-coded.
+    $modelPrewarmJob = $null
+    try {
+        $modelPrewarmJob = Start-Job -ScriptBlock {
+            param($nodeExe, $openclawMjs)
+            try {
+                & $nodeExe $openclawMjs gateway call models.list --json --timeout 12000 2>$null | Out-Null
+            } catch {}
+        } -ArgumentList $NODE, $OPENCLAW_MJS
+    } catch {}
+
+    $channelStatus = if (Test-OpenClawReady "" $true) { "Main Gateway RPC ready" } else { "Main RPC ready; channels pending" }
+    $stabilizeDeadline = (Get-Date).AddSeconds(20)
+    while ((Get-Date) -lt $stabilizeDeadline) {
+        $remaining = [math]::Ceiling(($stabilizeDeadline - (Get-Date)).TotalSeconds)
+        $percent = 50 + [math]::Floor(((20 - $remaining) / 20) * 10)
+        $prewarmStatus = if ($modelPrewarmJob -and $modelPrewarmJob.State -eq "Running") { "model catalog warming" } else { "model catalog warmed" }
+        Show-LaunchProgress $percent "$channelStatus; $prewarmStatus; stabilizing (${remaining}s)..."
+        Start-Sleep -Milliseconds 500
+    }
+
+    # The warm-up is bounded to 12 seconds. Do not wait beyond the existing
+    # stability period or leave completed PowerShell jobs in the launcher.
+    if ($modelPrewarmJob -and $modelPrewarmJob.State -in @("Completed", "Failed", "Stopped")) {
+        Receive-Job $modelPrewarmJob -ErrorAction SilentlyContinue | Out-Null
+        Remove-Job $modelPrewarmJob -Force -ErrorAction SilentlyContinue
+    }
+} else {
+    Show-LaunchProgress 60 "Main Gateway readiness timed out..."
 }
 
-# Sub-Agents (stagger 2s to reduce CPU spike during main gateway channel init)
+# Start all sub-agent gateways first, then check their HTTP liveness in parallel
+# under one shared deadline. This avoids four serial 45-second RPC timeouts.
 $script:subCmdProcs = @()
+$script:subAgentStates = @{}
+$pendingSubAgentIds = @{}
+$subAgentTotal = $subAgents.Count
+$subAgentStarted = 0
 foreach ($agent in $subAgents) {
-    $cmdArgs = "/k title $($agent.id) && set OPENCLAW_DISABLE_BONJOUR=1 && `"$NODE`" `"$OPENCLAW_MJS`" --profile $($agent.profile) gateway --force"
-    $proc = Start-Process "cmd.exe" -ArgumentList $cmdArgs -WorkingDirectory $WORKDIR -WindowStyle Minimized -PassThru
-    $script:subCmdProcs += $proc
-    Start-Sleep -Milliseconds 2000
+    $subAgentStarted++
+    Show-LaunchProgress 62 "Starting $($agent.id) ($subAgentStarted/$subAgentTotal)..."
+    $port = $script:agentPorts[$agent.id]
+    $proc = $null
+    if ($script:mainReady) {
+        try {
+            $proc = Start-SubAgentGateway $agent
+            if ($proc) { $script:subCmdProcs += $proc }
+        } catch {}
+    }
+    $script:subAgentStates[$agent.id] = [pscustomobject]@{
+        Agent = $agent
+        Port = $port
+        Process = $proc
+        Background = $false
+        FailCount = 0
+        LastRestart = (Get-Date)
+        WasDown = $true
+    }
+    $pendingSubAgentIds[$agent.id] = $true
 }
 
+$subAgentDeadline = (Get-Date).AddSeconds(45)
+while ($pendingSubAgentIds.Count -gt 0 -and (Get-Date) -lt $subAgentDeadline) {
+    foreach ($agent in $subAgents) {
+        if (-not $pendingSubAgentIds.ContainsKey($agent.id)) { continue }
+        $state = $script:subAgentStates[$agent.id]
+        if ($state.Process -and (Test-SubAgentHealth $state.Port)) {
+            $state.WasDown = $false
+            $pendingSubAgentIds.Remove($agent.id)
+            $readyCount = $subAgentTotal - $pendingSubAgentIds.Count
+            $percent = 65 + [math]::Floor(($readyCount / [math]::Max(1, $subAgentTotal)) * 20)
+            Show-LaunchProgress $percent "$($agent.id) ready ($readyCount/$subAgentTotal)..."
+        }
+    }
+    if ($pendingSubAgentIds.Count -gt 0) {
+        $readyCount = $subAgentTotal - $pendingSubAgentIds.Count
+        Show-LaunchProgress (65 + [math]::Floor(($readyCount / [math]::Max(1, $subAgentTotal)) * 20)) "Waiting for sub-agent health ($readyCount/$subAgentTotal)..."
+        Start-Sleep -Milliseconds 500
+    }
+}
+foreach ($agent in $subAgents) {
+    if ($pendingSubAgentIds.ContainsKey($agent.id)) {
+        Show-LaunchProgress 85 "$($agent.id) did not report ready..."
+    }
+}
+
+Show-LaunchProgress 86 "Starting Multi-Agent Dashboard..."
 # Multi-Agent + Bot Review (lightweight)
 $psiMA = New-Object System.Diagnostics.ProcessStartInfo
 $psiMA.FileName = $NODE
@@ -292,6 +697,7 @@ $psiMA.UseShellExecute = $false
 $psiMA.CreateNoWindow = $true
 $script:pMultiAgent = [System.Diagnostics.Process]::Start($psiMA)
 
+Show-LaunchProgress 89 "Starting Bot Review..."
 $psiBot = New-Object System.Diagnostics.ProcessStartInfo
 $psiBot.FileName = "cmd.exe"
 $psiBot.Arguments = "/c set PORT=8900&& set HOSTNAME=127.0.0.1&& set OPENCLAW_HOME=$env:USERPROFILE\.openclaw&& set OPENCLAW_PACKAGE_DIR=$OPENCLAW_PKG_DIR&& set OPENCLAW_ALLOW_UNAUTHENTICATED_LOCAL_OPERATOR_UI=true&& set NODE_ENV=production&& `"$NODE`" `"D:\Kiro\testopenclaw\OpenClaw-bot-review\.next\standalone\server.js`""
@@ -303,6 +709,7 @@ $script:pBot = [System.Diagnostics.Process]::Start($psiBot)
 # External web server projects (from webservers.json): rental 8901, spider-monitor 8902, ...
 $script:webProcs = @()
 foreach ($ws in $script:webServers) {
+    Show-LaunchProgress 92 "Starting $($ws.name)..."
     try {
         # 防御：启动前释放该端口，避免上次未正常关闭导致的残留占用
         $wsLines = cmd /c "netstat -ano 2>nul"
@@ -322,6 +729,7 @@ foreach ($ws in $script:webServers) {
     } catch {}
 }
 
+Show-LaunchProgress 96 "Starting mcporter daemon..."
 # mcporter daemon
 try {
     $daemonStatus = cmd /c "mcporter daemon status 2>&1"
@@ -330,14 +738,21 @@ try {
     }
 } catch {}
 
-Write-Host " $modelCount models, all launched ($(Elapsed $t0))" -ForegroundColor Green
+$launchReadinessFailures = (-not $script:mainReady) -or @(
+    $script:subAgentStates.Values | Where-Object { $_.WasDown }
+).Count -gt 0
+if ($launchReadinessFailures) {
+    Show-LaunchProgress 100 "$modelCount models, launch completed with readiness failures ($(Elapsed $t0))" -Complete -Warning
+} else {
+    Show-LaunchProgress 100 "$modelCount models, all gateways RPC-ready ($(Elapsed $t0))" -Complete
+}
 $script:perfStats["launch"] = (Get-Date) - $t0
 
 # ============================================
 # [4/6] Wait for all services (with retry for Main Gateway)
 # ============================================
 $t0 = Get-Date
-Write-Host "[4/5] Waiting for services..." -NoNewline
+Write-Host "[4/5] Waiting for services..."
 
 $allPorts = @(18789, 8899, 8900)
 $portNames = @{ 18789 = "Main Gateway"; 8899 = "Multi-Agent"; 8900 = "Bot Review" }
@@ -353,25 +768,11 @@ foreach ($ws in $script:webServers) {
     if ($ws.port) { $allPorts += $ws.port; $portNames[$ws.port] = $ws.name }
 }
 
-$totalPorts = $allPorts.Count
 $deadline = (Get-Date).AddSeconds(60)
 $pendingPorts = [System.Collections.Generic.List[int]]::new()
 foreach ($p in $allPorts) { $pendingPorts.Add($p) }
 $mainRetries = 0
-$doneCount = 0
-
-# Progress bar animation
-Write-Host ""
-$barWidth = 30
-function Show-Progress($done, $total) {
-    $pct = [math]::Round(($done / $total) * 100)
-    $filled = [math]::Round(($done / $total) * $barWidth)
-    $empty = $barWidth - $filled
-    $bar = ("=" * $filled) + ("." * $empty)
-    Write-Host "`r  [$bar] $pct%" -NoNewline
-}
-
-Show-Progress 0 $totalPorts
+$maxNameLen = ($portNames.Values | ForEach-Object { $_.Length } | Measure-Object -Maximum).Maximum
 
 while ($pendingPorts.Count -gt 0 -and (Get-Date) -lt $deadline) {
     $readyPorts = @()
@@ -381,8 +782,9 @@ while ($pendingPorts.Count -gt 0 -and (Get-Date) -lt $deadline) {
             $tcp.Connect("127.0.0.1", $port)
             $tcp.Close()
             $readyPorts += $port
-            $doneCount++
-            Show-Progress $doneCount $totalPorts
+            $name = $portNames[$port]
+            $pad = " " * ($maxNameLen - $name.Length)
+            Write-Host "  [OK] $name$pad  :$port" -ForegroundColor Green
         } catch {}
     }
     foreach ($port in $readyPorts) { $pendingPorts.Remove($port) | Out-Null }
@@ -390,16 +792,17 @@ while ($pendingPorts.Count -gt 0 -and (Get-Date) -lt $deadline) {
     # Main Gateway crash detection + auto-restart
     if ($pendingPorts.Contains(18789) -and $script:p2.HasExited -and $mainRetries -lt 3) {
         $mainRetries++
-        Write-Host "  [RETRY $mainRetries/3] Main Gateway crashed (exit=$($script:p2.ExitCode))" -ForegroundColor Red
-        # Show error from stability bundle
+        $retryStatus = "Restarting Main Gateway (retry $mainRetries/3)"
+        # Include the latest stability error in the same status line when available.
         $stabFile = Get-ChildItem "C:\Users\zhuyulin\.openclaw\logs\stability" -Filter "*.json" -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
         if ($stabFile) {
             try {
                 $stabData = Get-Content $stabFile.FullName -Raw | ConvertFrom-Json
-                $errMsg = $stabData.error.message
-                if ($errMsg) { Write-Host "    Error: $($errMsg.Substring(0, [Math]::Min(100, $errMsg.Length)))" -ForegroundColor Red }
+                $errMsg = [string]$stabData.error.message
+                if ($errMsg) { $retryStatus += ": " + $errMsg.Substring(0, [Math]::Min(80, $errMsg.Length)) }
             } catch {}
         }
+        Write-Host "  [RETRY $mainRetries/3] $retryStatus" -ForegroundColor Yellow
         # Clean locks and restart
         Get-ChildItem "$env:TEMP\openclaw" -Filter "gateway.*.lock" -ErrorAction SilentlyContinue |
             ForEach-Object { Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue }
@@ -411,18 +814,8 @@ while ($pendingPorts.Count -gt 0 -and (Get-Date) -lt $deadline) {
 }
 
 if ($pendingPorts.Count -gt 0) {
-    Write-Host ""
     foreach ($port in $pendingPorts) {
-        Write-Host "  [FAIL] $($portNames[$port]) ($port)" -ForegroundColor Red
-    }
-} else {
-    Write-Host ""
-    # Show all services aligned
-    $maxNameLen = ($portNames.Values | ForEach-Object { $_.Length } | Measure-Object -Maximum).Maximum
-    foreach ($port in $allPorts) {
-        $name = $portNames[$port]
-        $pad = " " * ($maxNameLen - $name.Length)
-        Write-Host "  [OK] $name$pad  :$port" -ForegroundColor Green
+        Write-Host "  [FAIL] $($portNames[$port]) :$port" -ForegroundColor Red
     }
 }
 $script:perfStats["wait"] = (Get-Date) - $t0
@@ -432,21 +825,26 @@ $script:perfStats["wait"] = (Get-Date) - $t0
 # This ensures the first user interaction is fast (avoids 14-18s cold start)
 if (-not $pendingPorts.Contains(18789)) {
     Write-Host "  [WARMUP] Triggering model cache..." -NoNewline -ForegroundColor DarkGray
-    try {
-        $warmupBody = '{"model":"claude-sonnet-4.5","messages":[{"role":"user","content":"ping"}],"max_tokens":1}'
-        $warmupHeaders = @{
-            "Authorization" = "Bearer my-super-secret-password-123"
-            "Content-Type" = "application/json"
-        }
+    $warmupProbe = Get-KiroProbeConfig
+    if ($warmupProbe) {
+        $warmupBody = @{
+            model = $warmupProbe.Model
+            messages = @(@{ role = "user"; content = "ping" })
+            max_tokens = 1
+        } | ConvertTo-Json -Depth 4 -Compress
+        $warmupHeaders = @{ "Content-Type" = "application/json" }
+        if ($warmupProbe.ApiKey) { $warmupHeaders["Authorization"] = "Bearer $($warmupProbe.ApiKey)" }
         # Fire-and-forget via background job (don't block startup)
         Start-Job -ScriptBlock {
-            param($body, $headers)
+            param($uri, $body, $headers)
             try {
-                Invoke-RestMethod -Uri "http://127.0.0.1:9000/v1/chat/completions" -Method POST -Headers $headers -Body $body -TimeoutSec 30 -ErrorAction Stop | Out-Null
+                Invoke-RestMethod -Uri $uri -Method POST -Headers $headers -Body $body -TimeoutSec 30 -ErrorAction Stop | Out-Null
             } catch {}
-        } -ArgumentList $warmupBody, $warmupHeaders | Out-Null
-        Write-Host " sent" -ForegroundColor DarkGray
-    } catch {}
+        } -ArgumentList $warmupProbe.Uri, $warmupBody, $warmupHeaders | Out-Null
+        Write-Host " queued ($($warmupProbe.Model))" -ForegroundColor DarkGray
+    } else {
+        Write-Host " skipped" -ForegroundColor Yellow
+    }
 }
 
 # [6/6] Open browsers + Done
@@ -487,7 +885,11 @@ $totalSec = [math]::Round(((Get-Date) - $launchStart).TotalSeconds, 1)
 
 Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "  All services running! (${totalSec}s)" -ForegroundColor Green
+if ($pendingPorts.Count -eq 0) {
+    Write-Host "  All services running! (${totalSec}s)" -ForegroundColor Green
+} else {
+    Write-Host "  Startup completed with $($pendingPorts.Count) service failure(s) (${totalSec}s)" -ForegroundColor Yellow
+}
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -575,57 +977,69 @@ while ($true) {
             }
         }
         
-        # Check Kiro API upstream connectivity (only if gateway is healthy)
-        if ($kiroOk) {
-            $upstreamOk = $false
-            try {
-                $body = '{"model":"claude-sonnet-4.5","messages":[{"role":"user","content":"ping"}],"max_tokens":1}'
-                $headers = @{"Authorization"="Bearer my-super-secret-password-123"; "Content-Type"="application/json"}
-                $ur = Invoke-RestMethod -Uri "http://127.0.0.1:9000/v1/chat/completions" -Method POST -Headers $headers -Body $body -TimeoutSec 15 -ErrorAction Stop
-                $upstreamOk = $true
-                $upstreamFailCount = 0
-                if (-not $lastUpstreamOk) {
-                    Write-Host "  ┌─────────────────────────────────────────────────" -ForegroundColor Green
-                    Write-Host "  │ [$(Get-Date -Format 'HH:mm:ss')] NETWORK: Kiro API recovered" -ForegroundColor Green
-                    Write-Host "  └─────────────────────────────────────────────────" -ForegroundColor Green
-                    Write-Host ""
+        # Check real Kiro API upstream less frequently than local health checks.
+        # A healthy local gateway is never restarted solely because an upstream request failed.
+        if ($kiroOk -and $checkCount % 150 -eq 0) {
+            $probe = Get-KiroProbeConfig
+            if ($probe) {
+                try {
+                    $body = @{
+                        model = $probe.Model
+                        messages = @(@{ role = "user"; content = "ping" })
+                        max_tokens = 1
+                    } | ConvertTo-Json -Depth 4 -Compress
+                    $headers = @{ "Content-Type" = "application/json" }
+                    if ($probe.ApiKey) { $headers["Authorization"] = "Bearer $($probe.ApiKey)" }
+                    Invoke-RestMethod -Uri $probe.Uri -Method POST -Headers $headers -Body $body -TimeoutSec 30 -ErrorAction Stop | Out-Null
+                    $upstreamFailCount = 0
+                    if (-not $lastUpstreamOk) {
+                        Write-Host "  ┌─────────────────────────────────────────────────" -ForegroundColor Green
+                        Write-Host "  │ [$(Get-Date -Format 'HH:mm:ss')] Kiro API recovered ($($probe.Model))" -ForegroundColor Green
+                        Write-Host "  └─────────────────────────────────────────────────" -ForegroundColor Green
+                        Write-Host ""
+                    }
                     $lastUpstreamOk = $true
-                }
-            } catch {
-                $upstreamFailCount++
-                if ($upstreamFailCount -ge 2 -and $lastUpstreamOk) {
+                } catch {
+                    $probeError = $_
+                    $statusCode = 0
+                    try {
+                        if ($probeError.Exception.Response) {
+                            $statusCode = [int]$probeError.Exception.Response.StatusCode
+                        }
+                    } catch {}
+
+                    $isConnectivityFailure = ($statusCode -eq 0 -or $statusCode -ge 500)
+                    if ($isConnectivityFailure) { $upstreamFailCount++ } else { $upstreamFailCount = 0 }
+
+                    if ($statusCode -eq 400) {
+                        $failureType = "REQUEST/MODEL INVALID"
+                    } elseif ($statusCode -eq 401 -or $statusCode -eq 403) {
+                        $failureType = "AUTHENTICATION FAILED"
+                    } elseif ($statusCode -eq 429) {
+                        $failureType = "RATE LIMITED"
+                    } elseif ($statusCode -ge 500) {
+                        $failureType = "UPSTREAM HTTP $statusCode"
+                    } elseif ($statusCode -gt 0) {
+                        $failureType = "HTTP $statusCode"
+                    } else {
+                        $failureType = "NETWORK/TIMEOUT"
+                    }
+
+                    $detail = [string]$probeError.Exception.Message
+                    if ($detail.Length -gt 140) { $detail = $detail.Substring(0, 140) + "..." }
                     Write-Host ""
                     Write-Host "  ┌─────────────────────────────────────────────────" -ForegroundColor DarkYellow
-                    Write-Host "  │ [$(Get-Date -Format 'HH:mm:ss')] NETWORK: Kiro API unreachable ($upstreamFailCount failures)" -ForegroundColor Yellow
+                    Write-Host "  │ [$(Get-Date -Format 'HH:mm:ss')] KIRO API: $failureType" -ForegroundColor Yellow
+                    Write-Host "  │ Model: $($probe.Model)" -ForegroundColor Gray
+                    Write-Host "  │ $detail" -ForegroundColor DarkGray
+                    if ($statusCode -eq 401 -or $statusCode -eq 403) {
+                        Write-Host "  │ Gateway internal token refresh remains active; healthy process not restarted." -ForegroundColor Magenta
+                    } elseif ($isConnectivityFailure) {
+                        Write-Host "  │ Upstream failure count: $upstreamFailCount; healthy local gateway not restarted." -ForegroundColor Gray
+                    }
                     Write-Host "  └─────────────────────────────────────────────────" -ForegroundColor DarkYellow
+                    Write-Host ""
                     $lastUpstreamOk = $false
-                }
-                # After 5 consecutive failures, try restarting Kiro Gateway (token refresh)
-                if ($upstreamFailCount -eq 5) {
-                    Write-Host ""
-                    Write-Host "  ┌─────────────────────────────────────────────────" -ForegroundColor Magenta
-                    Write-Host "  │ " -NoNewline -ForegroundColor Magenta
-                    Write-Host "[$(Get-Date -Format 'HH:mm:ss')] " -NoNewline -ForegroundColor Gray
-                    Write-Host "TOKEN REFRESH " -NoNewline -ForegroundColor Magenta
-                    Write-Host "API unreachable 5x" -ForegroundColor White
-                    Write-Host "  │ " -NoNewline -ForegroundColor Magenta
-                    Write-Host "[1/3] Stopping Kiro Gateway..." -NoNewline -ForegroundColor Magenta
-                    if ($script:p1 -and !$script:p1.HasExited) { $script:p1.Kill(); Start-Sleep -Milliseconds 1000 }
-                    Write-Host " done" -ForegroundColor DarkGray
-                    Write-Host "  │ " -NoNewline -ForegroundColor Magenta
-                    Write-Host "[2/3] Starting fresh instance..." -NoNewline -ForegroundColor Magenta
-                    $psi1r = New-Object System.Diagnostics.ProcessStartInfo
-                    $psi1r.FileName = "python"; $psi1r.Arguments = "main.py --port 9000"
-                    $psi1r.WorkingDirectory = "D:\Kiro\testopenclaw\kiro-gateway"
-                    $psi1r.UseShellExecute = $false; $psi1r.CreateNoWindow = $true
-                    $script:p1 = [System.Diagnostics.Process]::Start($psi1r)
-                    Write-Host " pid=$($script:p1.Id)" -ForegroundColor DarkGray
-                    Write-Host "  │ " -NoNewline -ForegroundColor Magenta
-                    Write-Host "[3/3] Waiting for health..." -NoNewline -ForegroundColor Magenta
-                    Wait-ForHealth "http://127.0.0.1:9000/health" 30 | Out-Null
-                    Write-Host " done" -ForegroundColor Green
-                    Write-Host "  └─────────────────────────────────────────────────" -ForegroundColor Magenta
-                    Write-Host ""
                 }
             }
         }
@@ -671,15 +1085,15 @@ while ($true) {
             Write-Host "[3/4] Starting new instance..." -NoNewline -ForegroundColor Red
             $psi2r = New-Object System.Diagnostics.ProcessStartInfo
             $psi2r.FileName = "cmd.exe"
-            $psi2r.Arguments = "/k set OPENCLAW_DISABLE_BONJOUR=1 && `"$NODE`" `"$OPENCLAW_MJS`" gateway --force"
+            $psi2r.Arguments = "/c set OPENCLAW_DISABLE_BONJOUR=1 && `"$NODE`" `"$OPENCLAW_MJS`" gateway --force"
             $psi2r.WorkingDirectory = $WORKDIR
             $psi2r.UseShellExecute = $true
             $psi2r.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Minimized
             $script:p2 = [System.Diagnostics.Process]::Start($psi2r)
             Write-Host " pid=$($script:p2.Id)" -ForegroundColor DarkGray
             Write-Host "  │ " -NoNewline -ForegroundColor Red
-            Write-Host "[4/4] Waiting for port 18789..." -NoNewline -ForegroundColor Red
-            if (Wait-ForPort 18789 45) {
+            Write-Host "[4/4] Waiting for core RPC readiness..." -NoNewline -ForegroundColor Red
+            if (Wait-ForOpenClawReady "" 90 $false) {
                 Write-Host " OK" -ForegroundColor Green
                 Write-Host "  │ " -NoNewline -ForegroundColor Red
                 Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Recovered" -ForegroundColor Green
@@ -694,6 +1108,61 @@ while ($true) {
             }
             Write-Host "  └─────────────────────────────────────────────────" -ForegroundColor Red
             Write-Host ""
+        }
+
+        # Monitor each sub-agent with the same HTTP liveness contract used at startup.
+        if ($script:subAgentStates) {
+            foreach ($state in @($script:subAgentStates.Values)) {
+                if (-not $state.Port) { continue }
+                $subOk = Test-SubAgentHealth $state.Port
+
+                if ($subOk) {
+                    $state.FailCount = 0
+                    if ($state.WasDown) {
+                        Write-Host "  [$(Get-Date -Format 'HH:mm:ss')] SUB-AGENT recovered: $($state.Agent.id) :$($state.Port)" -ForegroundColor Green
+                    }
+                    $state.WasDown = $false
+                    continue
+                }
+
+                $processExited = $false
+                try { $processExited = (-not $state.Process -or $state.Process.HasExited) } catch { $processExited = $true }
+                if ($processExited) { $state.FailCount = 2 } else { $state.FailCount++ }
+
+                # Closing an initial agent window should switch that agent to background promptly.
+                # Background crashes still respect the cooldown to avoid a restart loop.
+                $initialWindowClosed = $processExited -and -not $state.Background
+                $restartAge = ((Get-Date) - $state.LastRestart).TotalSeconds
+                if (-not $initialWindowClosed -and ($state.FailCount -lt 2 -or $restartAge -lt 300)) { continue }
+                $state.WasDown = $true
+
+                Write-Host ""
+                Write-Host "  ┌─────────────────────────────────────────────────" -ForegroundColor DarkYellow
+                Write-Host "  │ [$(Get-Date -Format 'HH:mm:ss')] SUB-AGENT DOWN: $($state.Agent.id) :$($state.Port)" -ForegroundColor Yellow
+                Write-Host "  │ [1/3] Stopping old process..." -NoNewline -ForegroundColor DarkYellow
+                Stop-SubAgentProcessTree $state.Process | Out-Null
+                Write-Host " done" -ForegroundColor DarkGray
+                Write-Host "  │ [2/3] Starting profile $($state.Agent.profile)..." -NoNewline -ForegroundColor DarkYellow
+                try {
+                    $state.Process = Start-SubAgentGateway $state.Agent -Background
+                    $state.Background = $true
+                    Write-Host " pid=$($state.Process.Id)" -ForegroundColor DarkGray
+                } catch {
+                    $state.Process = $null
+                    Write-Host " failed" -ForegroundColor Red
+                }
+                $state.LastRestart = Get-Date
+                $state.FailCount = 0
+                Write-Host "  │ [3/3] Waiting for HTTP health..." -NoNewline -ForegroundColor DarkYellow
+                if ($state.Process -and (Wait-ForSubAgentHealth $state.Port 45)) {
+                    Write-Host " OK" -ForegroundColor Green
+                    $state.WasDown = $false
+                } else {
+                    Write-Host " FAILED (next retry after 5m cooldown)" -ForegroundColor Red
+                }
+                Write-Host "  └─────────────────────────────────────────────────" -ForegroundColor DarkYellow
+                Write-Host ""
+            }
         }
     }
     
@@ -717,15 +1186,15 @@ while ($true) {
         Write-Host "[2/3] Starting new instance..." -NoNewline -ForegroundColor Red
         $psi2r = New-Object System.Diagnostics.ProcessStartInfo
         $psi2r.FileName = "cmd.exe"
-        $psi2r.Arguments = "/k set OPENCLAW_DISABLE_BONJOUR=1 && `"$NODE`" `"$OPENCLAW_MJS`" gateway --force"
+        $psi2r.Arguments = "/c set OPENCLAW_DISABLE_BONJOUR=1 && `"$NODE`" `"$OPENCLAW_MJS`" gateway --force"
         $psi2r.WorkingDirectory = $WORKDIR
         $psi2r.UseShellExecute = $true
         $psi2r.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Minimized
         $script:p2 = [System.Diagnostics.Process]::Start($psi2r)
         Write-Host " pid=$($script:p2.Id)" -ForegroundColor DarkGray
         Write-Host "  │ " -NoNewline -ForegroundColor Red
-        Write-Host "[3/3] Waiting for port 18789..." -NoNewline -ForegroundColor Red
-        if (Wait-ForPort 18789 45) {
+        Write-Host "[3/3] Waiting for core RPC readiness..." -NoNewline -ForegroundColor Red
+        if (Wait-ForOpenClawReady "" 90 $false) {
             Write-Host " OK" -ForegroundColor Green
             Write-Host "  │ " -NoNewline -ForegroundColor Red
             Write-Host "[$(Get-Date -Format 'HH:mm:ss')] Recovered" -ForegroundColor Green
@@ -746,5 +1215,7 @@ while ($true) {
 }
 
 Cleanup
+$global:LASTEXITCODE = 0
+exit 0
 
 
