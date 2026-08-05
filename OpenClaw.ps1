@@ -4,8 +4,8 @@
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $host.UI.RawUI.WindowTitle = "OpenClaw Launcher"
 
-$NODE = "D:\Kiro\testopenclaw\node-v22.22.1-win-x64\node.exe"
-$OPENCLAW_MJS = "D:\Kiro\testopenclaw\node-v22.22.1-win-x64\node_modules\openclaw\openclaw.mjs"
+$NODE = "D:\Kiro\testopenclaw\node-v22.23.2-win-x64\node.exe"
+$OPENCLAW_MJS = "D:\Kiro\testopenclaw\node-v22.23.2-win-x64\node_modules\openclaw\openclaw.mjs"
 # openclaw 包目录（供 Bot Review 扫描内置 skill 用，避免技能页只显示自定义 skill）
 $OPENCLAW_PKG_DIR = Split-Path $OPENCLAW_MJS -Parent
 $WORKDIR = "D:\Kiro\testopenclaw"
@@ -443,8 +443,8 @@ $nodeVer = Get-CommandOutputOrFallback -FilePath $NODE -CommandArgs @("--version
 $npmVer = Get-CommandOutputOrFallback -FilePath $NODE -CommandArgs @("-e", "console.log(require('child_process').execSync('npm -v').toString().trim())")
 $pythonVer = (Get-CommandOutputOrFallback -FilePath "python" -CommandArgs @("-V") -IncludeStdErr) -replace '^Python\s+', ''
 $nextVer = Get-CommandOutputOrFallback -FilePath $NODE -CommandArgs @("-e", "console.log(require('D:/Kiro/testopenclaw/OpenClaw-bot-review/node_modules/next/package.json').version)")
-$openclawVer = Get-CommandOutputOrFallback -FilePath $NODE -CommandArgs @("-e", "console.log(require('D:/Kiro/testopenclaw/node-v22.22.1-win-x64/node_modules/openclaw/package.json').version)")
-$mcporterVer = Get-CommandOutputOrFallback -FilePath $NODE -CommandArgs @("-e", "try{console.log(require('D:/Kiro/testopenclaw/node-v22.22.1-win-x64/node_modules/mcporter/package.json').version)}catch(e){console.log('N/A')}")
+$openclawVer = Get-CommandOutputOrFallback -FilePath $NODE -CommandArgs @("-e", "console.log(require('D:/Kiro/testopenclaw/node-v22.23.2-win-x64/node_modules/openclaw/package.json').version)")
+$mcporterVer = Get-CommandOutputOrFallback -FilePath $NODE -CommandArgs @("-e", "try{console.log(require('D:/Kiro/testopenclaw/node-v22.23.2-win-x64/node_modules/mcporter/package.json').version)}catch(e){console.log('N/A')}")
 $global:LASTEXITCODE = 0
 
 Write-Host ""

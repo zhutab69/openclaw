@@ -616,7 +616,8 @@ npm dist-tags 实况（2026-08-05）：
 `2026.7.1-2` 要求 `>=22.22.3`，**22.22.1 不满足**，引擎会直接拒绝。
 
 - 官方 zip + `SHASUMS256.txt` 校验；v22 线最新为 v22.23.2（LTS Jod）
-- ⚠️ **`npm install` 绝不能在 Node 安装目录下以本地模式执行** —— 它会把 `node_modules/npm` 一并修剪掉。这正是旧运行时 `npm N/A` 的成因。
+- ⚠️ **`npm install` 绝不能在 Node 安装目录下以本地模式执行** —— 它会把 `node_modules/npm` 一并修剪掉，之后该运行时就没有可用的 npm 了。
+- 📌 **更正**：启动器横幅上的 `npm N/A` **与此无关**。成因是 `OpenClaw.ps1` 第 443 行用 `execSync('npm -v')` 探测，依赖 **PATH 里有 `npm`**；便携版 Node 没进 PATH，所以恒为 N/A。升级后新运行时 npm 实为 **10.9.8**（`node.exe node_modules\npm\bin\npm-cli.js -v` 可验证），横幅仍显示 N/A 属显示缺陷。改法：照 `$openclawVer` 的写法直接 require `node_modules/npm/package.json`。
 - 正确做法（global 安装，保留内置 npm，且布局与生产一致）：
   ```powershell
   cd D:\Kiro\testopenclaw\node-v22.23.2-win-x64
@@ -929,7 +930,7 @@ set OPENCLAW_HOME= && node openclaw.mjs --profile upgradetest gateway --force
 22. 企业微信 + 微信各发一条消息，确认 `kind=final` 回复送达
 23. 4 个子 Agent 网关启动（3020/3040/3060/3080），确认各自无 peer link 报错
 24. 8899 面板：`/api/status` 返回 5 个 agent，main + 4 子 Agent 全部 online
-25. Bot Review：`npm run build`（含 post-build）后重启 8900，验证 `/api/config`、`/api/agent-status`、`/api/stats-models`、`/api/daily` 均 200
+25. Bot Review：**不需要重新 build**（实测确认）。`post-build.ps1` 只把 `.next\static` 与 `public` 拷进 standalone，与 openclaw 包路径无关；Bot Review 是运行时通过 `OPENCLAW_PACKAGE_DIR` 读包的，该变量在启动器里已随 `$OPENCLAW_MJS` 一起切到新目录。直接重启 8900 后验证 `/`、`/models`、`/api/config`、`/api/agent-status`、`/api/stats-models`、`/api/daily` 均 200
 26. 8901 / 8902 外部 web 服务可访问
 27. 开启 cron，观察首轮任务
 
@@ -970,12 +971,80 @@ set OPENCLAW_HOME= && node openclaw.mjs --profile upgradetest gateway --force
 
 结论：Control UI 在 7.x 的重写**没有破坏** Bot Review 依赖的 operator/control 读取路径，`OPENCLAW_ALLOW_UNAUTHENTICATED_LOCAL_OPERATOR_UI` flag 仍有效。
 
-### 11.12 待确认的遗留项
+### 11.12 生产升级实测记录（2026-08-05 执行完毕）
+
+**阶段 A — 备份**
+
+- 快照复用 `snapshot-openclaw-20260805-110440`，做**增量补齐**后与生产完全对齐：
+  - 集合差 `LIVE - SNAP = 0`、共同文件 size 全等、SNAP 独有 37 项全部是 `plugin-skills\` 下 junction 解引用（固有差异）
+  - ⚠️ 复核时先纠正了沙箱造成的 3 处改名（`exec-approvals.json` + 2 个 main 会话），全部 SHA-256 与快照原件一致
+  - 📌 **改名保持 mtime，只按"mtime 晚于快照"扫不出来**，必须做相对路径集合差
+- 配置级备份复用 `pre-upgrade-2026.7.1-2-20260805-103059`：10 项配置与生产逐一哈希一致，自带 `SHA256SUMS.txt` 12 条全过
+- Git：指南更新 commit `25293f4` 推送 GitLab + GitHub 双端，`ls-remote` 一致
+  - 新 Node 目录**未入库**（旧目录也只跟踪顶层壳脚本 + `node.exe`；入库会让仓库永久增大约 90MB，而回滚靠磁盘保留的旧目录）
+
+**阶段 B/C** — 16 个端口全空、无残留进程、无 Launcher 在跑；新运行时 Node v22.23.2 / npm 10.9.8 / openclaw 2026.7.1-2，旧目录保留。
+
+**阶段 D** — `OpenClaw.ps1` 4 处路径切换完成，AST 无解析错误，旧路径 0 残留。
+
+**阶段 E — 插件重装结果**
+
+6 个 peer 全部落在新运行时（5 × wecom + 1 × weixin）：
+
+| 配置目录 | wecom | weixin |
+|---|---|---|
+| `~\.openclaw` | 2026.7.2 ✅ | 2.4.6 ✅ |
+| 4 个子 profile | 2026.7.2 ✅ | 未装（保持原状）✅ |
+
+`plugins list` 确认 **4/70 enabled**，两个通道插件的 source 已指向 `npm\projects\` 新布局。
+
+**首次 7.x 启动触发的迁移（不可逆，共 47 个 `.migrated`）**
+
+⚠️ **迁移是在阶段 E 的第一条 `plugins install` 就触发的，不是等到阶段 F 启动网关**。指南原先把不可逆点标在阶段 F，实际提前到 E。
+
+- Cron store → SQLite：`cron\jobs.json`、`cron\jobs-state.json` + **34 个** `cron\runs\*.jsonl` 全部改名 `.migrated`
+- 222 task registry / 10 task delivery / 114 task flow → SQLite，`tasks\runs.sqlite`、`flows\registry.sqlite`（含 -shm/-wal）归档
+- **87 条 outbound delivery queue → SQLite，`delivery-queue\` 目录被直接删除**（不是改名）
+- `update-check.json`、`logs\config-health.json`、`exec-approvals.json` 归档
+- Memory Core：short-term recall 4 行 + main 记忆索引（23 源 / 186 chunk）→ per-agent SQLite，`memory\main.sqlite` 归档
+- `state\openclaw.sqlite` 从 1.16MB 增长到 11.6MB
+- 持续提示 `Left plugin install index in place because shared SQLite state has conflicting plugin install metadata` —— 属预期，`plugins\installs.json` 保留未动
+
+**`openclaw.json` 被 7.x 重写，但只动了 2 个字段**：`meta.lastTouchedAt`、`meta.lastTouchedVersion`。字节数从 35471 降到 33922 纯粹是重新格式化。agents.list 5 个、skills.entries 302 条且仍只启用 `qrcode-viewer`、5 个 agent 的模型分配与 fallback 链全部保留。
+
+**阶段 F/G — 验证结果**
+
+- 5 份 `config validate` 全过
+- 主网关 `[gateway] ready` **3.0s**（5.7 时 9.4s）；`Repaired OpenClaw host peer link(s) for 2 managed npm plugin package(s)` 自动修复
+- 当前运行日志（按 18789 进程启动时间切片后统计）：`missing-openclaw-peer` / `peer link audit` / `refusing to report` 匹配 **0**
+- 主网关 4 插件、4 个子 Agent 各 1 插件（wecom）
+- wecom WebSocket 连接 + 认证成功（2026.7.2）；weixin monitor 启动并恢复 sync 游标
+- 模型调用 status=200 × 7，**0** 个 4xx/5xx、0 个 model-fetch error、0 个 FailoverError
+- wecom 出站实测成功：`Reply message sent` + `Reply ack received`
+- 启动器全栈 80.6s，9 个服务全部 `[OK]`：18789 / 8899 / 8900 / 3020 / 3040 / 3060 / 3080 / 8901 / 8902
+- 16 个 HTTP 端点全部 200；8900 `/api/config` 回显 5 agent / 18 模型 / `gateway.port=18789`；8899 `/api/status` 5 agent 全部 `online:true`
+- cron 自动恢复运行，并清理了 3 个上次中断遗留的 stale `runningAtMs` 标记
+
+**7.x 的一个行为变化（会影响 cron 任务）**
+
+配置了多个通道时，`message` 工具**必须显式指定 channel**，否则报：
+
+```
+Channel is required when multiple channels are configured: openclaw-weixin, wecom.
+Pass --channel <channel> to choose one.
+```
+
+实测有一个 cron 任务（cc-hosts 普查）因任务内部直接调 `message` 而失败 —— 这本来就违反项目规则第 7 条"任务内部禁止调用 message，通知交给 `delivery`"。同一任务的 `delivery` 投递是成功的。**排查同类问题时先确认任务是否违规自己发通知。**
+
+### 11.13 待确认的遗留项
 
 | 项目 | 状态 |
 |------|------|
 | **mcporter** | 两个运行时的 `node_modules\mcporter` **都不存在**，只有 `mcporter.ps1` 壳 —— 这是启动器显示 `mcporter N/A` 的真正原因，与升级无关。如需该功能须单独安装 |
-| 8899 面板 main 端口硬编码 | `portMap = { 'main': 18789 }` 违反项目规则，建议改为读 `config.gateway.port`。生产端口恰好相同，不阻塞升级 |
+| 启动器 `npm N/A` | `OpenClaw.ps1` 第 443 行用 `execSync('npm -v')` 依赖 PATH，便携版 Node 不在 PATH 里。新运行时 npm 实为 10.9.8。建议改为 require `node_modules/npm/package.json`（纯显示问题，未改） |
+| 8899 面板 main 端口硬编码 | `dashboard-server.cjs` 第 196 行 `portMap = { 'main': 18789 }`（第 105 行同样以 18789 兜底）违反项目规则，建议改为读 `config.gateway.port`。生产端口恰好相同，已实测 main 显示 online，不阻塞 |
+| 两通道入站实测 | 出站已验证（wecom `Reply ack received`）。**入站需你在企业微信和微信各发一条消息**确认 `kind=final` 回复送达 |
+| legacy 插件目录 | `<home>\npm\node_modules\` 下 5 处旧安装未清理（含主目录那份 openclaw 2026.6.1 完整副本），作为回滚素材保留。观察若干天稳定后可清 |
 | `gateway.controlUi.allowInsecureAuth=true` | 安全警告仍在，属独立待决事项 |
 | Bot Review 模型写入路径 | `agent-model/route.ts` 的 PATCH 会把 `{primary, fallbacks}` 对象覆盖成字符串，**丢失 fallback 链**。改模型请用 webchat，勿用 8900 下拉框 |
 | `refresh_token.py` | 仍硬编码旧账号路径与旧 SSO URL。当前凭据链路不经过该脚本，暂未修改 |
@@ -983,4 +1052,4 @@ set OPENCLAW_HOME= && node openclaw.mjs --profile upgradetest gateway --force
 
 ---
 
-*最后更新：2026-08-05（第十一节：新增 §11.2②-补 插件 5 位置重装、§11.10 阶段 E 扩展、§11.11 面板实测结论）*
+*最后更新：2026-08-05 —— **生产已升级到 openclaw 2026.7.1-2 / Node v22.23.2 并验证通过**。第十一节新增 §11.6 沙箱隔离缺陷、§11.2②-补 插件 5 位置重装、§11.10 阶段 E 扩展、§11.11 面板实测、§11.12 生产升级实测记录。*
