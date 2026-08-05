@@ -440,7 +440,11 @@ function Get-CommandOutputOrFallback {
 }
 
 $nodeVer = Get-CommandOutputOrFallback -FilePath $NODE -CommandArgs @("--version")
-$npmVer = Get-CommandOutputOrFallback -FilePath $NODE -CommandArgs @("-e", "console.log(require('child_process').execSync('npm -v').toString().trim())")
+# Read npm's own package.json instead of shelling out to `npm -v`: this Node is
+# portable and never on PATH, so the execSync probe always failed (npm N/A).
+# Path is derived from $NODE so a runtime upgrade needs no edit here.
+$npmPkgJson = (Join-Path (Split-Path $NODE -Parent) "node_modules\npm\package.json") -replace '\\', '/'
+$npmVer = Get-CommandOutputOrFallback -FilePath $NODE -CommandArgs @("-e", "try{console.log(require('$npmPkgJson').version)}catch(e){console.log('N/A')}")
 $pythonVer = (Get-CommandOutputOrFallback -FilePath "python" -CommandArgs @("-V") -IncludeStdErr) -replace '^Python\s+', ''
 $nextVer = Get-CommandOutputOrFallback -FilePath $NODE -CommandArgs @("-e", "console.log(require('D:/Kiro/testopenclaw/OpenClaw-bot-review/node_modules/next/package.json').version)")
 $openclawVer = Get-CommandOutputOrFallback -FilePath $NODE -CommandArgs @("-e", "console.log(require('D:/Kiro/testopenclaw/node-v22.23.2-win-x64/node_modules/openclaw/package.json').version)")

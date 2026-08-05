@@ -617,7 +617,11 @@ npm dist-tags 实况（2026-08-05）：
 
 - 官方 zip + `SHASUMS256.txt` 校验；v22 线最新为 v22.23.2（LTS Jod）
 - ⚠️ **`npm install` 绝不能在 Node 安装目录下以本地模式执行** —— 它会把 `node_modules/npm` 一并修剪掉，之后该运行时就没有可用的 npm 了。
-- 📌 **更正**：启动器横幅上的 `npm N/A` **与此无关**。成因是 `OpenClaw.ps1` 第 443 行用 `execSync('npm -v')` 探测，依赖 **PATH 里有 `npm`**；便携版 Node 没进 PATH，所以恒为 N/A。升级后新运行时 npm 实为 **10.9.8**（`node.exe node_modules\npm\bin\npm-cli.js -v` 可验证），横幅仍显示 N/A 属显示缺陷。改法：照 `$openclawVer` 的写法直接 require `node_modules/npm/package.json`。
+- 这正是 `npm N/A` 的成因，实测确认的完整链条是**三环**：
+  1. 用户 PATH 第一项是 `D:\Kiro\testopenclaw\node-v22.22.1-win-x64`
+  2. 旧目录的 `node_modules\npm` 已被修剪（`npm.cmd` 还在，但 `node_modules\npm\bin\npm-cli.js` 不存在）
+  3. `OpenClaw.ps1` 第 443 行 `execSync('npm -v')` 依赖 PATH → 解析到旧目录的 `npm.cmd` → `Cannot find module …npm-cli.js` → exit 1 → 横幅显示 N/A
+- 📌 排查陷阱：在**已被污染的会话**里测 `execSync('npm -v')` 会返回 10.9.8（新目录被临时插到 PATH 前面），从而误判"探测方式没问题"。必须用 `-NoProfile` 子进程 + 注册表 PATH 复现。
 - 正确做法（global 安装，保留内置 npm，且布局与生产一致）：
   ```powershell
   cd D:\Kiro\testopenclaw\node-v22.23.2-win-x64
@@ -1025,6 +1029,26 @@ set OPENCLAW_HOME= && node openclaw.mjs --profile upgradetest gateway --force
 - 16 个 HTTP 端点全部 200；8900 `/api/config` 回显 5 agent / 18 模型 / `gateway.port=18789`；8899 `/api/status` 5 agent 全部 `online:true`
 - cron 自动恢复运行，并清理了 3 个上次中断遗留的 stale `runningAtMs` 标记
 
+**两通道入站实测（用户确认收到回复）**
+
+- 微信：`gateway/channels/openclaw-weixin` → `inbound message: from=… types=1`、`bodyLen=8`
+- 企业微信：6 次 `Reply message sent via WebSocket` + 6 次 `Reply ack received`
+- 当前运行 ERROR/FATAL **0**、模型调用 status=200 × 20、0 次 4xx/5xx、0 次 FailoverError
+
+**升级后的两处收尾改动**
+
+| 文件 | 改动 |
+|---|---|
+| `OpenClaw.ps1` 第 443 行 | npm 版本探测由 `execSync('npm -v')`（依赖 PATH，恒为 N/A）改为 **从 `$NODE` 推导路径**再 require `node_modules/npm/package.json`。好处：不依赖 PATH、不受别的 npm 干扰、**换运行时目录时这行不用再改**（未来硬编码维护点从 4 处降到 3 处） |
+| `dashboard-server.cjs` 第 196 行 | `portMap` 初始化改为空对象，main 端口从已读到的 `mainCfg.gateway.port` 取，读失败才兜底 18789。与第 105 行 `_resolveAgent` 写法一致 |
+
+> 📌 实测发现：生产 `openclaw.json` 的 `gateway` 段**并没有 `port` 字段**（18789 是 openclaw 内置默认值）。所以改完之后实际仍走 `|| 18789` 兜底。
+> 意义在于**一旦将来显式配置了 `gateway.port`，面板会自动跟随**，而不是像原来那样写死。要完全消除这个常量，得让面板改为向网关查询实际端口。
+
+> `dashboard-server.cjs` 按项目规则用 Python UTF-8 **无 BOM** 读写，且按行处理以保留原有 CRLF（411 个 CRLF、0 个孤立 LF）。`node --check` 通过。
+>
+> ⚠️ 该文件的中文注释**本身已是固化的 mojibake**（如 `璇诲彇`），是历史上 GBK 字节被当 UTF-8 存入造成的，与本次改动无关。修改时不要触碰这些行。
+
 **7.x 的一个行为变化（会影响 cron 任务）**
 
 配置了多个通道时，`message` 工具**必须显式指定 channel**，否则报：
@@ -1041,9 +1065,9 @@ Pass --channel <channel> to choose one.
 | 项目 | 状态 |
 |------|------|
 | **mcporter** | 两个运行时的 `node_modules\mcporter` **都不存在**，只有 `mcporter.ps1` 壳 —— 这是启动器显示 `mcporter N/A` 的真正原因，与升级无关。如需该功能须单独安装 |
-| 启动器 `npm N/A` | `OpenClaw.ps1` 第 443 行用 `execSync('npm -v')` 依赖 PATH，便携版 Node 不在 PATH 里。新运行时 npm 实为 10.9.8。建议改为 require `node_modules/npm/package.json`（纯显示问题，未改） |
+| ⚠️ **用户 PATH 仍指向旧 Node 目录** | `Path`(User) 第一项是 `node-v22.22.1-win-x64`。新开终端里 `node`→v22.22.1、`npm`→坏的、**`openclaw`→旧版 5.7 CLI**。已运行的服务不受影响（启动器用绝对路径），但手工敲 `openclaw` 会用 5.7 的 CLI 操作已迁移到 7.x 的状态，**有风险**。需改成 `node-v22.23.2-win-x64` |
 | 8899 面板 main 端口硬编码 | `dashboard-server.cjs` 第 196 行 `portMap = { 'main': 18789 }`（第 105 行同样以 18789 兜底）违反项目规则，建议改为读 `config.gateway.port`。生产端口恰好相同，已实测 main 显示 online，不阻塞 |
-| 两通道入站实测 | 出站已验证（wecom `Reply ack received`）。**入站需你在企业微信和微信各发一条消息**确认 `kind=final` 回复送达 |
+| ~~两通道入站实测~~ | ✅ 已完成。微信侧日志有 `inbound message: from=… types=1`；企业微信 6 次 `Reply message sent` + `Reply ack received`；当前运行 ERROR/FATAL **0**、模型调用 20 次全 200、0 次 Failover |
 | legacy 插件目录 | `<home>\npm\node_modules\` 下 5 处旧安装未清理（含主目录那份 openclaw 2026.6.1 完整副本），作为回滚素材保留。观察若干天稳定后可清 |
 | `gateway.controlUi.allowInsecureAuth=true` | 安全警告仍在，属独立待决事项 |
 | Bot Review 模型写入路径 | `agent-model/route.ts` 的 PATCH 会把 `{primary, fallbacks}` 对象覆盖成字符串，**丢失 fallback 链**。改模型请用 webchat，勿用 8900 下拉框 |
