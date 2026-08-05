@@ -246,20 +246,46 @@ function Wait-ForOpenClawReady($profile = "", $timeoutSec = 60, $requireChannels
     return $false
 }
 
-function Start-SubAgentGateway($agent, [switch]$Background) {
-    if ($Background) {
+function Start-MainGateway {
+    # Start node.exe itself in its own visible console. Do not use a cmd.exe
+    # wrapper: the watchdog must retain the actual Gateway process PID.
+    $previousDisableBonjour = $env:OPENCLAW_DISABLE_BONJOUR
+    $env:OPENCLAW_DISABLE_BONJOUR = "1"
+    try {
         $psi = New-Object System.Diagnostics.ProcessStartInfo
         $psi.FileName = $NODE
-        $psi.Arguments = "`"$OPENCLAW_MJS`" --profile `"$($agent.profile)`" gateway --force"
+        $psi.Arguments = "`"$OPENCLAW_MJS`" gateway --force"
         $psi.WorkingDirectory = $WORKDIR
-        $psi.UseShellExecute = $false
-        $psi.CreateNoWindow = $true
-        $psi.EnvironmentVariables["OPENCLAW_DISABLE_BONJOUR"] = "1"
+        $psi.UseShellExecute = $true
+        $psi.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Normal
         return [System.Diagnostics.Process]::Start($psi)
+    } finally {
+        if ($null -eq $previousDisableBonjour) {
+            Remove-Item Env:OPENCLAW_DISABLE_BONJOUR -ErrorAction SilentlyContinue
+        } else {
+            $env:OPENCLAW_DISABLE_BONJOUR = $previousDisableBonjour
+        }
     }
+}
 
-    $cmdArgs = "/c title $($agent.id) && set OPENCLAW_DISABLE_BONJOUR=1 && `"$NODE`" `"$OPENCLAW_MJS`" --profile `"$($agent.profile)`" gateway --force"
-    return Start-Process "cmd.exe" -ArgumentList $cmdArgs -WorkingDirectory $WORKDIR -WindowStyle Minimized -PassThru
+function Start-SubAgentGateway($agent, [switch]$Background) {
+    # Keep the tracked process as node.exe itself. A cmd.exe wrapper can exit
+    # independently and previously made the watchdog report a false DOWN state.
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = $NODE
+    $psi.Arguments = "`"$OPENCLAW_MJS`" --profile `"$($agent.profile)`" gateway --force"
+    $psi.WorkingDirectory = $WORKDIR
+    $psi.UseShellExecute = $false
+    $psi.CreateNoWindow = $true
+    $psi.EnvironmentVariables["OPENCLAW_DISABLE_BONJOUR"] = "1"
+    $process = [System.Diagnostics.Process]::Start($psi)
+
+    # Spread only initial profile starts. The dynamic agent list remains the
+    # source of truth; recovery restarts are not intentionally delayed.
+    if (-not $Background -and $script:subAgentStartStaggerMs -gt 0) {
+        Start-Sleep -Milliseconds $script:subAgentStartStaggerMs
+    }
+    return $process
 }
 
 function Stop-SubAgentProcessTree($process) {
@@ -564,15 +590,9 @@ if (-not $script:gwToken -or $script:gwToken -eq "no_change") {
     } catch {}
 }
 
-# Start ALL services in parallel (no waiting between them)
-# Main Gateway
-$psi2 = New-Object System.Diagnostics.ProcessStartInfo
-$psi2.FileName = "cmd.exe"
-$psi2.Arguments = "/c set OPENCLAW_DISABLE_BONJOUR=1 && `"$NODE`" `"$OPENCLAW_MJS`" gateway --force"
-$psi2.WorkingDirectory = $WORKDIR
-$psi2.UseShellExecute = $true
-$psi2.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Minimized
-$script:p2 = [System.Diagnostics.Process]::Start($psi2)
+# Start the real Node process directly so readiness and crash detection do not
+# depend on a transient cmd.exe wrapper.
+$script:p2 = Start-MainGateway
 
 # Gate sub-agent startup on core RPC readiness. Channel authentication is observed
 # separately so a slow external network cannot block otherwise healthy gateways.
@@ -635,6 +655,9 @@ if ($script:mainReady) {
 # Start all sub-agent gateways first, then check their HTTP liveness in parallel
 # under one shared deadline. This avoids four serial 45-second RPC timeouts.
 $script:subCmdProcs = @()
+# Do not start every profile at the same instant: each one loads plugins and
+# model configuration. This is independent of the number of configured agents.
+$script:subAgentStartStaggerMs = 2000
 $script:subAgentStates = @{}
 $pendingSubAgentIds = @{}
 $subAgentTotal = $subAgents.Count
@@ -807,7 +830,7 @@ while ($pendingPorts.Count -gt 0 -and (Get-Date) -lt $deadline) {
         Get-ChildItem "$env:TEMP\openclaw" -Filter "gateway.*.lock" -ErrorAction SilentlyContinue |
             ForEach-Object { Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue }
         Start-Sleep -Seconds 2
-        $script:p2 = [System.Diagnostics.Process]::Start($psi2)
+        $script:p2 = Start-MainGateway
     }
     
     if ($pendingPorts.Count -gt 0) { Start-Sleep -Milliseconds 500 }
@@ -1083,13 +1106,7 @@ while ($true) {
             Write-Host " done" -ForegroundColor DarkGray
             Write-Host "  │ " -NoNewline -ForegroundColor Red
             Write-Host "[3/4] Starting new instance..." -NoNewline -ForegroundColor Red
-            $psi2r = New-Object System.Diagnostics.ProcessStartInfo
-            $psi2r.FileName = "cmd.exe"
-            $psi2r.Arguments = "/c set OPENCLAW_DISABLE_BONJOUR=1 && `"$NODE`" `"$OPENCLAW_MJS`" gateway --force"
-            $psi2r.WorkingDirectory = $WORKDIR
-            $psi2r.UseShellExecute = $true
-            $psi2r.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Minimized
-            $script:p2 = [System.Diagnostics.Process]::Start($psi2r)
+            $script:p2 = Start-MainGateway
             Write-Host " pid=$($script:p2.Id)" -ForegroundColor DarkGray
             Write-Host "  │ " -NoNewline -ForegroundColor Red
             Write-Host "[4/4] Waiting for core RPC readiness..." -NoNewline -ForegroundColor Red
@@ -1110,60 +1127,10 @@ while ($true) {
             Write-Host ""
         }
 
-        # Monitor each sub-agent with the same HTTP liveness contract used at startup.
-        if ($script:subAgentStates) {
-            foreach ($state in @($script:subAgentStates.Values)) {
-                if (-not $state.Port) { continue }
-                $subOk = Test-SubAgentHealth $state.Port
+        # Sub-agent auto-restart is intentionally not performed here. Sub-agent
+        # state is still tracked so Cleanup can stop those processes on exit,
+        # but a stopped sub-agent is left stopped until the launcher is rerun.
 
-                if ($subOk) {
-                    $state.FailCount = 0
-                    if ($state.WasDown) {
-                        Write-Host "  [$(Get-Date -Format 'HH:mm:ss')] SUB-AGENT recovered: $($state.Agent.id) :$($state.Port)" -ForegroundColor Green
-                    }
-                    $state.WasDown = $false
-                    continue
-                }
-
-                $processExited = $false
-                try { $processExited = (-not $state.Process -or $state.Process.HasExited) } catch { $processExited = $true }
-                if ($processExited) { $state.FailCount = 2 } else { $state.FailCount++ }
-
-                # Closing an initial agent window should switch that agent to background promptly.
-                # Background crashes still respect the cooldown to avoid a restart loop.
-                $initialWindowClosed = $processExited -and -not $state.Background
-                $restartAge = ((Get-Date) - $state.LastRestart).TotalSeconds
-                if (-not $initialWindowClosed -and ($state.FailCount -lt 2 -or $restartAge -lt 300)) { continue }
-                $state.WasDown = $true
-
-                Write-Host ""
-                Write-Host "  ┌─────────────────────────────────────────────────" -ForegroundColor DarkYellow
-                Write-Host "  │ [$(Get-Date -Format 'HH:mm:ss')] SUB-AGENT DOWN: $($state.Agent.id) :$($state.Port)" -ForegroundColor Yellow
-                Write-Host "  │ [1/3] Stopping old process..." -NoNewline -ForegroundColor DarkYellow
-                Stop-SubAgentProcessTree $state.Process | Out-Null
-                Write-Host " done" -ForegroundColor DarkGray
-                Write-Host "  │ [2/3] Starting profile $($state.Agent.profile)..." -NoNewline -ForegroundColor DarkYellow
-                try {
-                    $state.Process = Start-SubAgentGateway $state.Agent -Background
-                    $state.Background = $true
-                    Write-Host " pid=$($state.Process.Id)" -ForegroundColor DarkGray
-                } catch {
-                    $state.Process = $null
-                    Write-Host " failed" -ForegroundColor Red
-                }
-                $state.LastRestart = Get-Date
-                $state.FailCount = 0
-                Write-Host "  │ [3/3] Waiting for HTTP health..." -NoNewline -ForegroundColor DarkYellow
-                if ($state.Process -and (Wait-ForSubAgentHealth $state.Port 45)) {
-                    Write-Host " OK" -ForegroundColor Green
-                    $state.WasDown = $false
-                } else {
-                    Write-Host " FAILED (next retry after 5m cooldown)" -ForegroundColor Red
-                }
-                Write-Host "  └─────────────────────────────────────────────────" -ForegroundColor DarkYellow
-                Write-Host ""
-            }
-        }
     }
     
     # Main Gateway crash restart (also triggered by fast crash detection outside the 30s check)
@@ -1184,13 +1151,7 @@ while ($true) {
         Write-Host " done" -ForegroundColor DarkGray
         Write-Host "  │ " -NoNewline -ForegroundColor Red
         Write-Host "[2/3] Starting new instance..." -NoNewline -ForegroundColor Red
-        $psi2r = New-Object System.Diagnostics.ProcessStartInfo
-        $psi2r.FileName = "cmd.exe"
-        $psi2r.Arguments = "/c set OPENCLAW_DISABLE_BONJOUR=1 && `"$NODE`" `"$OPENCLAW_MJS`" gateway --force"
-        $psi2r.WorkingDirectory = $WORKDIR
-        $psi2r.UseShellExecute = $true
-        $psi2r.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Minimized
-        $script:p2 = [System.Diagnostics.Process]::Start($psi2r)
+        $script:p2 = Start-MainGateway
         Write-Host " pid=$($script:p2.Id)" -ForegroundColor DarkGray
         Write-Host "  │ " -NoNewline -ForegroundColor Red
         Write-Host "[3/3] Waiting for core RPC readiness..." -NoNewline -ForegroundColor Red

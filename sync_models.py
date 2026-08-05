@@ -543,17 +543,46 @@ def _update_stats_rollups():
         print(f"[sessions] stats rollup updated: {updated} agent(s)")
 
 
+def _split_model_assignment(assignment):
+    """Normalize an agent model assignment into (primary, fallbacks or None).
+
+    OpenClaw accepts either a plain model id string or an object of the form
+    {"primary": "...", "fallbacks": [...]}. Sub-agent configs require a string
+    in `primary`, so an object must never be written there verbatim.
+    """
+    if isinstance(assignment, dict):
+        primary = assignment.get("primary")
+        fallbacks = assignment.get("fallbacks")
+        if not isinstance(primary, str) or not primary:
+            return None, None
+        if isinstance(fallbacks, list):
+            fallbacks = [m for m in fallbacks if isinstance(m, str) and m]
+        else:
+            fallbacks = None
+        return primary, fallbacks
+    if isinstance(assignment, str) and assignment:
+        return assignment, None
+    return None, None
+
+
 def _sync_sub_agent_models(config, sub_agents, all_models_map, fallback_models, primary_model):
     """Sync model assignments from main config to sub-agent configs.
     
     Reads the model for each agent from config.agents.list and writes it
     to the corresponding sub-agent profile config. This ensures webchat UI
     changes are propagated to sub-agents on every startup.
+
+    Per-agent fallback chains defined in the main config are preserved; only
+    agents without their own chain inherit the shared fallback list.
     """
     main_agent_models = {}
+    main_agent_fallbacks = {}
     for a in config.get("agents", {}).get("list", []):
-        if a.get("model"):
-            main_agent_models[a["id"]] = a["model"]
+        agent_primary, agent_fallbacks = _split_model_assignment(a.get("model"))
+        if agent_primary:
+            main_agent_models[a["id"]] = agent_primary
+            if agent_fallbacks is not None:
+                main_agent_fallbacks[a["id"]] = agent_fallbacks
 
     for profile, agent_id in sub_agents.items():
         cfg_path = os.path.join(HOME, f".openclaw-{profile}", "openclaw.json")
@@ -564,6 +593,7 @@ def _sync_sub_agent_models(config, sub_agents, all_models_map, fallback_models, 
                 sub_cfg = json.load(f)
 
             effective_model = main_agent_models.get(agent_id) or primary_model
+            effective_fallbacks = main_agent_fallbacks.get(agent_id, fallback_models)
 
             # Fix agent name/emoji in sub-agent config (same protection as main config)
             for a in sub_cfg.get("agents", {}).get("list", []):
@@ -582,7 +612,7 @@ def _sync_sub_agent_models(config, sub_agents, all_models_map, fallback_models, 
             # Update sub-agent config
             sub_cfg.setdefault("agents", {}).setdefault("defaults", {}).setdefault("model", {})
             sub_cfg["agents"]["defaults"]["models"] = all_models_map
-            sub_cfg["agents"]["defaults"]["model"]["fallbacks"] = fallback_models
+            sub_cfg["agents"]["defaults"]["model"]["fallbacks"] = effective_fallbacks
             sub_cfg["agents"]["defaults"]["model"]["primary"] = effective_model
 
             with open(cfg_path, "w", encoding="utf-8") as f:
@@ -731,15 +761,24 @@ def sync():
 
     # OpenClaw 运行时故障转移链：只取前 N 个，避免上游网络中断时逐一尝试全部模型
     # 造成数分钟卡顿（所有模型共用同一 kiro-gw/Kiro 后端，后端不可达时多余的 fallback 只会拖慢失败）。
-    # GPT-5.6 remains visible for manual selection but is deliberately excluded
-    # from automatic fallback because it is not part of the stable runtime path.
     # 注意：agents.defaults.models（完整模型表）仍保留全部，kiro-gw 的 FALLBACK_MODELS 也不受影响。
-    fallback_models = [
-        model_id
-        for model_id in all_model_ids
-        if model_id != primary_model
-        and not model_id.rsplit("/", 1)[-1].lower().startswith("gpt-5.6")
-    ][:MAX_FALLBACK_MODELS]
+    #
+    # A deliberately curated fallback chain is preserved as long as every entry is
+    # still offered upstream. Only regenerate it when the configured chain is
+    # missing or references models the account no longer provides, so a manual
+    # capability-tiered ordering is not silently replaced by alphabetical order.
+    configured_fallbacks = (
+        config.get("agents", {}).get("defaults", {}).get("model", {}).get("fallbacks", [])
+    )
+    configured_fallbacks = [m for m in configured_fallbacks if isinstance(m, str)]
+    if configured_fallbacks and all(
+        m in all_model_ids and m != primary_model for m in configured_fallbacks
+    ):
+        fallback_models = configured_fallbacks[:MAX_FALLBACK_MODELS]
+    else:
+        fallback_models = [
+            model_id for model_id in all_model_ids if model_id != primary_model
+        ][:MAX_FALLBACK_MODELS]
 
     # Check if anything changed
     old_models_map = config.get("agents", {}).get("defaults", {}).get("models", {})
@@ -801,11 +840,17 @@ def sync():
         return
 
     # === Sync to sub-agent configs ===
-    # Build agent_id -> model lookup from main config
+    # Build agent_id -> model lookup from main config. An assignment may be a
+    # plain string or a {"primary", "fallbacks"} object; sub-agent configs need
+    # a string in `primary`, so normalize before writing.
     main_agent_models = {}
+    main_agent_fallbacks = {}
     for a in config.get("agents", {}).get("list", []):
-        if a.get("model"):
-            main_agent_models[a["id"]] = a["model"]
+        agent_primary, agent_fallbacks = _split_model_assignment(a.get("model"))
+        if agent_primary:
+            main_agent_models[a["id"]] = agent_primary
+            if agent_fallbacks is not None:
+                main_agent_fallbacks[a["id"]] = agent_fallbacks
 
     sub_results = []
     for profile, agent_id in sub_agents.items():
@@ -819,12 +864,13 @@ def sync():
 
             # Use model from main config (user-managed, not hardcoded)
             effective_model = main_agent_models.get(agent_id) or primary_model
+            effective_fallbacks = main_agent_fallbacks.get(agent_id, fallback_models)
             model_source = "config"
 
             # Update sub-agent config
             sub_cfg.setdefault("agents", {}).setdefault("defaults", {}).setdefault("model", {})
             sub_cfg["agents"]["defaults"]["models"] = all_models_map
-            sub_cfg["agents"]["defaults"]["model"]["fallbacks"] = fallback_models
+            sub_cfg["agents"]["defaults"]["model"]["fallbacks"] = effective_fallbacks
             sub_cfg["agents"]["defaults"]["model"]["primary"] = effective_model
 
             # Always enforce correct model
