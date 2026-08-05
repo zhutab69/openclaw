@@ -875,11 +875,13 @@ set OPENCLAW_HOME= && node openclaw.mjs --profile upgradetest gateway --force
 
 **阶段 D — 启动器路径切换**
 
-9. 修改 `OpenClaw.ps1` 中 **4 处**硬编码（实测确认位置）：
-   - 第 7 行 `$NODE`
-   - 第 8 行 `$OPENCLAW_MJS`
-   - 第 446 行 `$openclawVer` 的 require 路径
-   - 第 447 行 `$mcporterVer` 的 require 路径
+9. 切换全部 **5 处**运行时路径引用：
+   - `OpenClaw.ps1` 第 7 行 `$NODE`
+   - `OpenClaw.ps1` 第 8 行 `$OPENCLAW_MJS`
+   - `OpenClaw.ps1` 的 `$openclawVer` require 路径
+   - `OpenClaw.ps1` 的 `$mcporterVer` require 路径
+   - ⚠️ **注册表用户 PATH**（`HKCU\Environment` 的 `Path`）—— **最容易漏的一处**，做法见 §11.12 末尾"容易漏的第 5 处硬编码"
+   - （npm 探测已改为从 `$NODE` 推导，无需再改）
 10. `[System.Management.Automation.Language.Parser]::ParseFile` 语法校验
 
 **阶段 E — 插件重装（5 个位置，不止主目录）**
@@ -990,6 +992,7 @@ set OPENCLAW_HOME= && node openclaw.mjs --profile upgradetest gateway --force
 **阶段 B/C** — 16 个端口全空、无残留进程、无 Launcher 在跑；新运行时 Node v22.23.2 / npm 10.9.8 / openclaw 2026.7.1-2，旧目录保留。
 
 **阶段 D** — `OpenClaw.ps1` 4 处路径切换完成，AST 无解析错误，旧路径 0 残留。
+⚠️ 但**这 4 处不是全部**：注册表用户 PATH 是第 5 处，当时漏了，事后才发现并修复（见本节末尾）。
 
 **阶段 E — 插件重装结果**
 
@@ -1049,6 +1052,31 @@ set OPENCLAW_HOME= && node openclaw.mjs --profile upgradetest gateway --force
 >
 > ⚠️ 该文件的中文注释**本身已是固化的 mojibake**（如 `璇诲彇`），是历史上 GBK 字节被当 UTF-8 存入造成的，与本次改动无关。修改时不要触碰这些行。
 
+**⚠️ 容易漏的第 5 处硬编码：用户环境变量 PATH**
+
+指南阶段 D 只说了 `OpenClaw.ps1` 的 4 处路径，**漏了注册表里的用户 PATH**。实测发现 `HKCU\Environment` 的 `Path` 第一项就是旧运行时目录，导致升级后任何**新开的终端**里：
+
+```
+node      -> node-v22.22.1-win-x64\node.exe      (v22.22.1)
+npm       -> 坏的（node_modules\npm 已被修剪）
+openclaw  -> node-v22.22.1-win-x64\openclaw.ps1  (5.7 的 CLI)
+```
+
+已运行的服务不受影响（启动器全用绝对路径），但**手工敲 `openclaw` 会用 5.7 的 CLI 去操作已迁移到 7.x 的状态**，这是真实风险。
+
+修改要点：
+
+1. 值类型是 **`REG_EXPAND_SZ`（ExpandString）**。用 `[Environment]::SetEnvironmentVariable(...,'User')` 有降级成 `REG_SZ` 的风险，应改用
+   `Set-ItemProperty -Path HKCU:\Environment -Name Path -Type ExpandString`
+2. 读原值必须带 `DoNotExpandEnvironmentNames`，否则 `%VAR%` 会被就地展开、写回时丢失可展开性
+3. 只替换等于旧目录的那一项，**保持条目顺序和数量不变**
+4. 先把原值和还原命令写进备份文件（本次：`D:\Kiro\_openclaw-upgrade-staging\user-path-backup-<ts>.txt`）
+5. 广播 `WM_SETTINGCHANGE` 让新进程立刻感知；已开的终端需重开
+
+修改后实测：`node -v` → v22.23.2、`npm -v` → **10.9.8**、`openclaw --version` → **OpenClaw 2026.7.1-2**；10 个服务端口全部不受影响。
+
+> 📌 顺带解决了 `npm N/A`：PATH 切到新目录后，即使是旧的 `execSync('npm -v')` 写法也能正常返回。不过 `OpenClaw.ps1` 已改成 require `package.json`，两层保险。
+
 **7.x 的一个行为变化（会影响 cron 任务）**
 
 配置了多个通道时，`message` 工具**必须显式指定 channel**，否则报：
@@ -1065,7 +1093,7 @@ Pass --channel <channel> to choose one.
 | 项目 | 状态 |
 |------|------|
 | **mcporter** | 两个运行时的 `node_modules\mcporter` **都不存在**，只有 `mcporter.ps1` 壳 —— 这是启动器显示 `mcporter N/A` 的真正原因，与升级无关。如需该功能须单独安装 |
-| ⚠️ **用户 PATH 仍指向旧 Node 目录** | `Path`(User) 第一项是 `node-v22.22.1-win-x64`。新开终端里 `node`→v22.22.1、`npm`→坏的、**`openclaw`→旧版 5.7 CLI**。已运行的服务不受影响（启动器用绝对路径），但手工敲 `openclaw` 会用 5.7 的 CLI 操作已迁移到 7.x 的状态，**有风险**。需改成 `node-v22.23.2-win-x64` |
+| ~~用户 PATH 指向旧 Node 目录~~ | ✅ 已修，见 §11.12 末尾 |
 | 8899 面板 main 端口硬编码 | `dashboard-server.cjs` 第 196 行 `portMap = { 'main': 18789 }`（第 105 行同样以 18789 兜底）违反项目规则，建议改为读 `config.gateway.port`。生产端口恰好相同，已实测 main 显示 online，不阻塞 |
 | ~~两通道入站实测~~ | ✅ 已完成。微信侧日志有 `inbound message: from=… types=1`；企业微信 6 次 `Reply message sent` + `Reply ack received`；当前运行 ERROR/FATAL **0**、模型调用 20 次全 200、0 次 Failover |
 | legacy 插件目录 | `<home>\npm\node_modules\` 下 5 处旧安装未清理（含主目录那份 openclaw 2026.6.1 完整副本），作为回滚素材保留。观察若干天稳定后可清 |
@@ -1076,4 +1104,4 @@ Pass --channel <channel> to choose one.
 
 ---
 
-*最后更新：2026-08-05 —— **生产已升级到 openclaw 2026.7.1-2 / Node v22.23.2 并验证通过**。第十一节新增 §11.6 沙箱隔离缺陷、§11.2②-补 插件 5 位置重装、§11.10 阶段 E 扩展、§11.11 面板实测、§11.12 生产升级实测记录。*
+*最后更新：2026-08-05 —— **生产已升级到 openclaw 2026.7.1-2 / Node v22.23.2，两通道入站出站均验证通过**。第十一节新增 §11.6 沙箱隔离缺陷、§11.2②-补 插件 5 位置重装、§11.10 阶段 E 扩展、§11.11 面板实测、§11.12 生产升级实测记录（含"容易漏的第 5 处硬编码：用户 PATH"）。*
