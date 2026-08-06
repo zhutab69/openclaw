@@ -1092,7 +1092,8 @@ Pass --channel <channel> to choose one.
 
 | 项目 | 状态 |
 |------|------|
-| **mcporter** | 两个运行时的 `node_modules\mcporter` **都不存在**，只有 `mcporter.ps1` 壳 —— 这是启动器显示 `mcporter N/A` 的真正原因，与升级无关。如需该功能须单独安装 |
+| **mcporter** | 见 §12.1 —— 结论是**未启用、无功能损失**，横幅 `N/A` 属事实陈述而非故障 |
+| **OpenSpace** | 见 §12.2 —— 结论是**不需要随本次升级改动** |
 | ~~用户 PATH 指向旧 Node 目录~~ | ✅ 已修，见 §11.12 末尾 |
 | 8899 面板 main 端口硬编码 | `dashboard-server.cjs` 第 196 行 `portMap = { 'main': 18789 }`（第 105 行同样以 18789 兜底）违反项目规则，建议改为读 `config.gateway.port`。生产端口恰好相同，已实测 main 显示 online，不阻塞 |
 | ~~两通道入站实测~~ | ✅ 已完成。微信侧日志有 `inbound message: from=… types=1`；企业微信 6 次 `Reply message sent` + `Reply ack received`；当前运行 ERROR/FATAL **0**、模型调用 20 次全 200、0 次 Failover |
@@ -1105,3 +1106,98 @@ Pass --channel <channel> to choose one.
 ---
 
 *最后更新：2026-08-05 —— **生产已升级到 openclaw 2026.7.1-2 / Node v22.23.2，两通道入站出站均验证通过**。第十一节新增 §11.6 沙箱隔离缺陷、§11.2②-补 插件 5 位置重装、§11.10 阶段 E 扩展、§11.11 面板实测、§11.12 生产升级实测记录（含"容易漏的第 5 处硬编码：用户 PATH"）。*
+
+---
+
+## 十二、mcporter 与 OpenSpace 核查（2026-08-05）
+
+### 12.1 mcporter：未启用，无功能损失
+
+**它是什么**：openclaw 的**可选** QMD 记忆搜索加速桥，配置位于 `memory.qmd.mcporter`。作用是把 QMD 搜索路由到一个长驻的 `mcporter` MCP daemon，避免每次查询都 spawn `qmd` 进程。
+
+官方文档 `docs/reference/memory-config.md` §mcporter integration（第 593-603 行）：
+
+| 字段 | 类型 | 默认 | 说明 |
+|---|---|---|---|
+| `enabled` | boolean | **`false`** | 把 QMD 调用走 mcporter，而不是每次 spawn `qmd` |
+| `serverName` | string | `qmd` | 运行 `qmd mcp` 的 mcporter server 名（需 `lifecycle: keep-alive`） |
+| `startDaemon` | boolean | `true` | `enabled` 为真时自动拉起 daemon |
+
+> 文档原话要点：需要 `mcporter` 已安装并在 PATH 上，外加一个配置好跑 `qmd mcp` 的 mcporter server；**本地简单部署保持禁用即可**，per-query 进程启动开销可以接受。
+
+**本项目的实际状态（实测）**
+
+| 检查项 | 结果 |
+|---|---|
+| `memory.backend` | `builtin`（**不是** qmd） |
+| `memory.qmd` | 只有 `includeDefaultMemory: true`，**没有 `mcporter` 段** → `enabled` 取默认 `false` |
+| dist 短路逻辑 | `ensureMcporterDaemonStarted()` 首行即 `if (!mcporter.enabled) return;` |
+| 内置 mcporter skill | `skills.entries.mcporter = {"enabled": false}`（302 条里只启用 `qrcode-viewer`） |
+| 旧运行时 | 有 3 个 shim（`mcporter` / `.cmd` / `.ps1`，都指向 `node_modules/mcporter/dist/cli.js`），但 `node_modules\mcporter` **不存在** → shim 早已是坏的 |
+| 新运行时 | 连 shim 都没有（全新解压 + 只 global 装了 openclaw） |
+| PATH 切换后 | `mcporter` 完全不可解析：`'mcporter' 不是内部或外部命令` |
+| openclaw 包依赖 | `dependencies` / `optionalDependencies` 里**都没有** mcporter |
+
+**结论**：mcporter 的用途**没有被本次升级中断**——它从来没被启用过，而且旧运行时的模块在升级前就已经被修剪掉了（与 npm 同一次事故）。横幅显示 `N/A` 是事实陈述，不是故障。
+
+**`openclaw mcp list` 的官方提示印证了这一点**：
+
+```
+OpenClaw-managed MCP servers (~\.openclaw\openclaw.json):
+- openspace
+Note: this command only shows OpenClaw-managed mcp.servers entries
+      and does not include mcporter servers from config/mcporter.json.
+```
+
+即 mcporter 维护的是**另一套独立的 MCP server 清单**（`config/mcporter.json`），与 openclaw 自己管的 `mcp.servers` 并行。本项目的 openspace 走的是后者。
+
+**启动器里有 3 处多余的 mcporter 调用**（都被 `try/catch` 或 `2>nul` 吞掉，所以从不报错）：
+
+| 位置 | 调用 |
+|---|---|
+| Cleanup | `cmd /c "mcporter daemon stop 2>nul"` |
+| 横幅 | `$mcporterVer` require `node_modules/mcporter/package.json` |
+| 启动 96% | `mcporter daemon status` → 不含 `pid N` 就 `mcporter daemon start` |
+
+这些是画蛇添足：**启用时 openclaw 会自己调 `ensureMcporterDaemonStarted()` 管 daemon**，不需要启动器代劳。可选清理方案：
+
+- 移除这 3 处调用与横幅那一行（推荐，消除每次启动 2 次注定失败的进程创建，以及 `N/A` 造成的误解）
+- 或 `npm install -g mcporter` 让横幅有版本 —— 但 QMD 桥没启用，装了也不起作用
+- 或保持现状（无实际危害）
+
+**将来什么情况下才需要装**：把 `memory.backend` 切到 qmd 并显式开 `memory.qmd.mcporter.enabled = true` 时。届时还需配一个跑 `qmd mcp` 且 `lifecycle: keep-alive` 的 mcporter server。
+
+### 12.2 OpenSpace：不需要随本次升级改动
+
+**它是什么**：上游 [HKUDS/OpenSpace](https://github.com/HKUDS/OpenSpace) 的本地检出，Python 3.12+ 的 Agent Skill 进化框架，**嵌套的独立 git 仓库**（主仓以 gitlink 记录，非 submodule —— 主仓没有 `.gitmodules`）。
+
+**为什么不受影响**
+
+| 核查项 | 结果 |
+|---|---|
+| 依赖 `openclaw` npm 包 / plugin-sdk | ❌ 无。全仓 grep `openclaw` 只命中文档与 Python 侧配置读取代码 |
+| 硬编码旧运行时路径 `node-v22.22.1-win-x64` | ❌ **0 命中** |
+| `engines` 字段约束 Node 版本 | ❌ 无（README 徽章写 Node 20+，v22.23.2 满足） |
+| 原生编译模块（better-sqlite3 / node-gyp 类） | ❌ 无。Node 侧只有 axios/react/vite（frontend）与 Baileys/pino/ws（whatsapp bridge），全纯 JS；且两处 `node_modules` 当前都未安装 |
+| 被 `OpenClaw.ps1` 启动 | ❌ 启动器全文无 `openspace` 命中 |
+| 在 `webservers.json` 里 | ❌ 只有 rental(8901, `D:\Kiro\testzufang\rental-crawler`) 与 spider-monitor(8902, `D:\Kiro\testspider`)，**都不属于 OpenSpace** |
+| 数据存储 | Python 内置 `sqlite3`（`.openspace/openspace.db`），与 Node 侧 SQLite 迁移无关 |
+
+**实际接入方式**：openclaw 按需拉起的 **stdio MCP server**，配置在 `openclaw.json` 的 `mcp.servers.openspace`，`command = openspace-mcp`，`cwd = D:\Kiro\testopenclaw\OpenSpace`，env 里 `OPENSPACE_LLM_API_BASE = http://127.0.0.1:9000/v1`（指向 Kiro Gateway）。
+
+**升级后实测验收**
+
+- `openspace-mcp` → `D:\Python314\Scripts\openspace-mcp.exe`（Python 侧入口，与 Node 无关）
+- `python -c "import openspace"` → `openspace 0.1.0`，路径 `D:\Kiro\testopenclaw\OpenSpace\openspace\__init__.py`（editable 安装）
+- `openclaw mcp list` → 列出 `openspace` ✅
+- 5 份 `config validate` 通过，说明 `mcp.servers` 配置在 7.1-2 schema 下合法
+
+**唯一的松耦合点**：`openspace/host_detection/openclaw.py` 会去解析 `~/.openclaw/openclaw.json` 的 `skills.entries.openspace.env` 和 `env.vars` 来自动探测凭据。若 openclaw 将来改这两处 schema，最坏结果是"自动探测失效"，降级到显式 env —— 而当前配置已经在 `mcp.servers.openspace.env` 里显式给了凭据，这条路径甚至没被用上，不会导致 MCP 起不来。
+
+**关于主仓 `git status` 显示 `M OpenSpace`**：子仓工作区 dirty（`5cd5226 → 5cd5226-dirty`），内容是 3 个 `.bak` 文件被删除（`session.py.bak`、`local_connector.py.bak`、`mcp_server.py.bak`），属历史清理残留，与本次升级无关。
+
+**将来若要用 frontend 或 whatsapp bridge**：在 Node v22.23.2 下跑一次 `npm install` 即可，无原生模块重编译风险。
+
+---
+
+*核查补充：2026-08-05。mcporter 与 OpenSpace 均为只读核查，未做任何修改。*
