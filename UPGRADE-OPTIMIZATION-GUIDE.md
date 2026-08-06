@@ -1015,7 +1015,7 @@ set OPENCLAW_HOME= && node openclaw.mjs --profile upgradetest gateway --force
 - `update-check.json`、`logs\config-health.json`、`exec-approvals.json` 归档
 - Memory Core：short-term recall 4 行 + main 记忆索引（23 源 / 186 chunk）→ per-agent SQLite，`memory\main.sqlite` 归档
 - `state\openclaw.sqlite` 从 1.16MB 增长到 11.6MB
-- 持续提示 `Left plugin install index in place because shared SQLite state has conflicting plugin install metadata` —— 属预期，`plugins\installs.json` 保留未动
+- 持续提示 `Left plugin install index in place because shared SQLite state has conflicting plugin install metadata` —— 见 §12.2 已处理
 
 **`openclaw.json` 被 7.x 重写，但只动了 2 个字段**：`meta.lastTouchedAt`、`meta.lastTouchedVersion`。字节数从 35471 降到 33922 纯粹是重新格式化。agents.list 5 个、skills.entries 302 条且仍只启用 `qrcode-viewer`、5 个 agent 的模型分配与 fallback 链全部保留。
 
@@ -1180,7 +1180,40 @@ Note: this command only shows OpenClaw-managed mcp.servers entries
 
 **将来什么情况下才需要装**：把 `memory.backend` 切到 qmd 并显式开 `memory.qmd.mcporter.enabled = true` 时。届时还需配一个跑 `qmd mcp` 且 `lifecycle: keep-alive` 的 mcporter server。
 
-### 12.2 OpenSpace：不需要随本次升级改动
+### 12.2 每次启动的 "conflicting plugin install metadata" 提示（已处理）
+
+**现象**：7.x 每次启动打印两遍 doctor notice：
+
+```
+Doctor notices
+- Left plugin install index in place because shared SQLite state has
+  conflicting plugin install metadata for: openclaw-weixin, wecom-openclaw-plugin
+```
+
+**性质**：**提示级，非错误**。是 7.x 迁移插件索引到 SQLite 时，发现 legacy 索引与 SQLite 状态"同一插件、元数据不一致"，于是**保守地保留 legacy 文件不动**并提示一声。服务、插件加载、通道全部正常（日志里 `4 plugins ... wecom-openclaw-plugin [2026.7.2]` 认证成功即为证）。
+
+**冲突的两边（实测比对）**：
+
+| | legacy `plugins\installs.json` | 权威 `state\openclaw.sqlite`（`installed_plugin_index`） |
+|---|---|---|
+| hostContractVersion | **2026.5.7** | **2026.7.1-2** |
+| wecom spec / 版本 | 无版本 / **2026.5.7** | `@2026.7.2` / **2026.7.2** |
+| wecom installPath | `npm\node_modules\@wecom\…`（旧 legacy 布局） | `npm\projects\…`（新布局） |
+| plugins[] manifestPath | 指向 **node-v22.22.1**（已废弃 Node 目录） | 新目录 |
+
+即 legacy 文件是**升级前 5.7 的快照**，SQLite 才是升级后的正确状态。真正生效的是 SQLite。
+
+**处理（2026-08-06，选项 A）**：把 legacy 文件归档，让 doctor 下次启动只认 SQLite、不再比较。
+
+- `plugins\installs.json` → `plugins\installs.json.migrated`（原地改名，可还原）
+- 备份副本 + 还原说明：`backups\plugin-index-archive-20260806-101855\`
+- SQLite 权威源未动
+- ⚠️ **改动只在下次启动生效**；当前运行的实例不受影响，也不需要为此主动重启生产
+- 还原：把 `.migrated` 改回 `installs.json` 即可
+
+**一并纠正一个我之前的误报**：上一轮我说 `plugin-skills\browser-automation` 符号链接"指向旧 Node 目录、有失效隐患"——**这是错的**。`os.readlink`/`realpath` 复核确认它指向 `node-v22.23.2`（新目录），SKILL.md 存在，完全正常。误报源于我的分类脚本把"路径含 `node_modules`"当成了 legacy 布局，而该 skill 是 openclaw 核心自带、本就住在 `<node>\node_modules\openclaw\dist\extensions\browser\skills\` 下。**全部 13 个 plugin-skills 链接均正确，无需改动。**
+
+### 12.3 OpenSpace：不需要随本次升级改动
 
 **它是什么**：上游 [HKUDS/OpenSpace](https://github.com/HKUDS/OpenSpace) 的本地检出，Python 3.12+ 的 Agent Skill 进化框架，**嵌套的独立 git 仓库**（主仓以 gitlink 记录，非 submodule —— 主仓没有 `.gitmodules`）。
 
