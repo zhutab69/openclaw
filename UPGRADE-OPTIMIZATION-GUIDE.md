@@ -1159,11 +1159,24 @@ Note: this command only shows OpenClaw-managed mcp.servers entries
 | 横幅 | `$mcporterVer` require `node_modules/mcporter/package.json` |
 | 启动 96% | `mcporter daemon status` → 不含 `pid N` 就 `mcporter daemon start` |
 
-这些是画蛇添足：**启用时 openclaw 会自己调 `ensureMcporterDaemonStarted()` 管 daemon**，不需要启动器代劳。可选清理方案：
+这些是画蛇添足：**启用时 openclaw 会自己调 `ensureMcporterDaemonStarted()` 管 daemon**，不需要启动器代劳。
 
-- 移除这 3 处调用与横幅那一行（推荐，消除每次启动 2 次注定失败的进程创建，以及 `N/A` 造成的误解）
-- 或 `npm install -g mcporter` 让横幅有版本 —— 但 QMD 桥没启用，装了也不起作用
-- 或保持现状（无实际危害）
+**✅ 已于 2026-08-05 移除（4 处共 12 行）**
+
+| 位置 | 删除内容 |
+|---|---|
+| Cleanup | `cmd /c "mcporter daemon stop 2>nul" \| Out-Null` |
+| 版本探测 | `$mcporterVer = ...` 整行 |
+| 横幅 | `Write-Host "  mcporter $mcporterVer" ...` 整行 |
+| 启动 96% | `Show-LaunchProgress 96 "Starting mcporter daemon..."` + `# mcporter daemon` 注释 + 整个 `try{ daemon status → daemon start }catch{}` 块 |
+
+效果：每次启动少 2 次注定失败的进程创建，横幅不再出现误导性的 `mcporter N/A`。启动进度从 92% 直接到 100%（96% 那档本就是 mcporter 专用）。
+
+校验：AST 无解析错误、全文 `mcporter` 引用 **0**、`git diff` 仅 12 行删除。
+
+> 📌 **括号平衡校验的一个坑**：正则数 `{` `}` 得到 delta=1，看着像少了一个右括号。实际是**改动前就是 1**（HEAD 版本同样 delta=1 且解析通过），因为有 `{` 在字符串字面量里（如 `"{0,-6}"` 格式串、内嵌 JS 的 `try{...}`）。**正则计数不区分字符串内外，不能单独作为判据**，要跟改动前对比、并以 AST 解析为准。
+
+**若将来要恢复**：`npm install -g mcporter --prefix <node-dir>`，再把上面 4 处加回；但前提是先开 `memory.qmd.mcporter.enabled = true`，否则装了也不生效。
 
 **将来什么情况下才需要装**：把 `memory.backend` 切到 qmd 并显式开 `memory.qmd.mcporter.enabled = true` 时。届时还需配一个跑 `qmd mcp` 且 `lifecycle: keep-alive` 的 mcporter server。
 

@@ -403,7 +403,6 @@ function Cleanup {
             ForEach-Object { Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue }
     }
     
-    cmd /c "mcporter daemon stop 2>nul" | Out-Null
     Write-Host "  All services stopped." -ForegroundColor Green
 }
 
@@ -448,7 +447,6 @@ $npmVer = Get-CommandOutputOrFallback -FilePath $NODE -CommandArgs @("-e", "try{
 $pythonVer = (Get-CommandOutputOrFallback -FilePath "python" -CommandArgs @("-V") -IncludeStdErr) -replace '^Python\s+', ''
 $nextVer = Get-CommandOutputOrFallback -FilePath $NODE -CommandArgs @("-e", "console.log(require('D:/Kiro/testopenclaw/OpenClaw-bot-review/node_modules/next/package.json').version)")
 $openclawVer = Get-CommandOutputOrFallback -FilePath $NODE -CommandArgs @("-e", "console.log(require('D:/Kiro/testopenclaw/node-v22.23.2-win-x64/node_modules/openclaw/package.json').version)")
-$mcporterVer = Get-CommandOutputOrFallback -FilePath $NODE -CommandArgs @("-e", "try{console.log(require('D:/Kiro/testopenclaw/node-v22.23.2-win-x64/node_modules/mcporter/package.json').version)}catch(e){console.log('N/A')}")
 $global:LASTEXITCODE = 0
 
 Write-Host ""
@@ -456,7 +454,6 @@ Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "  OpenClaw Launcher v4" -ForegroundColor White
 Write-Host "  Node $nodeVer / npm $npmVer / Python $pythonVer" -ForegroundColor Gray
 Write-Host "  OpenClaw $openclawVer / Next.js $nextVer" -ForegroundColor Gray
-Write-Host "  mcporter $mcporterVer" -ForegroundColor Gray
 Write-Host "========================================" -ForegroundColor Cyan
 
 $launchStart = Get-Date
@@ -755,15 +752,6 @@ foreach ($ws in $script:webServers) {
         $script:webProcs += [System.Diagnostics.Process]::Start($psiWs)
     } catch {}
 }
-
-Show-LaunchProgress 96 "Starting mcporter daemon..."
-# mcporter daemon
-try {
-    $daemonStatus = cmd /c "mcporter daemon status 2>&1"
-    if ($daemonStatus -notmatch "pid \d+") {
-        cmd /c "mcporter daemon start 2>nul" | Out-Null
-    }
-} catch {}
 
 $launchReadinessFailures = (-not $script:mainReady) -or @(
     $script:subAgentStates.Values | Where-Object { $_.WasDown }
