@@ -358,7 +358,11 @@ function Cleanup {
         cmd /c "taskkill /F /T /PID $($script:p1.Id) >nul 2>&1"
         Start-Sleep -Milliseconds 500
     }
-    if ($script:p2 -and !$script:p2.HasExited) { $script:p2.Kill() }
+    if ($script:p2 -and !$script:p2.HasExited) {
+        # Kill the whole tree: the visible main-gateway console stays open if
+        # child processes (openspace-mcp, hook shells) survive a root-only kill.
+        cmd /c "taskkill /F /T /PID $($script:p2.Id) >nul 2>&1"
+    }
     if ($script:pMultiAgent -and !$script:pMultiAgent.HasExited) { $script:pMultiAgent.Kill() }
     if ($script:pBot -and !$script:pBot.HasExited) { $script:pBot.Kill() }
     
@@ -933,6 +937,14 @@ $mainFailCount = 0
 $upstreamFailCount = 0
 $lastUpstreamOk = $true
 $watchdogStartTime = Get-Date
+# Baseline for sub-agent status-change reporting. Observe only: the watchdog
+# reports transitions but never restarts sub-agents (operator's explicit choice).
+$script:subAgentLastUp = @{}
+if ($script:subAgentStates) {
+    foreach ($sid in @($script:subAgentStates.Keys)) {
+        $script:subAgentLastUp[$sid] = -not $script:subAgentStates[$sid].WasDown
+    }
+}
 while ($true) {
     if ([Console]::KeyAvailable) { 
         $null = [Console]::ReadKey($true)
@@ -1164,6 +1176,27 @@ while ($true) {
         Write-Host ""
     }
     
+    # Sub-agent status-change reporting (observe only; never auto-restart).
+    # Same 30s cadence as the Kiro/main checks. Prints only on transitions so a
+    # manually stopped sub-agent reports DOWN once and then stays quiet.
+    if ($checkCount % 15 -eq 0 -and ((Get-Date) - $watchdogStartTime).TotalSeconds -gt 90 -and $script:subAgentStates) {
+        foreach ($sid in @($script:subAgentStates.Keys)) {
+            $sstate = $script:subAgentStates[$sid]
+            if (-not $sstate.Port) { continue }
+            $up = Test-SubAgentHealth $sstate.Port
+            if (-not $script:subAgentLastUp.ContainsKey($sid)) {
+                $script:subAgentLastUp[$sid] = $up
+            } elseif ($script:subAgentLastUp[$sid] -ne $up) {
+                $script:subAgentLastUp[$sid] = $up
+                if ($up) {
+                    Write-Host "  [$(Get-Date -Format 'HH:mm:ss')] SUB-AGENT $sid (:$($sstate.Port)) UP" -ForegroundColor Green
+                } else {
+                    Write-Host "  [$(Get-Date -Format 'HH:mm:ss')] SUB-AGENT $sid (:$($sstate.Port)) DOWN (observe-only, no restart)" -ForegroundColor Yellow
+                }
+            }
+        }
+    }
+
     Start-Sleep 2
 }
 

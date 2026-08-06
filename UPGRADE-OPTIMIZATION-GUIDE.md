@@ -1093,7 +1093,7 @@ Pass --channel <channel> to choose one.
 | 项目 | 状态 |
 |------|------|
 | **mcporter** | 见 §12.1 —— 结论是**未启用、无功能损失**，横幅 `N/A` 属事实陈述而非故障 |
-| **OpenSpace** | 见 §12.2 —— 结论是**不需要随本次升级改动** |
+| **OpenSpace** | 见 §12.4 —— 结论是**不需要随本次升级改动** |
 | ~~用户 PATH 指向旧 Node 目录~~ | ✅ 已修，见 §11.12 末尾 |
 | 8899 面板 main 端口硬编码 | `dashboard-server.cjs` 第 196 行 `portMap = { 'main': 18789 }`（第 105 行同样以 18789 兜底）违反项目规则，建议改为读 `config.gateway.port`。生产端口恰好相同，已实测 main 显示 online，不阻塞 |
 | ~~两通道入站实测~~ | ✅ 已完成。微信侧日志有 `inbound message: from=… types=1`；企业微信 6 次 `Reply message sent` + `Reply ack received`；当前运行 ERROR/FATAL **0**、模型调用 20 次全 200、0 次 Failover |
@@ -1109,7 +1109,9 @@ Pass --channel <channel> to choose one.
 
 ---
 
-## 十二、mcporter 与 OpenSpace 核查（2026-08-05）
+## 十二、升级后核查与运维改动（2026-08-05 ~ 08-06）
+
+> 12.1 mcporter · 12.2 插件索引冲突提示 · 12.3 启动器运维改动 · 12.4 OpenSpace
 
 ### 12.1 mcporter：未启用，无功能损失
 
@@ -1213,7 +1215,40 @@ Doctor notices
 
 **一并纠正一个我之前的误报**：上一轮我说 `plugin-skills\browser-automation` 符号链接"指向旧 Node 目录、有失效隐患"——**这是错的**。`os.readlink`/`realpath` 复核确认它指向 `node-v22.23.2`（新目录），SKILL.md 存在，完全正常。误报源于我的分类脚本把"路径含 `node_modules`"当成了 legacy 布局，而该 skill 是 openclaw 核心自带、本就住在 `<node>\node_modules\openclaw\dist\extensions\browser\skills\` 下。**全部 13 个 plugin-skills 链接均正确，无需改动。**
 
-### 12.3 OpenSpace：不需要随本次升级改动
+### 12.3 启动器运维改动（2026-08-06，升级后）
+
+升级到 7.x 后主网关会常驻 `openspace-mcp` 等子进程,叠加"主网关跑在可见窗口"这一设置,暴露出关闭时窗口不关的问题。三项改动:
+
+**① Cleanup 停主网关改为杀进程树**
+
+`OpenClaw.ps1` 的 `Cleanup`:`$script:p2.Kill()`(只杀 node 根)→ `taskkill /F /T /PID`(杀树)。根因:主网关 node 下挂着 `openspace-mcp.exe` / hook shell 等子进程,继承同一个可见 console;只杀根后子进程存活,console 窗口关不掉、停在最后日志画面。与 Kiro Gateway/子 agent/web 服务的停止方式对齐(它们本就杀树)。
+
+> 遗留同类项:watchdog **自愈重启主网关**处(约 line 1101)仍是 `$script:p2.Kill()` 根杀。重启走 `--force` 会清端口,但同样可能留 `openspace-mcp` 孤儿。未改,待定。
+
+**② 子 agent 日志分离**
+
+4 个子 profile 之前都没有 `logging` 段 → 日志全挤进主网关的 `openclaw-<date>.log`,无法单独查。给每个子 profile 的 `openclaw.json` 加:
+
+```json
+"logging": { "level": "info", "file": "…\\Temp\\openclaw\\subagent-<profile>.log" }
+```
+
+- 日志路径**只能**由 `logging.file` 配(无对应环境变量,`OPENCLAW_LOG_PREFIX` 只管 console 前缀)
+- 已确认 `sync_models.py` 的 `_sync_sub_agent_models` 是"整体读→改特定键→整体写",**保留** `logging` 段,不会覆盖
+- openclaw 原生按 `logging.maxFileBytes`(默认 100MB)轮转,保留 .1–.5
+- 主网关**不动**,仍写默认 `openclaw-<date>.log`
+- 看日志:`Get-Content …\subagent-writer.log -Wait -Tail 50`
+
+**③ watchdog 只报告子 agent 状态变化,不自动重启**
+
+TASK 5 曾删除"监测+自动重启子 agent"。本次按运维要求只加**观测**:watchdog 每 30s(与 Kiro/main 检查同频)用 `Test-SubAgentHealth` 查 4 个子 agent,**仅在状态跳变时**打印一行 `UP`/`DOWN`,不做任何重启。
+
+- 基线 = 启动结果(`WasDown`);手动停的子 agent 报一次 `DOWN` 后不再刷屏
+- 明确不重启:手动停的保持停止(尊重运维意图)
+
+三项均**下次启动生效**,不影响当前运行实例。校验:AST 无错、`{}`/`()`/`[]` 平衡与 HEAD 一致、4 个子 profile `config validate` 通过。
+
+### 12.4 OpenSpace：不需要随本次升级改动
 
 **它是什么**：上游 [HKUDS/OpenSpace](https://github.com/HKUDS/OpenSpace) 的本地检出，Python 3.12+ 的 Agent Skill 进化框架，**嵌套的独立 git 仓库**（主仓以 gitlink 记录，非 submodule —— 主仓没有 `.gitmodules`）。
 
