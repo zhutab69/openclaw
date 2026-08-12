@@ -180,17 +180,22 @@ function Test-OpenClawConfig {
         $proc = [System.Diagnostics.Process]::Start($psi)
         $stdoutTask = $proc.StandardOutput.ReadToEndAsync()
         $stderrTask = $proc.StandardError.ReadToEndAsync()
-        if (-not $proc.WaitForExit(20000)) {
+        # OpenClaw 7.x CLI cold start alone is ~16s (even `--help`); config parsing
+        # is cheap. 45s gives real headroom over the measured cold-start floor.
+        # A timeout is inconclusive, not a schema failure, so it is reported
+        # separately and must not abort the launch (the gateway re-validates on
+        # start and refuses to boot on an actually-invalid config).
+        if (-not $proc.WaitForExit(45000)) {
             $proc.Kill()
             $proc.WaitForExit(2000) | Out-Null
-            return [pscustomobject]@{ Ok = $false; Message = "config validation timed out" }
+            return [pscustomobject]@{ Ok = $false; TimedOut = $true; Message = "config validation timed out" }
         }
         $stdout = $stdoutTask.GetAwaiter().GetResult().Trim()
         $stderr = $stderrTask.GetAwaiter().GetResult().Trim()
         $message = if ($stderr) { $stderr } else { $stdout }
-        return [pscustomobject]@{ Ok = ($proc.ExitCode -eq 0); Message = $message }
+        return [pscustomobject]@{ Ok = ($proc.ExitCode -eq 0); TimedOut = $false; Message = $message }
     } catch {
-        return [pscustomobject]@{ Ok = $false; Message = $_.Exception.Message }
+        return [pscustomobject]@{ Ok = $false; TimedOut = $false; Message = $_.Exception.Message }
     } finally {
         if ($proc) { $proc.Dispose() }
     }
@@ -407,6 +412,14 @@ function Cleanup {
             ForEach-Object { Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue }
     }
     
+    # Purge stale delivery dead-letters now that the gateway is stopped and the
+    # state SQLite is free of writers. The script self-guards (skips if 18789 is
+    # still up) and never throws, so it cannot block shutdown.
+    try {
+        $purge = python "D:\Kiro\testopenclaw\purge_delivery_queue.py" 2>&1
+        if ($purge) { $purge | ForEach-Object { Write-Host "  $_" -ForegroundColor DarkGray } }
+    } catch {}
+
     Write-Host "  All services stopped." -ForegroundColor Green
 }
 
@@ -471,12 +484,20 @@ Write-Host "[1/5] Config + Cleanup..." -NoNewline
 
 $configValidation = Test-OpenClawConfig
 if (-not $configValidation.Ok) {
-    Write-Host " failed" -ForegroundColor Red
-    Write-Host "  OpenClaw config validation failed before cleanup:" -ForegroundColor Red
-    $validationMessage = [string]$configValidation.Message
-    if ($validationMessage.Length -gt 600) { $validationMessage = $validationMessage.Substring(0, 600) + "..." }
-    Write-Host "  $validationMessage" -ForegroundColor Yellow
-    exit 1
+    if ($configValidation.TimedOut) {
+        # Inconclusive pre-flight (CLI cold start), not a schema error. Do not
+        # abort: the gateway validates its own config on start and refuses to
+        # boot if it is actually invalid, and [4/5]/watchdog will surface that.
+        Write-Host " config pre-check timed out (continuing)" -ForegroundColor Yellow
+        Write-Host "  Pre-flight config validate exceeded its window; the gateway will validate on start." -ForegroundColor DarkGray
+    } else {
+        Write-Host " failed" -ForegroundColor Red
+        Write-Host "  OpenClaw config validation failed before cleanup:" -ForegroundColor Red
+        $validationMessage = [string]$configValidation.Message
+        if ($validationMessage.Length -gt 600) { $validationMessage = $validationMessage.Substring(0, 600) + "..." }
+        Write-Host "  $validationMessage" -ForegroundColor Yellow
+        exit 1
+    }
 }
 
 $subAgents = @()

@@ -1282,3 +1282,52 @@ TASK 5 曾删除"监测+自动重启子 agent"。本次按运维要求只加**�
 ---
 
 *核查补充：2026-08-05。mcporter 与 OpenSpace 均为只读核查，未做任何修改。*
+
+### 12.5 关闭时自动清理 delivery 死信 + 配置预检超时误判修复（2026-08-12）
+
+两项改动，均**下次启动/关闭生效**，不影响当前运行实例。
+
+**① 启动器关闭阶段自动清理过期 delivery 死信**
+
+在 `OpenClaw.ps1` 的 `Cleanup` 末尾（停完所有服务、按端口清理、清 lock **之后**）新增调用 `purge_delivery_queue.py`。放在关闭阶段而不是启动阶段，是因为此时网关已停、state SQLite 无并发写入者，删除最安全。
+
+`purge_delivery_queue.py`（仓库根目录）行为：
+
+- 只删 `delivery_queue_entries` 中 `status='failed'` 且死信年龄（`failed_at`，回退 `enqueued_at`）**超过 1 天**的条目
+- **绝不碰** `pending` / `active`（recovery 只处理 `pending`）和近 1 天的 `failed`（保留可观测性）
+- 删除后 `PRAGMA wal_checkpoint(TRUNCATE)` 让改动落主库
+- **双重护栏**：若解析出的网关端口仍在监听则跳过（Cleanup 本该已停网关）
+- **永不抛异常**：任何错误只打印并跳过，不阻塞关闭
+
+> ⚠️ **端口/路径动态读取（符合项目规则，不硬编码）**：
+> - 网关端口按 `openclaw.json` 的 `gateway.port` > `agents.list[main].port` > OpenClaw 默认 18789 解析，**不写死**
+> - OpenClaw home 严格用 `%USERPROFILE%`，取不到则跳过（**不再回退硬编码 `C:\Users\zhuyulin`**）
+> - 表名为 `delivery_queue_entries`（7.x 迁移后队列进 SQLite；`delivery-queue\` 目录已在升级时删除）
+
+验证（临时 SQLite 覆盖四类 + 真实环境护栏）：
+
+| 场景 | 结果 |
+|---|---|
+| pending / active / failed<1d / 旧 pending | ✅ 全部保留 |
+| failed>1d（含 failed_at 缺失、enqueued_at 旧） | ✅ 删除 |
+| 端口解析：无配置 / `gateway.port` / `main.port` | ✅ 18789 / 22222 / 33333 |
+| 端口被监听时 | ✅ 跳过（skip purge） |
+| 端口空闲、真实队列为空 | ✅ 正常执行，无删除 |
+| `py_compile` | ✅ |
+
+**② 配置预检超时不再误判为致命失败**
+
+现象：`[1/5] Config + Cleanup... failed / config validation timed out`，随后重启即成功。
+
+根因（实测）：`Test-OpenClawConfig` 跑 `openclaw config validate` 的 `WaitForExit` 固定 **20s**，而 OpenClaw 7.x CLI **冷启动本身就要 ~16s**（连 `config validate --help` 都 15.6s，说明慢在 CLI 模块加载而非解析 `openclaw.json`；热进程降到 3s）。冷启动偶发越过 20s → 判 timeout → `exit 1`，且发生在 Cleanup 之前，所以死信脚本根本没执行——**与死信改动无关**。
+
+修复：
+
+- `WaitForExit` 20s → **45s**（给实测冷启动留真实余量，非掩盖：校验本身 3–16s 能完成，只是 CLI 冷启动慢）
+- 返回值区分 `TimedOut`：**timeout 是"结果不确定"而非"schema 非法"**，降级为黄色警告并**继续启动**（网关启动时会自己再校验一次，非法配置照样拒启，`[4/5]`/watchdog 会捕获）；真正的 schema 非法（exit≠0 且有 issues）仍 `exit 1` 中止
+
+验证：5 份 `config validate` 全 `exit=0`；`OpenClaw.ps1` AST 无解析错误；`git diff --check` 干净。
+
+---
+
+*改动补充：2026-08-12。§12.5 关闭时死信清理 + 配置预检超时修复。*
