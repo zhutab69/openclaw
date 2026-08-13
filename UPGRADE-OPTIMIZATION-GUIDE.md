@@ -1328,6 +1328,32 @@ TASK 5 曾删除"监测+自动重启子 agent"。本次按运维要求只加**�
 
 验证：5 份 `config validate` 全 `exit=0`；`OpenClaw.ps1` AST 无解析错误；`git diff --check` 干净。
 
+### 12.6 冷机首启子 Agent 全部 [FAIL] 的根因与修复（2026-08-13）
+
+**现象**：08-13 冷机首次启动，`[1/5]` 走了 §12.5 的"config pre-check timed out (continuing)"（正常继续），但 `[4/5]` 4 个子 Agent 全部 `[FAIL] :3020/3040/3060/3080`。事后核查：4 份子 Agent 独立日志 mtime 仍是**前一天**、本次无写入，且无任何带 `--profile` 的 node 进程——**子 Agent 这次根本没被拉起**。主网关本身完全正常（webchat 连上、models.list 成功）。
+
+**根因（与 §12.5 同源）**：启动器 `[3/5]` 用 `Test-OpenClawReady` 判定主网关 RPC 就绪来决定 `$script:mainReady`，而子 Agent 仅在 `if ($script:mainReady)` 时启动。`Test-OpenClawReady` 每次探测 spawn 一个 `openclaw health --json` CLI，`WaitForExit` 只有 **12s**。
+
+关键事实：**每个 `openclaw` CLI 都是全新 Node 进程，无跨进程模块缓存，7.x 冷启动恒 ~15s＞12s**。所以冷机首启时每次健康探测都在 CLI 加载完成前被杀，`mainReady` 在 90s 窗口内始终为 false → 子 Agent 被整段跳过。前一天成功是因为 CLI 文件缓存热（3s＜12s）。
+
+> 📌 本质是"7.x CLI 冷启动 ~15s 撞上启动器各处过紧的 CLI-spawn 超时"这一**同一根因**在两处发作：§12.5 是 config 预检（20s，偶发越界），§12.6 是健康探测（12s，冷机必然越界）。
+
+**修复**（`OpenClaw.ps1`，均只调超时、不改判定逻辑）：
+
+| 函数 | 原值 | 新值 | 说明 |
+|---|---|---|---|
+| `Test-OpenClawReady` | `WaitForExit(12000)` | **30000** | 清过冷启动 ~15s 地板；外层轮询窗口（90s RPC / 45s 子 Agent）仍限制总等待。watchdog 自愈的 `Wait-ForOpenClawReady` 同样受益 |
+| `Test-OpenClawConfig` | `WaitForExit(45000)` | **15000** | 既然 timeout 已降级为"继续"，就快速失败快速继续：15s 让热校验（3s）通过并捕获快速 schema 错误，冷启动则迅速放行交给网关自校验，不再白等 45s |
+
+**为何不改用 HTTP `/health` 轮询**：实测主网关 18789 的 `/health` 在 5s 内不返回（Invoke-WebRequest 直接挂到超时），这正是启动器当初用 CLI `health --json` 而非 HTTP 的原因。故维持 CLI 探测，只把超时调到匹配冷启动的真实耗时。
+
+验证：`OpenClaw.ps1` AST 无解析错误；4 处 `WaitForExit` 值符合预期（15000 / 30000 各一 + 两处 2000 kill 等待）；5 份 `config validate` 全 `exit=0`；`git diff --check` 干净。
+
+**两个独立的遗留问题（本次未改，另行处理）**：
+
+1. **cron `b0e0cb5f` 违反规则第 7 条**：任务内部直接调 `message` 发 `💓` 到 openclaw-weixin → `sendMessage ret=-2 prepare failed`，并持续生成卡在 `send_attempt_started` 的 delivery 条目。应改 `jobs.json` 去掉任务内 `message`、改走 `delivery`。
+2. **启动时 `delivery-recovery` 报 9 条 pending 卡 `send_attempt_started`**：recovery 拒绝盲 replay 并标为 failed。§12.5 的 purge 只清 failed>1d，这些近期条目会保留（符合设计），根源即上面的 cron。
+
 ---
 
-*改动补充：2026-08-12。§12.5 关闭时死信清理 + 配置预检超时修复。*
+*改动补充：2026-08-12 §12.5 关闭死信清理 + 配置预检超时；2026-08-13 §12.6 子 Agent 就绪探测超时修复。*

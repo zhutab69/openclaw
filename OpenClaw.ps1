@@ -180,12 +180,12 @@ function Test-OpenClawConfig {
         $proc = [System.Diagnostics.Process]::Start($psi)
         $stdoutTask = $proc.StandardOutput.ReadToEndAsync()
         $stderrTask = $proc.StandardError.ReadToEndAsync()
-        # OpenClaw 7.x CLI cold start alone is ~16s (even `--help`); config parsing
-        # is cheap. 45s gives real headroom over the measured cold-start floor.
-        # A timeout is inconclusive, not a schema failure, so it is reported
-        # separately and must not abort the launch (the gateway re-validates on
-        # start and refuses to boot on an actually-invalid config).
-        if (-not $proc.WaitForExit(45000)) {
+        # OpenClaw 7.x CLI cold start alone is ~15s (even `--help`); config parsing
+        # is cheap. Since a timeout is now inconclusive (not fatal) and we continue
+        # regardless, fail fast: 15s lets a warm validate (~3s) pass and catch quick
+        # schema errors, while a cold start bails promptly and defers to the
+        # gateway's own start-time validation instead of burning ~45s here.
+        if (-not $proc.WaitForExit(15000)) {
             $proc.Kill()
             $proc.WaitForExit(2000) | Out-Null
             return [pscustomobject]@{ Ok = $false; TimedOut = $true; Message = "config validation timed out" }
@@ -216,7 +216,13 @@ function Test-OpenClawReady($profile = "", $requireChannels = $false) {
         $proc = [System.Diagnostics.Process]::Start($psi)
         $stdoutTask = $proc.StandardOutput.ReadToEndAsync()
         $stderrTask = $proc.StandardError.ReadToEndAsync()
-        if (-not $proc.WaitForExit(12000)) {
+        # `openclaw health` is a fresh Node CLI each call with no cross-process
+        # module cache, so a cold start is ~15s. A 12s cap killed every cold
+        # probe before it could answer, so $script:mainReady never became true
+        # on a cold first launch and sub-agents were skipped entirely. 30s clears
+        # the cold-start floor; the outer poll deadlines (90s RPC / 45s sub-agent)
+        # still bound total wait.
+        if (-not $proc.WaitForExit(30000)) {
             $proc.Kill()
             $proc.WaitForExit(2000) | Out-Null
             return $false
