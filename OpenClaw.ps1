@@ -78,26 +78,35 @@ function Write-ServiceTable {
         if ($w -gt $nameWidth) { $nameWidth = $w }
     }
 
+    # Pad the URL column to the widest URL in this group, otherwise the trailing
+    # status markers would sit at ragged offsets behind URLs of different length.
+    $urlWidth = 0
+    foreach ($p in $Ports) {
+        $u = [string]$Urls[$p]
+        if ($u -and $u.Length -gt $urlWidth) { $urlWidth = $u.Length }
+    }
+
     $consoleWidth = try { [Console]::WindowWidth } catch { 120 }
+    # 4 indent + name + 1 + 6 port + (3 + url) + 3 + 6 marker
+    $showUrls = ($urlWidth -gt 0) -and
+                ((4 + $nameWidth + 1 + 6 + 3 + $urlWidth + 3 + 6) -lt $consoleWidth)
 
     Write-Host "  $Title" -ForegroundColor DarkGray
     foreach ($p in $Ports) {
         $name = [string]$Names[$p]
         $pad = " " * [math]::Max(0, $nameWidth - (Get-DisplayWidth $name))
         $isUp = [bool]$Ready[$p]
-        $tag = if ($isUp) { "[OK]  " } else { "[FAIL]" }
         $color = if ($isUp) { "Green" } else { "Red" }
         # Right-align the port so 4- and 5-digit ports end in the same column.
         $portCol = ("{0,6}" -f ":$p")
-        $row = "    $tag $name$pad $portCol"
-        $url = [string]$Urls[$p]
-        # Drop the URL rather than let it wrap on a narrow console.
-        if ($url -and (4 + 6 + 1 + $nameWidth + 1 + 6 + 3 + $url.Length) -lt $consoleWidth) {
-            Write-Host $row -NoNewline -ForegroundColor $color
-            Write-Host "   $url" -ForegroundColor Cyan
-        } else {
-            Write-Host $row -ForegroundColor $color
+
+        # Status goes last, so the row is written in three coloured pieces.
+        Write-Host "    $name$pad $portCol" -NoNewline
+        if ($showUrls) {
+            $url = [string]$Urls[$p]
+            Write-Host ("   " + $url.PadRight($urlWidth)) -NoNewline -ForegroundColor Cyan
         }
+        Write-Host ("   " + $(if ($isUp) { "[OK]" } else { "[FAIL]" })) -ForegroundColor $color
     }
 }
 
