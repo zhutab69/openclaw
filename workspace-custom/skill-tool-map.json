@@ -1,0 +1,55 @@
+{
+  "_description": "技能→工具直用映射表。列出不需要 read SKILL.md 也能正常工作的技能（通过 MCP tool 或 CLI 直接调用）。分析器读此表判断'工具直用-健康'状态。",
+  "_version": "1.0",
+  "_updated": "2026-06-06",
+  "tool_direct_skills": {
+    "wecom-contact": {
+      "tool": "wecom_mcp",
+      "category": "contact",
+      "methods": ["get_userlist"],
+      "note": "通过 wecom_mcp call contact 直接使用，无需 read SKILL.md"
+    },
+    "wecom-meeting": {
+      "tool": "wecom_mcp",
+      "category": "meeting",
+      "methods": ["create_meeting", "get_meeting_list", "get_meeting_detail", "cancel_meeting", "update_meeting_members"],
+      "note": "通过 wecom_mcp call meeting 直接使用"
+    },
+    "wecom-todo": {
+      "tool": "wecom_mcp",
+      "category": "todo",
+      "methods": ["get_todo_list", "get_todo_detail", "create_todo", "update_todo", "delete_todo", "change_todo_status"],
+      "note": "通过 wecom_mcp call todo 直接使用"
+    },
+    "wecom-smartsheet": {
+      "tool": "wecom_mcp",
+      "category": "smartsheet",
+      "methods": ["list_sheets", "list_fields", "list_records", "add_records", "update_records", "delete_records"],
+      "note": "通过 wecom_mcp call smartsheet 直接使用"
+    },
+    "wecom-preflight": {
+      "tool": "exec",
+      "category": "preflight",
+      "methods": [],
+      "note": "前置条件检查，通过 shell 命令执行，其他 wecom 技能首次调用前自动触发"
+    },
+    "weather": {
+      "tool": "web_fetch",
+      "category": "weather",
+      "methods": [],
+      "note": "通过 web_fetch 抓取天气网站，SKILL.md 只定义 URL 模板"
+    },
+    "browser-automation": {
+      "tool": "browser",
+      "category": "browser",
+      "methods": [],
+      "note": "通过 browser 工具直接控制，SKILL.md 提供流程指导但工具本身可独立使用"
+    },
+    "canvas": {
+      "tool": "canvas",
+      "category": "canvas",
+      "methods": [],
+      "note": "通过 canvas 工具直接展示 HTML，SKILL.md 提供用法指导"
+    }
+  }
+}

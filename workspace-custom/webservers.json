@@ -1,0 +1,55 @@
+{
+  "webservers": [
+    {
+      "id": "agent-dashboard",
+      "emoji": "🦞",
+      "name": "多智能体管理中心",
+      "port": 8899,
+      "desc": "Agent 状态 / 调度器 / Cron 调度",
+      "cwd": "C:\\Users\\zhuyulin\\.openclaw\\workspace",
+      "script": "dashboard-server.cjs",
+      "url": "http://127.0.0.1:8899",
+      "env": {
+        "OPENCLAW_HOME": "${OPENCLAW_HOME}",
+        "OPENCLAW_PACKAGE_DIR": "${OPENCLAW_PACKAGE_DIR}"
+      }
+    },
+    {
+      "id": "bot-review",
+      "emoji": "🤖",
+      "name": "OpenClaw Bot Dashboard",
+      "port": 8900,
+      "desc": "Bot 审阅面板 (Next.js)",
+      "cwd": "D:\\Kiro\\testopenclaw\\OpenClaw-bot-review\\.next\\standalone",
+      "script": "server.js",
+      "url": "http://127.0.0.1:8900",
+      "env": {
+        "HOSTNAME": "127.0.0.1",
+        "NODE_ENV": "production",
+        "OPENCLAW_ALLOW_UNAUTHENTICATED_LOCAL_OPERATOR_UI": "true",
+        "OPENCLAW_HOME": "${OPENCLAW_HOME}",
+        "OPENCLAW_PACKAGE_DIR": "${OPENCLAW_PACKAGE_DIR}"
+      }
+    },
+    {
+      "id": "rental",
+      "emoji": "🏠",
+      "name": "租房信息系统",
+      "port": 8901,
+      "desc": "结果展示 / 搜索采集 / Cookie 管理",
+      "cwd": "D:\\Kiro\\testzufang\\rental-crawler",
+      "script": "server.js",
+      "url": "http://127.0.0.1:8901"
+    },
+    {
+      "id": "spider-monitor",
+      "emoji": "🏥",
+      "name": "采集平台监控",
+      "port": 8902,
+      "desc": "仪表盘 / 健康检查 / 信源管理",
+      "cwd": "D:\\Kiro\\testspider",
+      "script": "server.js",
+      "url": "http://127.0.0.1:8902"
+    }
+  ]
+}

@@ -1,0 +1,1010 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenClaw 多智能体管理中心</title>
+<style>
+:root {
+  --bg-primary: #0f172a;
+  --bg-secondary: #1e293b;
+  --bg-tertiary: #334155;
+  --border-color: #334155;
+  --text-primary: #f1f5f9;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
+  --accent-red: #ef4444;
+  --accent-orange: #f59e0b;
+  --accent-blue: #3b82f6;
+  --accent-cyan: #06b6d4;
+  --accent-pink: #ec4899;
+  --accent-green: #22c55e;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  padding: 8px 12px;
+  min-height: 100vh;
+}
+
+.container {
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+/* Header */
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+h1 {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.controls button {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.controls button:hover {
+  background: var(--bg-tertiary);
+  border-color: var(--accent-blue);
+}
+
+/* 统计卡片 */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.stat-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 10px;
+  transition: all 0.2s;
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 16px rgba(0,0,0,0.4);
+}
+
+.stat-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.stat-value {
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.stat-value.green { color: var(--accent-green); }
+.stat-value.red { color: var(--accent-red); }
+.stat-value.blue { color: var(--accent-cyan); }
+
+/* Section Title */
+.section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin: 12px 0 8px 0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.region {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  padding: 16px 18px;
+  margin-bottom: 20px;
+}
+.region-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 14px 0;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+/* Agent Cards Grid */
+.agents-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.agent-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 10px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.agent-card::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--accent-color);
+  transition: width 0.3s;
+}
+
+.agent-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  border-color: var(--accent-color);
+}
+
+.agent-card:hover::before {
+  width: 3px;
+}
+
+/* Agent Header */
+.agent-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.agent-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.agent-icon {
+  font-size: 18px;
+}
+
+.agent-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.status-badge.online {
+  background: rgba(34, 197, 94, 0.15);
+  color: var(--accent-green);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.status-badge.offline {
+  background: rgba(100, 116, 139, 0.15);
+  color: var(--text-muted);
+  border: 1px solid rgba(100, 116, 139, 0.3);
+}
+
+.status-badge::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* Agent Info */
+.agent-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  margin: 3px 0;
+  line-height: 1.3;
+}
+
+.agent-info-label {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.agent-info-value {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.agent-info-value a {
+  color: var(--accent-cyan);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.agent-info-value a:hover {
+  color: var(--accent-blue);
+  text-decoration: underline;
+}
+
+/* Agent Actions */
+.agent-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.btn-small {
+  flex: 1;
+  padding: 4px 6px;
+  font-size: 10px;
+  font-weight: 500;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-small:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.btn-small.primary {
+  background: #7ba3d6;
+  color: white;
+}
+
+.btn-small.primary:hover:not(:disabled) {
+  background: #6a92c5;
+  box-shadow: 0 4px 12px rgba(123, 163, 214, 0.4);
+}
+
+.btn-small.danger {
+  background: #b87ba3;
+  color: white;
+}
+
+.btn-small.danger:hover:not(:disabled) {
+  background: #a76a92;
+  box-shadow: 0 4px 12px rgba(184, 123, 163, 0.4);
+}
+
+.btn-small.warning {
+  background: #d4a574;
+  color: white;
+}
+
+.btn-small.warning:hover:not(:disabled) {
+  background: #c39463;
+  box-shadow: 0 4px 12px rgba(212, 165, 116, 0.4);
+}
+
+.btn-small.success {
+  background: #6db86d;
+  color: white;
+}
+
+.btn-small.success:hover:not(:disabled) {
+  background: #5ca75c;
+  box-shadow: 0 4px 12px rgba(109, 184, 109, 0.4);
+}
+
+/* Activity Table */
+.table-container {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table thead {
+  background: var(--bg-tertiary);
+}
+
+.table th {
+  padding: 8px 12px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 2px solid var(--border-color);
+}
+
+.table td {
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--text-primary);
+  border-bottom: 1px solid rgba(51, 65, 85, 0.5);
+}
+
+.table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.table tbody tr {
+  transition: background 0.2s;
+}
+
+.table tbody tr:hover {
+  background: rgba(51, 65, 85, 0.3);
+}
+
+.status-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 8px;
+}
+
+.status-dot.online {
+  background: var(--accent-green);
+  box-shadow: 0 0 8px var(--accent-green);
+}
+
+.status-dot.offline {
+  background: var(--text-muted);
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>
+    <span>🦞</span>
+    <span>OpenClaw 多智能体管理中心</span>
+  </h1>
+  <div class="controls">
+    <button onclick="loadAgents()">🔄 刷新状态</button>
+  </div>
+</div>
+
+<div class="container">
+  <!-- 统计卡片 -->
+  <!-- Region 1: Agents -->
+  <div class="region">
+    <div class="region-title">🤖 智能体总览 (Agents)</div>
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-label">总 Agent 数</div>
+      <div class="stat-value" id="totalAgents">5</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">在线 Agent</div>
+      <div class="stat-value green" id="onlineAgents">5</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">离线 Agent</div>
+      <div class="stat-value red" id="offlineAgents">0</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">活跃连接数</div>
+      <div class="stat-value blue" id="activeConnections">0</div>
+    </div>
+  </div>
+
+  <!-- 主 Agent -->
+  <div class="section-title">🦞 主 Agent</div>
+  <div class="agents-grid" id="mainAgentGrid"></div>
+
+  <!-- 子 Agents -->
+  <div class="section-title">👥 子 Agent (Sub-Agents)</div>
+  <div class="agents-grid" id="subAgents"></div>
+
+  <!-- 最近活动表格 -->
+  <div class="section-title">📊 最近活动 (Recent Activity)</div>
+  <div class="table-container">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>时间</th>
+          <th>Agent</th>
+          <th>操作</th>
+          <th>状态</th>
+          <th>详情</th>
+        </tr>
+      </thead>
+      <tbody id="activityTable"></tbody>
+    </table>
+  </div>
+  </div><!-- /Region 1: Agents -->
+
+  <!-- Region 2: Projects -->
+  <div class="region">
+    <div class="region-title">🗂️ 项目服务 (Projects)</div>
+    <div class="agents-grid" id="webServersGrid"></div>
+  </div>
+</div>
+
+<script>
+const agentColors = {
+  'main': '#ef4444',
+  'writer': '#f59e0b',
+  'dev': '#3b82f6',
+  'info': '#06b6d4',
+  'image': '#ec4899'
+};
+
+    // An agent model may be a plain id string or a {primary, fallbacks} object.
+    // Calling String.prototype.replace on the object form throws and aborts rendering.
+    function formatAgentModel(model) {
+      const strip = (id) => String(id).replace('kiro-gw/', '');
+      if (!model) return '-';
+      if (typeof model === 'string') return strip(model);
+      if (typeof model === 'object') {
+        const primary = model.primary;
+        if (!primary) return '-';
+        const extra = Array.isArray(model.fallbacks) ? model.fallbacks.length : 0;
+        return extra > 0 ? strip(primary) + ' +' + extra : strip(primary);
+      }
+      return '-';
+    }
+
+function createAgentCard(agent, isMain = false) {
+  const accentColor = agentColors[agent.profile] || '#6b7280';
+  const card = document.createElement('div');
+  card.className = 'agent-card';
+  card.style.setProperty('--accent-color', accentColor);
+  
+  card.innerHTML = `
+    <div class="agent-header">
+      <div class="agent-title">
+        <div class="agent-icon">${agent.icon}</div>
+        <div class="agent-name">${agent.name}</div>
+      </div>
+      <span class="status-badge ${agent.online ? 'online' : 'offline'}">${agent.online ? '在线' : '离线'}</span>
+    </div>
+    <div class="agent-info">
+      <span class="agent-info-label">端口</span>
+      <span class="agent-info-value">${agent.port || '-'}</span>
+    </div>
+    <div class="agent-info">
+      <span class="agent-info-label">Profile</span>
+      <span class="agent-info-value">${agent.profile}</span>
+    </div>
+    <div class="agent-info">
+      <span class="agent-info-label">模型</span>
+      <span class="agent-info-value">${formatAgentModel(agent.model)}</span>
+    </div>
+    <div class="agent-info">
+      <span class="agent-info-label">访问地址</span>
+      <span class="agent-info-value">${agent.port ? `<a href="http://127.0.0.1:${agent.port}/" target="_blank">127.0.0.1:${agent.port}</a>` : '-'}</span>
+    </div>
+    <div class="agent-actions">
+      <button class="btn-small primary" onclick="window.open('http://127.0.0.1:${agent.port}/', '_blank')" ${!agent.online ? 'disabled' : ''}>控制台</button>
+      ${agent.online ? `
+        ${!isMain ? `
+          <button class="btn-small danger" onclick="stopAgent('${agent.id}', ${agent.port})">停止</button>
+          <button class="btn-small warning" onclick="restartAgent('${agent.id}', ${agent.port})">重启</button>
+        ` : `
+          <button class="btn-small danger" disabled>停止</button>
+          <button class="btn-small warning" disabled>重启</button>
+        `}
+      ` : `
+        <button class="btn-small success" onclick="startAgent('${agent.id}')">启动</button>
+      `}
+    </div>
+  `;
+  return card;
+}
+
+function updateActivityTable(agents) {
+  const tbody = document.getElementById('activityTable');
+  tbody.innerHTML = '';
+  
+  agents.forEach(agent => {
+    const row = document.createElement('tr');
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    
+    row.innerHTML = `
+      <td>${timeStr}</td>
+      <td>
+        <span class="status-dot ${agent.online ? 'online' : 'offline'}"></span>
+        ${agent.name}
+      </td>
+      <td>${agent.online ? '运行中' : '已停止'}</td>
+      <td><span style="color: ${agent.online ? 'var(--accent-green)' : 'var(--accent-red)'};">${agent.online ? '在线' : '离线'}</span></td>
+      <td>端口: ${agent.port || '-'} | 模型: ${formatAgentModel(agent.model)}</td>
+    `;
+    tbody.appendChild(row);
+  });
+}
+
+async function loadAgents() {
+  try {
+    const response = await fetch('/api/status');
+    const agents = await response.json();
+    
+    let totalCount = agents.length;
+    let onlineCount = agents.filter(a => a.online).length;
+    let offlineCount = totalCount - onlineCount;
+    
+    document.getElementById('totalAgents').textContent = totalCount;
+    document.getElementById('onlineAgents').textContent = onlineCount;
+    document.getElementById('offlineAgents').textContent = offlineCount;
+    
+    const mainAgent = agents.find(a => a.id === 'main');
+    const mainAgentContainer = document.getElementById('mainAgentGrid');
+    mainAgentContainer.innerHTML = '';
+    if (mainAgent) {
+      mainAgentContainer.appendChild(createAgentCard(mainAgent, true));
+    }
+    
+    const subAgents = agents.filter(a => a.id !== 'main');
+    const subAgentsContainer = document.getElementById('subAgents');
+    subAgentsContainer.innerHTML = '';
+    subAgents.forEach(agent => {
+      subAgentsContainer.appendChild(createAgentCard(agent, false));
+    });
+    
+    updateActivityTable(agents);
+    
+  } catch (error) {
+    console.error('加载失败:', error);
+  }
+}
+
+async function stopAgent(agentId, port) {
+  if (!confirm(`确定要停止 Agent "${agentId}" 吗？`)) return;
+  try {
+    const response = await fetch(`/api/stop/${encodeURIComponent(agentId)}/${port}`);
+    const result = await response.json();
+    if (result.ok) {
+      alert(`Agent "${agentId}" 已停止`);
+      setTimeout(() => loadAgents(), 1500);
+    } else {
+      alert(`停止失败: ${result.error || '未知错误'}`);
+    }
+  } catch (error) {
+    alert(`停止失败: ${error.message}`);
+  }
+}
+
+async function restartAgent(agentId, port) {
+  if (!confirm(`确定要重启 Agent "${agentId}" 吗？`)) return;
+  try {
+    const response = await fetch(`/api/restart/${encodeURIComponent(agentId)}/${port}`);
+    const result = await response.json();
+    if (result.ok) {
+      alert(`Agent "${agentId}" 正在重启，请稍候几秒后刷新状态...`);
+      setTimeout(() => loadAgents(), 6000);
+    } else {
+      alert(`重启失败: ${result.error || '未知错误'}`);
+    }
+  } catch (error) {
+    alert(`重启失败: ${error.message}`);
+  }
+}
+
+async function startAgent(agentId) {
+  if (!confirm(`确定要启动 Agent "${agentId}" 吗？将打开独立启动窗口。`)) return;
+  try {
+    const response = await fetch(`/api/start/${encodeURIComponent(agentId)}`);
+    const result = await response.json();
+    if (result.ok) {
+      alert(`Agent "${agentId}" 正在启动，请稍候几秒后刷新状态...`);
+      setTimeout(() => loadAgents(), 6000);
+    } else if (result.already) {
+      alert(`Agent "${agentId}" 端口 ${result.port} 已在监听，无需启动`);
+      loadAgents();
+    } else {
+      alert(`启动失败: ${result.error || '未知错误'}`);
+    }
+  } catch (error) {
+    alert(`启动失败: ${error.message}`);
+  }
+}
+
+function createWebServerCard(ws) {
+  const card = document.createElement('div');
+  card.className = 'agent-card';
+  card.style.setProperty('--accent-color', ws.online ? '#10b981' : '#6b7280');
+  const urlShort = (ws.url || '').replace('http://', '');
+  card.innerHTML = `
+    <div class="agent-header">
+      <div class="agent-title">
+        <div class="agent-icon">${ws.emoji || '🖥️'}</div>
+        <div class="agent-name">${ws.name}</div>
+      </div>
+      <span class="status-badge ${ws.online ? 'online' : 'offline'}">${ws.online ? '在线' : '离线'}</span>
+    </div>
+    <div class="agent-info">
+      <span class="agent-info-label">端口</span>
+      <span class="agent-info-value">${ws.port || '-'}</span>
+    </div>
+    <div class="agent-info">
+      <span class="agent-info-label">说明</span>
+      <span class="agent-info-value">${ws.desc || '-'}</span>
+    </div>
+    <div class="agent-info">
+      <span class="agent-info-label">访问地址</span>
+      <span class="agent-info-value">${ws.port ? `<a href="${ws.url}" target="_blank">${urlShort}</a>` : '-'}</span>
+    </div>
+    <div class="agent-actions">
+      <button class="btn-small primary" onclick="window.open('${ws.url}', '_blank')" ${!ws.online ? 'disabled' : ''}>打开</button>
+      ${ws.online
+        ? `<button class="btn-small danger" onclick="stopWebServer('${ws.id}')">停止</button>
+           <button class="btn-small warning" onclick="restartWebServer('${ws.id}')">重启</button>`
+        : `<button class="btn-small success" onclick="startWebServer('${ws.id}')">启动</button>`}
+    </div>
+  `;
+  return card;
+}
+
+async function loadWebServers() {
+  try {
+    const response = await fetch('/api/webservers');
+    const list = await response.json();
+    const container = document.getElementById('webServersGrid');
+    if (!container) return;
+    container.innerHTML = '';
+    list.forEach(ws => container.appendChild(createWebServerCard(ws)));
+  } catch (error) {
+    console.error('loadWebServers failed', error);
+  }
+}
+
+async function startWebServer(id) {
+  try {
+    const r = await fetch(`/api/webserver/start/${encodeURIComponent(id)}`);
+    const d = await r.json();
+    if (!d.ok && !d.already) alert(`启动失败: ${d.error || d.message || '未知错误'}`);
+    setTimeout(loadWebServers, 1500);
+  } catch (error) { alert(`启动失败: ${error.message}`); }
+}
+
+async function stopWebServer(id) {
+  try {
+    const r = await fetch(`/api/webserver/stop/${encodeURIComponent(id)}`);
+    const d = await r.json();
+    if (!d.ok) alert(`停止失败: ${d.error || '未知错误'}`);
+    setTimeout(loadWebServers, 1200);
+  } catch (error) { alert(`停止失败: ${error.message}`); }
+}
+
+async function restartWebServer(id) {
+  try {
+    const r = await fetch(`/api/webserver/restart/${encodeURIComponent(id)}`);
+    const d = await r.json();
+    if (!d.ok) alert(`重启失败: ${d.error || '未知错误'}`);
+    setTimeout(loadWebServers, 2000);
+  } catch (error) { alert(`重启失败: ${error.message}`); }
+}
+
+loadAgents();
+loadWebServers();
+setInterval(loadAgents, 30000);
+setInterval(loadWebServers, 30000);
+</script>
+
+
+<!-- Region 3: Scheduler -->
+<div class="container">
+<div class="region" id="scheduler-panel">
+  <div class="region-title">⚡ Kiro Gateway 调度器</div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(105px,1fr));gap:8px;margin-bottom:10px;">
+    <div style="background:var(--bg-tertiary);padding:8px;border-radius:8px;text-align:center;">
+      <div style="font-size:10px;color:var(--text-muted);margin-bottom:2px;">活跃请求</div>
+      <div id="sched-active" style="font-size:18px;font-weight:700;color:var(--accent-green);">-</div>
+    </div>
+    <div style="background:var(--bg-tertiary);padding:8px;border-radius:8px;text-align:center;">
+      <div style="font-size:10px;color:var(--text-muted);margin-bottom:2px;">排队等待</div>
+      <div id="sched-queued" style="font-size:18px;font-weight:700;color:var(--accent-orange);">-</div>
+    </div>
+    <div style="background:var(--bg-tertiary);padding:8px;border-radius:8px;text-align:center;">
+      <div style="font-size:10px;color:var(--text-muted);margin-bottom:2px;">并发上限</div>
+      <div id="sched-max" style="font-size:18px;font-weight:700;color:var(--text-primary);">-</div>
+    </div>
+    <div style="background:var(--bg-tertiary);padding:8px;border-radius:8px;text-align:center;">
+      <div style="font-size:10px;color:var(--text-muted);margin-bottom:2px;">总请求数</div>
+      <div id="sched-total" style="font-size:18px;font-weight:700;color:var(--accent-blue);">-</div>
+    </div>
+    <div style="background:var(--bg-tertiary);padding:8px;border-radius:8px;text-align:center;">
+      <div style="font-size:10px;color:var(--text-muted);margin-bottom:2px;">已完成</div>
+      <div id="sched-completed" style="font-size:18px;font-weight:700;color:var(--accent-cyan);">-</div>
+    </div>
+    <div style="background:var(--bg-tertiary);padding:8px;border-radius:8px;text-align:center;">
+      <div style="font-size:10px;color:var(--text-muted);margin-bottom:2px;">超时(429)</div>
+      <div id="sched-timeouts" style="font-size:18px;font-weight:700;color:var(--accent-red);">-</div>
+    </div>
+    <div style="background:var(--bg-tertiary);padding:8px;border-radius:8px;text-align:center;">
+      <div style="font-size:10px;color:var(--text-muted);margin-bottom:2px;">限流等待</div>
+      <div id="sched-rate-waited" style="font-size:18px;font-weight:700;color:var(--accent-pink);">-</div>
+    </div>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px;">
+    <div id="sched-status-dot" style="width:8px;height:8px;border-radius:50%;background:#666;"></div>
+    <span id="sched-status-text" style="font-size:12px;color:var(--text-muted);">正在连接...</span>
+  </div>
+</div>
+</div>
+
+<script>
+// Scheduler Stats Auto-refresh
+async function loadSchedulerStats() {
+  try {
+    const res = await fetch('/api/scheduler');
+    const data = await res.json();
+    if (data.error) {
+      document.getElementById('sched-status-dot').style.background = '#ef4444';
+      document.getElementById('sched-status-text').textContent = 'Gateway 离线';
+      return;
+    }
+    document.getElementById('sched-active').textContent = data.active || 0;
+    document.getElementById('sched-queued').textContent = data.queued || 0;
+    document.getElementById('sched-max').textContent = data.max_concurrent || 0;
+    document.getElementById('sched-total').textContent = data.total_requests || 0;
+    document.getElementById('sched-completed').textContent = data.total_completed || 0;
+    document.getElementById('sched-timeouts').textContent = data.total_timeouts || 0;
+    document.getElementById('sched-rate-waited').textContent = data.total_rate_waited || 0;
+    document.getElementById('sched-status-dot').style.background = '#22c55e';
+    document.getElementById('sched-status-text').textContent = 
+      `运行中 · ${data.active}/${data.max_concurrent} 活跃 · ${data.queued} 排队`;
+  } catch (e) {
+    document.getElementById('sched-status-dot').style.background = '#ef4444';
+    document.getElementById('sched-status-text').textContent = '连接失败';
+  }
+}
+loadSchedulerStats();
+setInterval(loadSchedulerStats, 3000);
+</script>
+
+<!-- Region 4: Cron Jobs -->
+<div class="container">
+<div class="region" id="cron-panel">
+  <div class="region-title" style="justify-content:space-between;">
+    <span>⏰ Cron 调度任务</span>
+    <button onclick="loadCronJobs()" style="background:var(--bg-tertiary);border:1px solid var(--border-color);color:var(--text-secondary);padding:4px 10px;border-radius:6px;cursor:pointer;font-size:11px;">🔄 刷新</button>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(105px,1fr));gap:8px;margin-bottom:12px;">
+    <div style="background:var(--bg-tertiary);padding:8px;border-radius:8px;text-align:center;">
+      <div style="font-size:10px;color:var(--text-muted);margin-bottom:2px;">总任务</div>
+      <div id="cron-total" style="font-size:18px;font-weight:700;color:var(--text-primary);">-</div>
+    </div>
+    <div style="background:var(--bg-tertiary);padding:8px;border-radius:8px;text-align:center;">
+      <div style="font-size:10px;color:var(--text-muted);margin-bottom:2px;">正常</div>
+      <div id="cron-ok" style="font-size:18px;font-weight:700;color:var(--accent-green);">-</div>
+    </div>
+    <div style="background:var(--bg-tertiary);padding:8px;border-radius:8px;text-align:center;">
+      <div style="font-size:10px;color:var(--text-muted);margin-bottom:2px;">错误</div>
+      <div id="cron-error" style="font-size:18px;font-weight:700;color:var(--accent-red);">-</div>
+    </div>
+    <div style="background:var(--bg-tertiary);padding:8px;border-radius:8px;text-align:center;">
+      <div style="font-size:10px;color:var(--text-muted);margin-bottom:2px;">已禁用</div>
+      <div id="cron-disabled" style="font-size:18px;font-weight:700;color:var(--text-muted);">-</div>
+    </div>
+    <div style="background:var(--bg-tertiary);padding:8px;border-radius:8px;text-align:center;">
+      <div style="font-size:10px;color:var(--text-muted);margin-bottom:2px;">运行中</div>
+      <div id="cron-running" style="font-size:18px;font-weight:700;color:var(--accent-cyan);">-</div>
+    </div>
+  </div>
+  <div class="table-container">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>状态</th>
+          <th>任务名</th>
+          <th>调度</th>
+          <th>上次运行</th>
+          <th>下次运行</th>
+          <th>连错</th>
+          <th>详情</th>
+        </tr>
+      </thead>
+      <tbody id="cronTable"></tbody>
+    </table>
+  </div>
+  <div id="cron-updated" style="font-size:10px;color:var(--text-muted);margin-top:8px;"></div>
+</div>
+</div>
+
+<script>
+function _cronFmtTime(ms) {
+  if (!ms) return '-';
+  const d = new Date(ms);
+  const now = Date.now();
+  const diff = ms - now;
+  const abs = Math.abs(diff);
+  let rel;
+  if (abs < 60000) rel = Math.round(abs / 1000) + '秒';
+  else if (abs < 3600000) rel = Math.round(abs / 60000) + '分';
+  else if (abs < 86400000) rel = Math.round(abs / 3600000) + '小时';
+  else rel = Math.round(abs / 86400000) + '天';
+  const hhmm = d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+  const mmdd = (d.getMonth() + 1) + '/' + d.getDate();
+  const stamp = mmdd + ' ' + hhmm;
+  if (diff > 0) return stamp + ' (' + rel + '后)';
+  return stamp + ' (' + rel + '前)';
+}
+function _cronDot(health, running) {
+  const map = { ok: '#22c55e', error: '#ef4444', disabled: '#64748b', skipped: '#f59e0b', unknown: '#94a3b8' };
+  const color = running ? '#06b6d4' : (map[health] || '#94a3b8');
+  const label = running ? '运行中' : ({ ok: '正常', error: '错误', disabled: '已禁用', skipped: '跳过', unknown: '未知' }[health] || health);
+  const pulse = running ? 'animation:pulse 1.5s infinite;' : '';
+  return '<span style="display:inline-flex;align-items:center;gap:6px;"><span style="width:8px;height:8px;border-radius:50%;background:' + color + ';box-shadow:0 0 6px ' + color + ';' + pulse + '"></span>' + label + '</span>';
+}
+async function loadCronJobs() {
+  try {
+    const res = await fetch('/api/cron');
+    const data = await res.json();
+    if (data.error && (!data.jobs || !data.jobs.length)) {
+      document.getElementById('cronTable').innerHTML = '<tr><td colspan="7" style="color:var(--accent-red);">读取失败: ' + data.error + '</td></tr>';
+      return;
+    }
+    const s = data.summary || {};
+    document.getElementById('cron-total').textContent = s.total || 0;
+    document.getElementById('cron-ok').textContent = s.ok || 0;
+    document.getElementById('cron-error').textContent = s.error || 0;
+    document.getElementById('cron-disabled').textContent = s.disabled || 0;
+    document.getElementById('cron-running').textContent = s.running || 0;
+    const tbody = document.getElementById('cronTable');
+    tbody.innerHTML = '';
+    (data.jobs || []).forEach(j => {
+      const row = document.createElement('tr');
+      if (!j.enabled) row.style.opacity = '0.55';
+      const errCell = j.consecutiveErrors > 0
+        ? '<span style="color:var(--accent-red);font-weight:600;">' + j.consecutiveErrors + '</span>'
+        : '0';
+      let detail = j.model ? ('🤖 ' + j.model) : '';
+      if (j.lastRunStatus === 'error' && j.lastError) {
+        detail = '<span style="color:var(--accent-red);" title="' + String(j.lastError).replace(/"/g, '&quot;') + '">' + String(j.lastError).slice(0, 40) + '</span>';
+      } else if (j.lastDurationMs) {
+        detail += (detail ? ' · ' : '') + Math.round(j.lastDurationMs / 1000) + 's';
+      }
+      row.innerHTML =
+        '<td>' + _cronDot(j.health, j.running) + '</td>' +
+        '<td style="max-width:260px;">' + j.name + '</td>' +
+        '<td style="font-family:monospace;font-size:11px;color:var(--text-secondary);">' + j.schedule + '</td>' +
+        '<td style="font-size:11px;">' + _cronFmtTime(j.lastRunAtMs) + '</td>' +
+        '<td style="font-size:11px;">' + (j.enabled ? _cronFmtTime(j.nextRunAtMs) : '-') + '</td>' +
+        '<td style="text-align:center;">' + errCell + '</td>' +
+        '<td style="font-size:11px;color:var(--text-muted);">' + detail + '</td>';
+      tbody.appendChild(row);
+    });
+    document.getElementById('cron-updated').textContent = '最后刷新: ' + new Date().toLocaleTimeString('zh-CN') + (data.error ? ' · ⚠️ ' + data.error : '');
+  } catch (e) {
+    document.getElementById('cronTable').innerHTML = '<tr><td colspan="7" style="color:var(--accent-red);">连接失败: ' + e.message + '</td></tr>';
+  }
+}
+loadCronJobs();
+setInterval(loadCronJobs, 30000);
+</script>
+
+<!-- Region 5: Background Resident Tasks -->
+<div class="container">
+<div class="region" id="bgtask-panel">
+  <div class="region-title" style="justify-content:space-between;">
+    <span>🔁 后台常驻任务</span>
+    <button onclick="loadBgTasks()" style="background:var(--bg-tertiary);border:1px solid var(--border-color);color:var(--text-secondary);padding:4px 10px;border-radius:6px;cursor:pointer;font-size:11px;">🔄 刷新</button>
+  </div>
+  <div style="font-size:11px;color:var(--text-muted);margin-bottom:10px;">长负载常驻进程（不在 cron 列表），cron 仅作守护哨兵。进度直读磁盘 progress 文件。</div>
+  <div id="bgtaskCards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:12px;"></div>
+  <div id="bgtask-updated" style="font-size:10px;color:var(--text-muted);margin-top:8px;"></div>
+</div>
+</div>
+
+<script>
+function _bgFmtNum(n) {
+  if (n === null || n === undefined || isNaN(n)) return '-';
+  return Number(n).toLocaleString('en-US');
+}
+function _bgFmtTime(ms) {
+  if (!ms) return '-';
+  const d = new Date(ms);
+  const diff = Date.now() - ms;
+  let rel;
+  if (diff < 60000) rel = Math.round(diff / 1000) + '秒前';
+  else if (diff < 3600000) rel = Math.round(diff / 60000) + '分前';
+  else if (diff < 86400000) rel = Math.round(diff / 3600000) + '小时前';
+  else rel = Math.round(diff / 86400000) + '天前';
+  return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) + ' (' + rel + ')';
+}
+function _bgStatusBadge(t) {
+  let color, label;
+  if (t.allDone) { color = '#22c55e'; label = '已完成'; }
+  else if (t.alive) { color = '#06b6d4'; label = '运行中 ' + t.workers + '/' + t.expectedWorkers; }
+  else { color = '#ef4444'; label = '未运行'; }
+  const pulse = (t.alive && !t.allDone) ? 'animation:pulse 1.5s infinite;' : '';
+  return '<span style="display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:' + color + ';"><span style="width:8px;height:8px;border-radius:50%;background:' + color + ';box-shadow:0 0 6px ' + color + ';' + pulse + '"></span>' + label + '</span>';
+}
+function _bgCard(t) {
+  const metricsHtml = Object.entries(t.metrics || {}).map(([k, v]) =>
+    '<div style="display:flex;justify-content:space-between;font-size:11px;margin:2px 0;"><span style="color:var(--text-muted);">' + k + '</span><span style="color:var(--text-secondary);font-weight:600;">' + (typeof v === 'number' ? _bgFmtNum(v) : v) + '</span></div>'
+  ).join('');
+  let bar = '';
+  if (t.progressPct !== null && t.progressPct !== undefined) {
+    const pct = Math.min(100, t.progressPct);
+    const barColor = t.allDone ? '#22c55e' : '#06b6d4';
+    bar = '<div style="margin:8px 0 6px;"><div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-muted);margin-bottom:3px;"><span>进度</span><span>' + pct + '%</span></div><div style="height:6px;background:var(--bg-primary);border-radius:3px;overflow:hidden;"><div style="height:100%;width:' + pct + '%;background:' + barColor + ';transition:width .5s;"></div></div></div>';
+  }
+  let bandsHtml = '';
+  if (t.bands && t.bands.length) {
+    bandsHtml = '<div style="display:flex;gap:4px;margin-top:6px;flex-wrap:wrap;">' + t.bands.map(b => {
+      const c = b.completed ? '#22c55e' : '#06b6d4';
+      return '<span style="font-size:10px;padding:2px 6px;border-radius:4px;background:var(--bg-primary);color:' + c + ';border:1px solid ' + c + '33;" title="已删 ' + _bgFmtNum(b.deleted) + '">' + b.band + ' ' + _bgFmtNum(b.deleted) + '</span>';
+    }).join('') + '</div>';
+  }
+  return '<div style="background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:10px;padding:12px 14px;">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><span style="font-size:13px;font-weight:600;color:var(--text-primary);">' + t.name + '</span>' + _bgStatusBadge(t) + '</div>' +
+    '<div style="font-size:10px;color:var(--text-muted);margin-bottom:8px;">🛡️ 守护 cron: ' + (t.guardCron || '-') + '</div>' +
+    bar + metricsHtml + bandsHtml +
+    '<div style="font-size:10px;color:var(--text-muted);margin-top:8px;">更新: ' + _bgFmtTime(t.lastUpdateMs) + '</div>' +
+    '</div>';
+}
+async function loadBgTasks() {
+  try {
+    const res = await fetch('/api/bgtasks');
+    const data = await res.json();
+    const box = document.getElementById('bgtaskCards');
+    if (data.error && (!data.tasks || !data.tasks.length)) {
+      box.innerHTML = '<div style="color:var(--accent-red);">读取失败: ' + data.error + '</div>';
+      return;
+    }
+    box.innerHTML = (data.tasks || []).map(_bgCard).join('');
+    document.getElementById('bgtask-updated').textContent = '最后刷新: ' + new Date().toLocaleTimeString('zh-CN');
+  } catch (e) {
+    document.getElementById('bgtaskCards').innerHTML = '<div style="color:var(--accent-red);">连接失败: ' + e.message + '</div>';
+  }
+}
+loadBgTasks();
+setInterval(loadBgTasks, 30000);
+</script>
+
+</body>
+</html>

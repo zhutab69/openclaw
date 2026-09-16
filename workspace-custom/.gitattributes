@@ -1,0 +1,9 @@
+# The repo has core.autocrlf=true, which would rewrite these files to CRLF on
+# checkout. That would break the whole point of this directory: the mirror is meant to
+# be byte-identical to the live files under ~/.openclaw/workspace so it can be copied
+# straight back, and sync-workspace-custom.py compares them by sha256 (a line-ending
+# rewrite would make every file report as CHANGED forever).
+#
+# -text disables all end-of-line conversion here. Scoped to this directory on purpose:
+# a repo-wide setting would renormalize unrelated tracked files.
+* -text

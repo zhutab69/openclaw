@@ -1,0 +1,19 @@
+{
+  "dependencies": {
+    "docx": "^8.5.0",
+    "pdf-parse": "^2.4.5",
+    "playwright": "^1.60.0"
+  },
+  "name": "workspace",
+  "version": "1.0.0",
+  "description": "",
+  "main": "cron-uptime.js",
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs"
+}
