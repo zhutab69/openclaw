@@ -35,6 +35,72 @@ function Elapsed($start) {
     return "$([math]::Round($ms/1000, 2))s"
 }
 
+# Console columns occupied by $Text. A CJK/fullwidth code point takes two columns,
+# so padding by .Length shifted the port column one space right per Chinese
+# character - that is why the Chinese service names did not line up.
+function Get-DisplayWidth([string]$Text) {
+    if (-not $Text) { return 0 }
+    $w = 0
+    foreach ($ch in $Text.ToCharArray()) {
+        $c = [int][char]$ch
+        if (($c -ge 0x1100 -and $c -le 0x115F) -or
+            ($c -ge 0x2E80 -and $c -le 0x303E) -or
+            ($c -ge 0x3041 -and $c -le 0x33FF) -or
+            ($c -ge 0x3400 -and $c -le 0x4DBF) -or
+            ($c -ge 0x4E00 -and $c -le 0x9FFF) -or
+            ($c -ge 0xA000 -and $c -le 0xA4CF) -or
+            ($c -ge 0xAC00 -and $c -le 0xD7A3) -or
+            ($c -ge 0xF900 -and $c -le 0xFAFF) -or
+            ($c -ge 0xFE30 -and $c -le 0xFE6F) -or
+            ($c -ge 0xFF00 -and $c -le 0xFF60) -or
+            ($c -ge 0xFFE0 -and $c -le 0xFFE6)) { $w += 2 }
+        else { $w += 1 }
+    }
+    return $w
+}
+
+# One aligned group of services. Called once for the sub-agent RPC ports and once
+# for the web UIs; each group aligns on its own widest name so neither group is
+# padded out by the other.
+function Write-ServiceTable {
+    param(
+        [string]$Title,
+        [int[]]$Ports,
+        [hashtable]$Names,
+        [hashtable]$Urls,
+        [hashtable]$Ready
+    )
+    if (-not $Ports -or $Ports.Count -eq 0) { return }
+
+    $nameWidth = 0
+    foreach ($p in $Ports) {
+        $w = Get-DisplayWidth ([string]$Names[$p])
+        if ($w -gt $nameWidth) { $nameWidth = $w }
+    }
+
+    $consoleWidth = try { [Console]::WindowWidth } catch { 120 }
+
+    Write-Host "  $Title" -ForegroundColor DarkGray
+    foreach ($p in $Ports) {
+        $name = [string]$Names[$p]
+        $pad = " " * [math]::Max(0, $nameWidth - (Get-DisplayWidth $name))
+        $isUp = [bool]$Ready[$p]
+        $tag = if ($isUp) { "[OK]  " } else { "[FAIL]" }
+        $color = if ($isUp) { "Green" } else { "Red" }
+        # Right-align the port so 4- and 5-digit ports end in the same column.
+        $portCol = ("{0,6}" -f ":$p")
+        $row = "    $tag $name$pad $portCol"
+        $url = [string]$Urls[$p]
+        # Drop the URL rather than let it wrap on a narrow console.
+        if ($url -and (4 + 6 + 1 + $nameWidth + 1 + 6 + 3 + $url.Length) -lt $consoleWidth) {
+            Write-Host $row -NoNewline -ForegroundColor $color
+            Write-Host "   $url" -ForegroundColor Cyan
+        } else {
+            Write-Host $row -ForegroundColor $color
+        }
+    }
+}
+
 function Show-LaunchProgress {
     param(
         [int]$Percent,
@@ -44,7 +110,7 @@ function Show-LaunchProgress {
     )
 
     $Percent = [math]::Max(0, [math]::Min(100, $Percent))
-    $activity = "[3/5] Launch all services..."
+    $activity = "[3/4] Launch all services..."
     $indicator = if ($Complete) { if ($Warning) { "!" } else { "OK" } } else {
         $frames = @("|", "/", "-", "\")
         $frame = $frames[$script:launchSpinnerFrame % $frames.Count]
@@ -63,7 +129,7 @@ function Show-LaunchProgress {
             $barWidth = [math]::Min(30, [math]::Max(10, $width - 56))
             $filled = [int][math]::Round(($Percent / 100) * $barWidth)
             $bar = ("█" * $filled) + ("." * ($barWidth - $filled))
-            $prefix = "[3/5] Launch: [$bar] $Percent% $indicator "
+            $prefix = "[3/4] Launch: [$bar] $Percent% $indicator "
             $maxStatusLength = [math]::Max(0, $width - 1 - $prefix.Length)
             $shortStatus = [string]$Status
             if ($shortStatus.Length -gt $maxStatusLength) {
@@ -564,18 +630,18 @@ Write-Host "========================================" -ForegroundColor Cyan
 $launchStart = Get-Date
 
 # ============================================
-# [1/5] Config + Cleanup
+# [1/4] Config + Cleanup
 # ============================================
 $t0 = Get-Date
 Write-Host ""
-Write-Host "[1/5] Config + Cleanup..." -NoNewline
+Write-Host "[1/4] Config + Cleanup..." -NoNewline
 
 $configValidation = Test-OpenClawConfig
 if (-not $configValidation.Ok) {
     if ($configValidation.TimedOut) {
         # Inconclusive pre-flight (CLI cold start), not a schema error. Do not
         # abort: the gateway validates its own config on start and refuses to
-        # boot if it is actually invalid, and [4/5]/watchdog will surface that.
+        # boot if it is actually invalid, and [4/4]/watchdog will surface that.
         Write-Host " config pre-check timed out (continuing)" -ForegroundColor Yellow
         Write-Host "  Pre-flight config validate exceeded its window; the gateway will validate on start." -ForegroundColor DarkGray
     } else {
@@ -647,10 +713,10 @@ Write-Host " $($subAgents.Count) agents (ports: $portList) ($(Elapsed $t0))" -Fo
 $script:perfStats["init"] = (Get-Date) - $t0
 
 # ============================================
-# [2/5] Kiro Gateway (must be ready before OpenClaw)
+# [2/4] Kiro Gateway (must be ready before OpenClaw)
 # ============================================
 $t0 = Get-Date
-Write-Host "[2/5] Kiro Gateway..." -NoNewline
+Write-Host "[2/4] Kiro Gateway..." -NoNewline
 
 # Refresh Kiro auth token before starting Gateway
 try {
@@ -676,7 +742,7 @@ if (Wait-ForHealth "http://127.0.0.1:9000/health" 30) {
 $script:perfStats["kiro"] = (Get-Date) - $t0
 
 # ============================================
-# [3/6] Sync Models + Main Gateway
+# [3/4] Sync Models + Main Gateway
 # ============================================
 $t0 = Get-Date
 $script:launchSpinnerFrame = 0
@@ -920,50 +986,75 @@ if ($launchReadinessFailures) {
 $script:perfStats["launch"] = (Get-Date) - $t0
 
 # ============================================
-# [4/6] Wait for all services (with retry for Main Gateway)
+# [4/4] Wait for all services, then print them grouped (with retry for Main Gateway)
 # ============================================
 $t0 = Get-Date
-Write-Host "[4/5] Waiting for services..."
+Write-Host "[4/4] Waiting for services..."
 
-# 8899/8900 are no longer listed here: they come from webservers.json below.
-# Listing them in both places is what printed them twice in [4/5] and in the summary.
+# Ports are discovered, not hardcoded: sub-agents come from openclaw.json via
+# $script:agentPorts, web UIs from webservers.json. Only the main gateway port is
+# fixed, because the gateway itself fixes it.
 $allPorts = @(18789)
 $portNames = @{ 18789 = "Main Gateway" }
+$portUrls = @{ 18789 = "http://127.0.0.1:18789/" }
+# Two groups on purpose: a sub-agent port is an RPC endpoint with nothing to open in
+# a browser, a web service has a URL. One combined table left the URL column half
+# empty and read as if unrelated things belonged together.
+$rpcPorts = @()
+$uiPorts = @(18789)
 foreach ($agent in $subAgents) {
     $port = $script:agentPorts[$agent.id]
     if ($port) {
         $allPorts += $port
+        $rpcPorts += $port
         $name = ($agent.id -replace '-agent$', '')
         $portNames[$port] = $name.Substring(0,1).ToUpper() + $name.Substring(1)
     }
 }
 foreach ($ws in $script:webServers) {
-    if ($ws.port) { $allPorts += $ws.port; $portNames[$ws.port] = $ws.name }
+    if ($ws.port) {
+        $allPorts += $ws.port
+        $uiPorts += $ws.port
+        $portNames[$ws.port] = $ws.name
+        if ($ws.url) { $portUrls[$ws.port] = $ws.url }
+    }
 }
 # Guard against a port being declared twice (e.g. re-added to the hardcoded list):
 # a duplicate would be waited on and printed twice.
 $allPorts = @($allPorts | Sort-Object -Unique)
+$rpcPorts = @($rpcPorts | Sort-Object -Unique)
+$uiPorts = @($uiPorts | Sort-Object -Unique)
 
 $deadline = (Get-Date).AddSeconds(60)
 $pendingPorts = [System.Collections.Generic.List[int]]::new()
 foreach ($p in $allPorts) { $pendingPorts.Add($p) }
 $mainRetries = 0
-$maxNameLen = ($portNames.Values | ForEach-Object { $_.Length } | Measure-Object -Maximum).Maximum
+# Readiness is collected first and printed afterwards. Printing as each port answers
+# would interleave the two groups and defeat the alignment; the wait is ~1s in
+# practice, so nothing useful is lost. A slow wait still reports itself below.
+$portReady = @{}
+$waitNotice = (Get-Date).AddSeconds(3)
 
 while ($pendingPorts.Count -gt 0 -and (Get-Date) -lt $deadline) {
-    $readyPorts = @()
+    $justReady = @()
     foreach ($port in $pendingPorts) {
         try {
             $tcp = New-Object System.Net.Sockets.TcpClient
             $tcp.Connect("127.0.0.1", $port)
             $tcp.Close()
-            $readyPorts += $port
-            $name = $portNames[$port]
-            $pad = " " * ($maxNameLen - $name.Length)
-            Write-Host "  [OK] $name$pad  :$port" -ForegroundColor Green
+            $justReady += $port
+            $portReady[$port] = $true
         } catch {}
     }
-    foreach ($port in $readyPorts) { $pendingPorts.Remove($port) | Out-Null }
+    foreach ($port in $justReady) { $pendingPorts.Remove($port) | Out-Null }
+
+    # Silence is normal here, so say something once the wait becomes long enough to
+    # look like a hang, and name the ports still missing.
+    if ($pendingPorts.Count -gt 0 -and (Get-Date) -gt $waitNotice) {
+        $stillPending = ($pendingPorts | ForEach-Object { $portNames[$_] }) -join ", "
+        Write-Host "  still waiting for $($pendingPorts.Count): $stillPending" -ForegroundColor DarkGray
+        $waitNotice = (Get-Date).AddSeconds(5)
+    }
     
     # Main Gateway crash detection + auto-restart
     if ($pendingPorts.Contains(18789) -and $script:p2.HasExited -and $mainRetries -lt 3) {
@@ -989,12 +1080,13 @@ while ($pendingPorts.Count -gt 0 -and (Get-Date) -lt $deadline) {
     if ($pendingPorts.Count -gt 0) { Start-Sleep -Milliseconds 500 }
 }
 
-if ($pendingPorts.Count -gt 0) {
-    foreach ($port in $pendingPorts) {
-        Write-Host "  [FAIL] $($portNames[$port]) :$port" -ForegroundColor Red
-    }
-}
 $script:perfStats["wait"] = (Get-Date) - $t0
+
+# Everything has settled: print both groups aligned. Ports missing from $portReady
+# render as [FAIL] inside their own group, so a failure keeps its context instead of
+# being appended to a separate list.
+Write-ServiceTable -Title "Sub-agents (RPC)" -Ports $rpcPorts -Names $portNames -Urls $portUrls -Ready $portReady
+Write-ServiceTable -Title "Web services" -Ports $uiPorts -Names $portNames -Urls $portUrls -Ready $portReady
 
 # ============================================
 # Warm-up: trigger model-resolution + auth cache population
@@ -1057,10 +1149,11 @@ try {
     if ($cronCheck) { Write-Diag $cronCheck }
 } catch {}
 
-# [6/6] Open browsers + Done
+# Open browsers - folded into [4/4] rather than carrying its own step number:
+# opening tabs is not a phase the operator waits on, and a fifth step made the
+# window look like it listed the services twice.
 # ============================================
 $t0 = Get-Date
-Write-Host "[5/5] Opening browsers..." -NoNewline
 
 try {
     $gwUrl = if ($script:gwToken -and $script:gwToken -ne "no_change") { "http://127.0.0.1:18789/?token=$($script:gwToken)" } else { "http://127.0.0.1:18789/" }
@@ -1084,9 +1177,9 @@ try {
         # Fallback: open one by one with spacing
         foreach ($u in $openUrls) { cmd /c start "" "$u" 2>$null; Start-Sleep -Milliseconds 800 }
     }
-    Write-Host " done ($(Elapsed $t0))" -ForegroundColor Green
+    Write-Host "  Browser: $($openUrls.Count) tab(s) opened ($(Elapsed $t0))" -ForegroundColor DarkGray
 } catch {
-    Write-Host " partial ($(Elapsed $t0))" -ForegroundColor Yellow
+    Write-Host "  Browser: partial ($(Elapsed $t0))" -ForegroundColor Yellow
 }
 $script:perfStats["browsers"] = (Get-Date) - $t0
 
@@ -1113,10 +1206,9 @@ Write-Host "  Launch All:  $(FmtMs ([int]$script:perfStats['launch'].TotalMillis
 Write-Host "  Wait Ready:  $(FmtMs ([int]$script:perfStats['wait'].TotalMilliseconds))" -ForegroundColor Gray
 Write-Host "  Browsers:    $(FmtMs ([int]$script:perfStats['browsers'].TotalMilliseconds))" -ForegroundColor Gray
 Write-Host ""
-Write-Host "  Main Dashboard: http://127.0.0.1:18789/" -ForegroundColor Cyan
-# 8899/8900 are printed by the webservers loop below (they live in webservers.json).
-foreach ($ws in $script:webServers) { Write-Host "  $($ws.name): $($ws.url)" -ForegroundColor Cyan }
-Write-Host ""
+# The URLs used to be repeated here. [4/4] already lists every service with its port
+# and URL in one aligned table, and having both made the window look like it printed
+# the same block twice.
 Write-Host "  Press any key to stop all services" -ForegroundColor DarkGray
 Write-Host ""
 
