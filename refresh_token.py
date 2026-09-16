@@ -1,15 +1,49 @@
 """Manually refresh Kiro auth token using AWS SSO OIDC."""
 import json, urllib.request, os
 
-CREDS_FILE = r"C:\Users\zhuyulin\.aws\sso\cache\kiro-auth-token.json"
-CLIENT_FILE = r"C:\Users\zhuyulin\.aws\sso\cache\58fbcb9a0e52bd94d951203bea6aceebbf330175.json"
+CACHE_DIR = r"C:\Users\zhuyulin\.aws\sso\cache"
+CREDS_FILE = os.path.join(CACHE_DIR, "kiro-auth-token.json")
 
 # Load current credentials
 with open(CREDS_FILE, "r") as f:
     creds = json.load(f)
 
-with open(CLIENT_FILE, "r") as f:
-    client = json.load(f)
+
+def resolve_client_file(creds):
+    """Locate the SSO client-registration file.
+
+    2026-08-11 fix: the client file name was hardcoded to an old hash
+    (58fbcb9a...). After an SSO re-login the hash changes, so every refresh
+    died with FileNotFoundError -> token_refresh=failed every hour for days.
+    kiro-auth-token.json carries `clientIdHash`, so resolve from it and only
+    fall back to scanning the cache dir.
+    """
+    candidates = []
+    h = creds.get("clientIdHash")
+    if h:
+        candidates.append(os.path.join(CACHE_DIR, f"{h}.json"))
+
+    for name in sorted(os.listdir(CACHE_DIR)):
+        if not name.endswith(".json") or name == "kiro-auth-token.json":
+            continue
+        candidates.append(os.path.join(CACHE_DIR, name))
+
+    for path in candidates:
+        try:
+            with open(path, "r") as f:
+                data = json.load(f)
+        except (OSError, ValueError):
+            continue
+        if data.get("clientId") and data.get("clientSecret"):
+            return path, data
+
+    raise FileNotFoundError(
+        f"No SSO client registration (clientId+clientSecret) found in {CACHE_DIR}"
+    )
+
+
+CLIENT_FILE, client = resolve_client_file(creds)
+print(f"Client file: {os.path.basename(CLIENT_FILE)}")
 
 print(f"Current token expires: {creds['expiresAt']}")
 print(f"Client ID: {client['clientId'][:20]}...")

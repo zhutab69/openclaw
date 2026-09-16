@@ -52,3 +52,19 @@ yarn.lock
 *.bak
 *.backup
 *_backup.*
+
+# Portable Node runtime (~90MB unpacked; intentionally NOT tracked - rollback relies
+# on keeping the previous directory on disk, see UPGRADE-OPTIMIZATION-GUIDE.md).
+# Listed explicitly rather than as node-v*-win-x64/ because the older
+# node-v22.22.1-win-x64/ still has ~36 deliberately tracked files (top-level shims +
+# node.exe); a wildcard here would be misleading about their status.
+# When a new runtime is introduced, add it here as its own line.
+node-v22.23.2-win-x64/
+
+# Timestamped backup files. The generic *.bak rule above misses these because the
+# timestamp/suffix comes AFTER .bak (e.g. refresh_token.py.bak-clienthash-20260811-0900).
+# Several of them hold credentials, so they must never be committed.
+*.bak-*
+*.bak.*
+.env.bak*
+*.migrated

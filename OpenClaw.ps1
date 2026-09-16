@@ -353,6 +353,86 @@ function Get-KiroProbeConfig {
     }
 }
 
+$script:DiagLog = "$env:USERPROFILE\.openclaw\logs\launcher-startup.log"
+
+function Write-Diag {
+    # Startup diagnostics go to a file, not the console: warm-up / model-check /
+    # cron-check are informational and were burying the actual service table.
+    # Genuine problems are still surfaced on screen by their callers.
+    param([string[]]$Lines)
+    try {
+        $dir = Split-Path $script:DiagLog -Parent
+        if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+        $stamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
+        $buf = New-Object System.Collections.Generic.List[string]
+        foreach ($l in $Lines) {
+            if ($null -ne $l -and "$l".Trim()) { $buf.Add("$stamp  $l") }
+        }
+        if ($buf.Count -gt 0) {
+            # UTF-8 without BOM, appended explicitly: PS 5.1's -Encoding UTF8 writes a
+            # BOM and would corrupt the Chinese job names on every append.
+            $enc = New-Object System.Text.UTF8Encoding($false)
+            [System.IO.File]::AppendAllLines($script:DiagLog, $buf, $enc)
+        }
+    } catch {}
+}
+
+function Invoke-ModelSelfCheck {
+    # P2: verify every agent's primary model actually exists in the live upstream
+    # catalog exposed by each provider's /v1/models. Warn only — never edits config.
+    # All values are read dynamically from openclaw.json (no hard-coded agents/models).
+    try {
+        $cfg = Get-Content $OPENCLAW_CONFIG -Raw -Encoding UTF8 | ConvertFrom-Json
+
+        # Fetch live model ids per provider (null = unknown, skip that provider)
+        $liveByProvider = @{}
+        foreach ($prop in $cfg.models.providers.PSObject.Properties) {
+            $prov = $prop.Value
+            $baseUrl = ([string]$prov.baseUrl).TrimEnd('/')
+            if (-not $baseUrl) { continue }
+            try {
+                $headers = @{}
+                if ($prov.apiKey) { $headers["Authorization"] = "Bearer $($prov.apiKey)" }
+                $resp = Invoke-RestMethod -Uri "$baseUrl/models" -Headers $headers -TimeoutSec 8 -ErrorAction Stop
+                $liveByProvider[$prop.Name] = @($resp.data | ForEach-Object { $_.id })
+            } catch {
+                $liveByProvider[$prop.Name] = $null
+            }
+        }
+
+        # Collect (who, modelRef) for defaults + each agent primary
+        $refs = New-Object System.Collections.Generic.List[object]
+        $defaultPrimary = $cfg.agents.defaults.model.primary
+        if ($defaultPrimary) { $refs.Add(@{ who = "defaults"; ref = [string]$defaultPrimary }) }
+        foreach ($a in $cfg.agents.list) {
+            $m = $a.model
+            $primary = if ($m -is [string]) { $m } elseif ($m) { $m.primary } else { $null }
+            if ($primary) { $refs.Add(@{ who = $a.id; ref = [string]$primary }) }
+        }
+
+        $missing = @()
+        foreach ($item in $refs) {
+            $parts = $item.ref -split '/', 2
+            if ($parts.Count -ne 2) { continue }
+            $live = $liveByProvider[$parts[0]]
+            if ($null -ne $live -and ($live -notcontains $parts[1])) {
+                $missing += "$($item.who) -> $($item.ref)"
+            }
+        }
+
+        if ($missing.Count -gt 0) {
+            # A missing primary model is actionable right now, so it stays on screen.
+            Write-Host "  [MODEL CHECK] primary models missing from upstream catalog (will fall back):" -ForegroundColor Yellow
+            foreach ($m in $missing) { Write-Host "     - $m" -ForegroundColor Yellow }
+            Write-Diag (@("[MODEL CHECK] missing from upstream catalog:") + ($missing | ForEach-Object { "   - $_" }))
+        } else {
+            Write-Diag "[MODEL CHECK] all agent primary models present upstream (OK)"
+        }
+    } catch {
+        Write-Diag "[MODEL CHECK] skipped: $($_.Exception.Message)"
+    }
+}
+
 function Cleanup {
     Write-Host "`n========================================" -ForegroundColor Cyan
     Write-Host "  Stopping all services..." -ForegroundColor Yellow
@@ -374,8 +454,9 @@ function Cleanup {
         # child processes (openspace-mcp, hook shells) survive a root-only kill.
         cmd /c "taskkill /F /T /PID $($script:p2.Id) >nul 2>&1"
     }
-    if ($script:pMultiAgent -and !$script:pMultiAgent.HasExited) { $script:pMultiAgent.Kill() }
-    if ($script:pBot -and !$script:pBot.HasExited) { $script:pBot.Kill() }
+    # 8899/8900 are part of $script:webProcs now (started from webservers.json), so
+    # they are stopped by the webProcs loop below - which kills the whole tree,
+    # unlike the root-only Kill() used here before.
     
     if ($script:webProcs) {
         foreach ($proc in $script:webProcs) {
@@ -401,7 +482,8 @@ function Cleanup {
         } catch {}
     }
     
-    $targetPorts = @(18789, 8899, 8900, 9000) + ($script:agentPorts.Values | Where-Object { $_ }) + $script:webPorts
+    # 8899/8900 come from $script:webPorts (webservers.json); -Unique avoids sweeping a port twice.
+    $targetPorts = @(@(18789, 9000) + ($script:agentPorts.Values | Where-Object { $_ }) + $script:webPorts | Sort-Object -Unique)
     $lines = cmd /c "netstat -ano 2>nul"
     foreach ($line in $lines) {
         if ($line -notmatch "LISTENING") { continue }
@@ -536,7 +618,8 @@ try {
 }
 
 # Cleanup stale processes
-$targetPorts = @(18789, 8899, 8900, 9000) + ($script:agentPorts.Values | Where-Object { $_ }) + $script:webPorts
+# 8899/8900 come from $script:webPorts (webservers.json); -Unique avoids sweeping a port twice.
+$targetPorts = @(@(18789, 9000) + ($script:agentPorts.Values | Where-Object { $_ }) + $script:webPorts | Sort-Object -Unique)
 $pidsToKill = @()
 $lines = cmd /c "netstat -ano 2>nul"
 foreach ($line in $lines) {
@@ -643,11 +726,15 @@ while ((Get-Date) -lt $mainPortDeadline -and -not $mainPortReady) {
     } catch { Start-Sleep -Milliseconds 300 }
 }
 if ($mainPortReady) {
-    $rpcDeadline = (Get-Date).AddSeconds(90)
+    # P3: probe the unauthenticated HTTP /health endpoint instead of the cold-start
+    # `openclaw health` CLI. Each CLI call spawns a fresh Node process (~15-30s cold)
+    # and under concurrent launch load routinely blew past the 30s cap, so mainReady
+    # never flipped true and every sub-agent was silently skipped. /health is sub-second.
+    $rpcDeadline = (Get-Date).AddSeconds(60)
     while ((Get-Date) -lt $rpcDeadline -and -not $script:mainReady) {
-        Show-LaunchProgress 32 "Waiting for Main Gateway RPC..."
-        $script:mainReady = Test-OpenClawReady "" $false
-        if (-not $script:mainReady) { Start-Sleep -Milliseconds 500 }
+        Show-LaunchProgress 32 "Waiting for Main Gateway health..."
+        $script:mainReady = Test-SubAgentHealth 18789
+        if (-not $script:mainReady) { Start-Sleep -Milliseconds 400 }
     }
 }
 if ($script:mainReady) {
@@ -664,7 +751,9 @@ if ($script:mainReady) {
         } -ArgumentList $NODE, $OPENCLAW_MJS
     } catch {}
 
-    $channelStatus = if (Test-OpenClawReady "" $true) { "Main Gateway RPC ready" } else { "Main RPC ready; channels pending" }
+    # The HTTP /health probe above already confirmed the gateway is live; avoid
+    # another ~15-30s cold-start CLI call just to produce a status label.
+    $channelStatus = "Main Gateway ready"
     $stabilizeDeadline = (Get-Date).AddSeconds(20)
     while ((Get-Date) -lt $stabilizeDeadline) {
         $remaining = [math]::Ceiling(($stabilizeDeadline - (Get-Date)).TotalSeconds)
@@ -699,7 +788,10 @@ foreach ($agent in $subAgents) {
     Show-LaunchProgress 62 "Starting $($agent.id) ($subAgentStarted/$subAgentTotal)..."
     $port = $script:agentPorts[$agent.id]
     $proc = $null
-    if ($script:mainReady) {
+    # P3: gate on the main gateway PORT being reachable, not on the fragile cold-CLI
+    # RPC readiness. Sub-agent gateways are independent processes; a slow main-gateway
+    # probe must never prevent them from starting at all.
+    if ($mainPortReady) {
         try {
             $proc = Start-SubAgentGateway $agent
             if ($proc) { $script:subCmdProcs += $proc }
@@ -711,13 +803,20 @@ foreach ($agent in $subAgents) {
         Process = $proc
         Background = $false
         FailCount = 0
+        RetryCount = 0
         LastRestart = (Get-Date)
         WasDown = $true
     }
     $pendingSubAgentIds[$agent.id] = $true
 }
 
-$subAgentDeadline = (Get-Date).AddSeconds(45)
+# P3: give sub-agents more room under concurrent cold-start load, and re-launch
+# any that crashed, never started, or stayed unhealthy past the grace window
+# (bounded retries). This startup-phase recovery is intentionally separate from
+# the runtime watchdog, which stays observe-only.
+$subAgentMaxRetries = 2
+$subAgentRetryGraceSec = 40
+$subAgentDeadline = (Get-Date).AddSeconds(90)
 while ($pendingSubAgentIds.Count -gt 0 -and (Get-Date) -lt $subAgentDeadline) {
     foreach ($agent in $subAgents) {
         if (-not $pendingSubAgentIds.ContainsKey($agent.id)) { continue }
@@ -728,6 +827,24 @@ while ($pendingSubAgentIds.Count -gt 0 -and (Get-Date) -lt $subAgentDeadline) {
             $readyCount = $subAgentTotal - $pendingSubAgentIds.Count
             $percent = 65 + [math]::Floor(($readyCount / [math]::Max(1, $subAgentTotal)) * 20)
             Show-LaunchProgress $percent "$($agent.id) ready ($readyCount/$subAgentTotal)..."
+            continue
+        }
+        # Re-launch when the process never started, crashed, or has been unhealthy
+        # past the grace window — as long as retries remain.
+        $processDown = (-not $state.Process) -or $state.Process.HasExited
+        $stuckTooLong = ((Get-Date) - $state.LastRestart).TotalSeconds -ge $subAgentRetryGraceSec
+        if (($processDown -or $stuckTooLong) -and $state.RetryCount -lt $subAgentMaxRetries) {
+            if ($state.Process) { Stop-SubAgentProcessTree $state.Process | Out-Null }
+            try {
+                $newProc = Start-SubAgentGateway $agent -Background
+                if ($newProc) {
+                    $state.Process = $newProc
+                    $script:subCmdProcs += $newProc
+                }
+            } catch {}
+            $state.RetryCount++
+            $state.LastRestart = (Get-Date)
+            Show-LaunchProgress 66 "Retrying $($agent.id) ($($state.RetryCount)/$subAgentMaxRetries)..."
         }
     }
     if ($pendingSubAgentIds.Count -gt 0) {
@@ -742,29 +859,28 @@ foreach ($agent in $subAgents) {
     }
 }
 
-Show-LaunchProgress 86 "Starting Multi-Agent Dashboard..."
-# Multi-Agent + Bot Review (lightweight)
-$psiMA = New-Object System.Diagnostics.ProcessStartInfo
-$psiMA.FileName = $NODE
-$psiMA.Arguments = "`"$env:USERPROFILE\.openclaw\workspace\dashboard-server.cjs`""
-$psiMA.WorkingDirectory = "$env:USERPROFILE\.openclaw\workspace"
-$psiMA.UseShellExecute = $false
-$psiMA.CreateNoWindow = $true
-$script:pMultiAgent = [System.Diagnostics.Process]::Start($psiMA)
+# Multi-Agent dashboard (8899) and Bot Review (8900) are NOT started here anymore.
+# They live in webservers.json like every other web project, so they get started by
+# the single loop below. Starting them here as well produced two instances on 8900:
+# this block passed the full env, the generic loop passed only PORT, and requests
+# were served by whichever instance won the port - so /api/config answered
+# inconsistently. webservers.json now carries their env (with ${...} placeholders).
 
-Show-LaunchProgress 89 "Starting Bot Review..."
-$psiBot = New-Object System.Diagnostics.ProcessStartInfo
-$psiBot.FileName = "cmd.exe"
-$psiBot.Arguments = "/c set PORT=8900&& set HOSTNAME=127.0.0.1&& set OPENCLAW_HOME=$env:USERPROFILE\.openclaw&& set OPENCLAW_PACKAGE_DIR=$OPENCLAW_PKG_DIR&& set OPENCLAW_ALLOW_UNAUTHENTICATED_LOCAL_OPERATOR_UI=true&& set NODE_ENV=production&& `"$NODE`" `"D:\Kiro\testopenclaw\OpenClaw-bot-review\.next\standalone\server.js`""
-$psiBot.WorkingDirectory = "D:\Kiro\testopenclaw\OpenClaw-bot-review\.next\standalone"
-$psiBot.UseShellExecute = $false
-$psiBot.CreateNoWindow = $true
-$script:pBot = [System.Diagnostics.Process]::Start($psiBot)
-
-# External web server projects (from webservers.json): rental 8901, spider-monitor 8902, ...
+# All web projects from webservers.json (single source of truth):
+# agent-dashboard 8899, bot-review 8900, rental 8901, spider-monitor 8902, ...
+# An entry may declare an `env` map. Values support ${...} placeholders so that
+# runtime-dependent paths are not frozen into the config (OPENCLAW_PACKAGE_DIR
+# changes on every runtime upgrade). dashboard-server.cjs expands the same
+# placeholders, so restarting a service from the panel keeps its env intact.
 $script:webProcs = @()
+$wsPlaceholders = @{
+    'OPENCLAW_HOME'        = "$env:USERPROFILE\.openclaw"
+    'OPENCLAW_PACKAGE_DIR' = $OPENCLAW_PKG_DIR
+    'USERPROFILE'          = $env:USERPROFILE
+    'NODE_EXE'             = $NODE
+}
 foreach ($ws in $script:webServers) {
-    Show-LaunchProgress 92 "Starting $($ws.name)..."
+    Show-LaunchProgress 88 "Starting $($ws.name)..."
     try {
         # 防御：启动前释放该端口，避免上次未正常关闭导致的残留占用
         $wsLines = cmd /c "netstat -ano 2>nul"
@@ -780,6 +896,15 @@ foreach ($ws in $script:webServers) {
         $psiWs.UseShellExecute = $false
         $psiWs.CreateNoWindow = $true
         $psiWs.EnvironmentVariables["PORT"] = "$($ws.port)"
+        if ($ws.env) {
+            foreach ($kv in $ws.env.PSObject.Properties) {
+                $val = [string]$kv.Value
+                foreach ($ph in $wsPlaceholders.Keys) {
+                    $val = $val.Replace('${' + $ph + '}', [string]$wsPlaceholders[$ph])
+                }
+                $psiWs.EnvironmentVariables[$kv.Name] = $val
+            }
+        }
         $script:webProcs += [System.Diagnostics.Process]::Start($psiWs)
     } catch {}
 }
@@ -800,8 +925,10 @@ $script:perfStats["launch"] = (Get-Date) - $t0
 $t0 = Get-Date
 Write-Host "[4/5] Waiting for services..."
 
-$allPorts = @(18789, 8899, 8900)
-$portNames = @{ 18789 = "Main Gateway"; 8899 = "Multi-Agent"; 8900 = "Bot Review" }
+# 8899/8900 are no longer listed here: they come from webservers.json below.
+# Listing them in both places is what printed them twice in [4/5] and in the summary.
+$allPorts = @(18789)
+$portNames = @{ 18789 = "Main Gateway" }
 foreach ($agent in $subAgents) {
     $port = $script:agentPorts[$agent.id]
     if ($port) {
@@ -813,6 +940,9 @@ foreach ($agent in $subAgents) {
 foreach ($ws in $script:webServers) {
     if ($ws.port) { $allPorts += $ws.port; $portNames[$ws.port] = $ws.name }
 }
+# Guard against a port being declared twice (e.g. re-added to the hardcoded list):
+# a duplicate would be waited on and printed twice.
+$allPorts = @($allPorts | Sort-Object -Unique)
 
 $deadline = (Get-Date).AddSeconds(60)
 $pendingPorts = [System.Collections.Generic.List[int]]::new()
@@ -870,7 +1000,6 @@ $script:perfStats["wait"] = (Get-Date) - $t0
 # Warm-up: trigger model-resolution + auth cache population
 # This ensures the first user interaction is fast (avoids 14-18s cold start)
 if (-not $pendingPorts.Contains(18789)) {
-    Write-Host "  [WARMUP] Triggering model cache..." -NoNewline -ForegroundColor DarkGray
     $warmupProbe = Get-KiroProbeConfig
     if ($warmupProbe) {
         $warmupBody = @{
@@ -887,11 +1016,46 @@ if (-not $pendingPorts.Contains(18789)) {
                 Invoke-RestMethod -Uri $uri -Method POST -Headers $headers -Body $body -TimeoutSec 30 -ErrorAction Stop | Out-Null
             } catch {}
         } -ArgumentList $warmupProbe.Uri, $warmupBody, $warmupHeaders | Out-Null
-        Write-Host " queued ($($warmupProbe.Model))" -ForegroundColor DarkGray
+        Write-Diag "[WARMUP] model cache queued ($($warmupProbe.Model))"
     } else {
-        Write-Host " skipped" -ForegroundColor Yellow
+        Write-Diag "[WARMUP] skipped: no usable probe model resolved"
     }
 }
+
+# P2: model self-check (warn-only) once the main gateway is up.
+if (-not $pendingPorts.Contains(18789)) {
+    Invoke-ModelSelfCheck
+}
+
+# Cron false-success check (report-only): surfaces runs recorded as ok whose reply
+# was just an assistant greeting/self-introduction, i.e. the task never actually
+# ran (seen after upstream 504 retries). Those runs reset consecutive_errors and
+# never trigger failureAlert, so without this they stay invisible.
+# Read-only, always exits 0, cannot block startup.
+try {
+    # This console runs as UTF-8 ([Console]::OutputEncoding above), but a piped
+    # Python writes in the locale encoding (GBK here), so Chinese job names came
+    # back mojibake. Force Python to emit UTF-8 so both ends agree.
+    # Encoding-independent: let Python write UTF-8 straight to a file and read it
+    # back as UTF-8. Capturing via the pipe would decode with the console code page
+    # (GBK here), which mangled the Chinese cron job names.
+    $prevPyEnc = $env:PYTHONIOENCODING
+    $env:PYTHONIOENCODING = 'utf-8'
+    $cronTmp = Join-Path $env:TEMP "openclaw-cron-check.txt"
+    Start-Process -FilePath "python" `
+        -ArgumentList "`"D:\Kiro\testopenclaw\check_cron_false_success.py`"", "--hours", "48", "--verbose" `
+        -NoNewWindow -Wait -RedirectStandardOutput $cronTmp -RedirectStandardError "$cronTmp.err" `
+        -ErrorAction Stop
+    if ($null -eq $prevPyEnc) { Remove-Item Env:PYTHONIOENCODING -ErrorAction SilentlyContinue }
+    else { $env:PYTHONIOENCODING = $prevPyEnc }
+    $cronCheck = if (Test-Path $cronTmp) { [System.IO.File]::ReadAllLines($cronTmp, [System.Text.Encoding]::UTF8) } else { @() }
+    Remove-Item $cronTmp, "$cronTmp.err" -Force -ErrorAction SilentlyContinue
+    # File only: this is a report about the PAST 48h, not a problem with this
+    # startup, so it must not push the service table off screen. Read it with:
+    #   Get-Content "$env:USERPROFILE\.openclaw\logs\launcher-startup.log" -Tail 40
+    # or re-run the script directly for an up-to-date view.
+    if ($cronCheck) { Write-Diag $cronCheck }
+} catch {}
 
 # [6/6] Open browsers + Done
 # ============================================
@@ -900,8 +1064,10 @@ Write-Host "[5/5] Opening browsers..." -NoNewline
 
 try {
     $gwUrl = if ($script:gwToken -and $script:gwToken -ne "no_change") { "http://127.0.0.1:18789/?token=$($script:gwToken)" } else { "http://127.0.0.1:18789/" }
-    $openUrls = @($gwUrl, "http://127.0.0.1:8899/", "http://127.0.0.1:8900/")
+    # 8899/8900 come from webservers.json; hardcoding them here opened duplicate tabs.
+    $openUrls = @($gwUrl)
     $openUrls += @($script:webServers | ForEach-Object { $_.url } | Where-Object { $_ })
+    $openUrls = @($openUrls | Select-Object -Unique)
 
     # Open ALL tabs in ONE default-browser invocation (avoids cold-start tab race / blank tabs)
     $browserExe = $null
@@ -948,8 +1114,7 @@ Write-Host "  Wait Ready:  $(FmtMs ([int]$script:perfStats['wait'].TotalMillisec
 Write-Host "  Browsers:    $(FmtMs ([int]$script:perfStats['browsers'].TotalMilliseconds))" -ForegroundColor Gray
 Write-Host ""
 Write-Host "  Main Dashboard: http://127.0.0.1:18789/" -ForegroundColor Cyan
-Write-Host "  Multi-Agent:    http://127.0.0.1:8899" -ForegroundColor Cyan
-Write-Host "  Bot Review:     http://127.0.0.1:8900" -ForegroundColor Cyan
+# 8899/8900 are printed by the webservers loop below (they live in webservers.json).
 foreach ($ws in $script:webServers) { Write-Host "  $($ws.name): $($ws.url)" -ForegroundColor Cyan }
 Write-Host ""
 Write-Host "  Press any key to stop all services" -ForegroundColor DarkGray

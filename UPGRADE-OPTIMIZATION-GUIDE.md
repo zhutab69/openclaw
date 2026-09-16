@@ -1357,3 +1357,73 @@ TASK 5 曾删除"监测+自动重启子 agent"。本次按运维要求只加**�
 ---
 
 *改动补充：2026-08-12 §12.5 关闭死信清理 + 配置预检超时；2026-08-13 §12.6 子 Agent 就绪探测超时修复。*
+
+
+---
+
+## 十三、2026.7.1-2 → 2026.8.2（"OpenClaw 2.0"）沙箱预评估（2026-09-02）
+
+> 结论先行：**暂缓升级，生产保持 2026.7.1-2**。8.2 迁移本体技术可行，但会通过一批破坏性 schema 变更打断本项目**全部定制代码**，真正工作量在改写定制层而非 openclaw 本身。本节是升级前评估记录，供将来排期时直接参考。
+
+### 13.1 版本与前提（相比 5.7→7.1 更简单的地方）
+
+| 项 | 值 |
+|---|---|
+| 目标 | `openclaw@2026.8.2`（npm `latest`；8.1 已被其取代，两者 schema 相同、8.2 含 8.1 后的补丁） |
+| npm dist-tags（2026-09-02） | `latest=2026.8.2`、`beta=2026.9.1-beta.1`、`extended-stable=2026.6.34` |
+| Node 引擎要求 | `>=22.22.3 <23 \|\| >=24.15 <25 \|\| >=25.9`，**与 7.1-2 相同 → 无需换 Node**（省掉 §11.2① 整套 npm 修剪/PATH 硬编码坑） |
+| schemaVersions | `agent:19 / state:15`（8.1 与 8.2 一致，从 7.x 升上来是同一次迁移代价） |
+| 通道插件目标版本 | `@wecom/wecom-openclaw-plugin@2026.8.17`（peer `openclaw>=2026.3.28`）、`@tencent-weixin/openclaw-weixin@2.4.8`（peer/minHost `>=2026.5.12`）——均满足 8.2；仍须**显式 pin**、勿用 latest |
+
+### 13.2 沙箱隔离方法（本次验证有效，修正了 §11.6 的遗留问题）
+
+关键认知：**`OPENCLAW_HOME` 是"家目录基准"（其下自动拼 `.openclaw`）**，不是数据目录本身。直接 `OPENCLAW_HOME=...\.openclaw-upgradetest` 会让 8.2 在其下再建一层空的 `.openclaw`（测不到真实数据），但**确实不碰生产**。
+
+有效做法 —— **目录联接(junction) + OPENCLAW_HOME**：
+```
+mklink /J  C:\Users\zhuyulin\.ocsbx82\.openclaw            C:\Users\zhuyulin\.openclaw-upgradetest
+mklink /J  C:\Users\zhuyulin\.ocsbx82\.openclaw-ut-writer  C:\Users\zhuyulin\.openclaw-ut-writer   （coder/infoer/imager 同）
+set OPENCLAW_HOME=C:\Users\zhuyulin\.ocsbx82
+```
+- 主网关无需 `--profile`（OPENCLAW_HOME 已定家目录 → 主 home = `.ocsbx82\.openclaw` = junction → 真实沙箱数据）。
+- 既**完全隔离生产**（家目录基准是 `.ocsbx82`，永不落到真实 `~`），又作用于真实的沙箱数据（287 session）。
+- 隔离运行时：独立目录 `D:\Kiro\_openclaw-upgrade-staging\rt82\node-v22.23.2-win-x64` global 装 8.2（生产 `node-v22.23.2` 的 7.1-2 一字节未动）。
+- 非交互参数：`plugins install --accept-capabilities`；`doctor --fix --yes`（`--non-interactive` 亦可）。
+- **拆 junction 必须用 `rmdir <link>`**（只删链接），**严禁 `Remove-Item -Recurse`**（会顺着 junction 删到目标真实数据）。
+
+### 13.3 迁移可行性（沙箱实测通过）
+
+- `plugins install`（首个 8.2 命令）即触发 **state 迁移（不可逆）**：表折叠、SQLite STRICT 类型化、agent-db 路径重锚、device pairing 待启动导入等。
+- 首启因旧 schema 报 `OpenClaw config is invalid` 并提示 `doctor --fix`；跑 `doctor --fix --yes` 后 **`config validate` 通过、`meta.lastTouchedVersion=2026.8.2`**。
+- 全程生产 `~/.openclaw` 未受影响（meta 仍 7.1-2、`agents.list`/`exec-approvals.json` 未变、state sqlite mtime 未动）。
+
+### 13.4 ★ 会打断定制代码的破坏性 schema 变更（本次核心发现）★
+
+`doctor --fix` 自动迁移后，8.2 相比 7.1-2 的关键差异：
+
+| # | 变更 | 受影响的本项目定制文件 |
+|---|---|---|
+| 1 | **`agents.list` → `agents.entries`（keyed 对象，key=agentId）** | ⚠️**最致命**：`OpenClaw.ps1`（[1/5] agent 枚举/端口、`Get-KiroProbeConfig`、`Invoke-ModelSelfCheck`）、`sync_models.py`（`_load_sub_agents`/`_fix_agent_names`/`_sync_sub_agent_models`/primary·fallback 逻辑/session 目录推导）、`dashboard-server.cjs`、Bot Review `lib/agents.ts`、`memory_flush.py`、`purge_delivery_queue.py` —— 凡读 `agents.list` 处全部要改 |
+| 2 | `gateway.controlUi.allowInsecureAuth` **移除** → `{embedSandbox, allowExternalEmbedUrls}` | 面板免鉴权（配合 `OPENCLAW_ALLOW_UNAUTHENTICATED_LOCAL_OPERATOR_UI`）需重验/改造，直接影响 8899/8900 |
+| 3 | `plugins.bundledDiscovery:"allowlist"` **移除** | §2.3 的启动性能优化失效，需找 8.2 等价机制 |
+| 4 | `agents.defaults.models` → `agents.defaults.modelPolicy.allow` | `sync_models.py` 写模型表的目标键变更（旧 `models` 键残留但非权威） |
+| 5 | `memory.backend`/`memory.qmd` **退役**（builtin 为唯一引擎） | 本项目本就用 builtin，可直接弃；`memory.qmd.*` 外部路径迁到 `memory.search.extraPaths` |
+| 6 | session/transcript 进一步进 **SQLite** | `sync_models.py` 对 `sessions.json`/`.jsonl` 的清理 + `stats-daily.json` 统计 rollup 很可能整体失效；Bot Review `lib/openclaw-stats.ts` 读取口径需改。**升级 8.x 前必须专门验证这一条** |
+| 7 | 一批小键退役 | `browser.profiles.*.color`、`cron.maxConcurrentRuns`/`cron.runLog`、`mcp.sessionIdleTtlMs`、`commands.ownerDisplay`、`agents.defaults.compaction.truncateAfterCompaction` 等（`doctor --fix` 会清理，但自定义值会丢，需事后核对） |
+
+### 13.5 将来真要升 8.x 的工作清单（预估）
+
+1. 隔离沙箱按 §13.2 搭好，先 `plugins install` 触发迁移 + `doctor --fix --yes`，导出迁移前后 `openclaw.json` 对比。
+2. **改写定制层适配 `agents.entries`**：`OpenClaw.ps1`、`sync_models.py`、`dashboard-server.cjs`、Bot Review、`memory_flush.py`、`purge_delivery_queue.py`（做成"两种结构都兼容"更稳，便于回滚）。
+3. `sync_models.py` 模型写入改到 `agents.defaults.modelPolicy.allow`；并**专项验证 session→SQLite 后的清理/统计逻辑**（很可能要重写为读 SQLite）。
+4. 面板免鉴权在 8.2 下重验（allowInsecureAuth 已无），必要时改造 8899/8900。
+5. 通道插件用 `--force` 升到 `@2026.8.17`/`@2.4.8` 并确认 peer relink 到 8.x 运行时（5 个配置目录逐个，沿用 §11.2②）。
+6. 全绿 + 停生产窗口做通道端到端后再切；保留旧运行时目录 + 完整快照作回滚。
+
+### 13.6 本次沙箱产物处置（2026-09-02）
+
+- 沙箱已被 8.2 迁移（不可逆）；生产未受任何影响。
+- 按用户决定**清理了本次升级产物**（隔离运行时 `rt82`、本次快照 `snap82-pre-20260902-102019`、已迁到 8.2 的沙箱目录 `.openclaw-upgradetest` 与 `.openclaw-ut-*`）以回收磁盘；将来升级时重新按 §13.2 搭建即可。
+- junction 已用 `rmdir` 安全拆除，目标数据未受影响；`.ocsbx82` 已移除。
+
+*评估记录：2026-09-02 —— 8.2 预评估完成，结论暂缓；本节为纯评估记录，未改动生产。*
