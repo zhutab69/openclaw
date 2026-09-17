@@ -15,6 +15,15 @@ so the reason is not lost.
 Usage:
     python sync-workspace-custom.py            # report drift only, change nothing
     python sync-workspace-custom.py --apply    # copy live -> mirror
+    python sync-workspace-custom.py --apply --force
+                                               # also overwrite reverse-drifted files
+
+Reverse drift means the mirror is newer than the live file, i.e. someone edited the
+publish target by mistake. Those files are skipped by --apply so the edit is not
+destroyed; --force is the deliberate escape hatch once the edit is known to be
+worthless. This is not hypothetical: on 2026-09-17 a config-driven refactor of
+dashboard-server.cjs was written into the mirror instead of the live workspace, so the
+8899 dashboard kept running the old hardcoded task list while the change looked done.
 """
 import hashlib
 import os
@@ -34,6 +43,7 @@ WHITELIST = [
     "webservers.json",
     "dashboard-server.cjs",
     "dashboard.html",
+    "bgtasks-manifest.json",
     "package.json",
     # keepalive / heartbeat / uptime
     "kiro-keepalive.ps1",
@@ -133,12 +143,13 @@ def gate(path):
 
 def main():
     apply = "--apply" in sys.argv
+    force = "--force" in sys.argv
     if not os.path.isdir(WS):
         raise SystemExit(f"[ABORT] workspace not found: {WS}")
 
     os.makedirs(MIRROR, exist_ok=True)
 
-    missing, blocked, new, changed, same = [], [], [], [], []
+    missing, blocked, new, changed, same, reverse = [], [], [], [], [], []
     for name in WHITELIST:
         src = os.path.join(WS, name)
         dst = os.path.join(MIRROR, name)
@@ -153,6 +164,18 @@ def main():
             new.append(name)
         elif sha(src) != sha(dst):
             changed.append(name)
+            # Reverse-drift guard: if the mirror is NEWER than live, someone edited
+            # the mirror by mistake (mirror is a read-only publish target; live is
+            # the single source of truth). Skip the copy so their edit survives --
+            # warning alone is not enough, because the copy below would already have
+            # destroyed it by the time anyone read the warning.
+            try:
+                if os.path.getmtime(dst) > os.path.getmtime(src) + 1:
+                    reverse.append(name)
+                    if not force:
+                        continue
+            except OSError:
+                pass
         else:
             same.append(name)
             continue
@@ -161,6 +184,12 @@ def main():
             shutil.copyfile(src, dst)
 
     verb = "copied" if apply else "would copy"
+    # Reverse-drifted files are reported separately: lumping them under CHANGED
+    # implied they were synced when --apply had deliberately skipped them.
+    drifted = set(reverse)
+    to_copy = [n for n in changed if n not in drifted or force]
+    held = [n for n in changed if n in drifted and not force]
+
     print(f"mirror = {MIRROR}")
     print()
     if new:
@@ -168,10 +197,16 @@ def main():
         for n in new:
             print(f"  + {n}")
         print()
-    if changed:
-        print(f"CHANGED ({len(changed)}) -- {verb}")
-        for n in changed:
+    if to_copy:
+        suffix = " (--force: overwriting reverse drift)" if force and drifted else ""
+        print(f"CHANGED ({len(to_copy)}) -- {verb}{suffix}")
+        for n in to_copy:
             print(f"  ~ {n}")
+        print()
+    if held:
+        print(f"HELD BACK ({len(held)}) -- reverse drift, NOT {'copied' if apply else 'to be copied'}")
+        for n in held:
+            print(f"  = {n}")
         print()
     if same:
         print(f"UP-TO-DATE ({len(same)})")
@@ -184,13 +219,29 @@ def main():
         print(f"*** BLOCKED ({len(blocked)}) -- credential found, NOT copied ***")
         for n, r in blocked:
             print(f"  ! {n}: {', '.join(r)}")
+    if reverse:
+        print()
+        print(f"*** REVERSE DRIFT ({len(reverse)}) -- mirror is NEWER than live ***")
+        print("    The mirror is a read-only publish target; edits belong in the")
+        print(f"    live workspace ({WS}).")
+        if force:
+            print("    --force given: the mirror edit was OVERWRITTEN by the live file.")
+        else:
+            print("    These files were skipped, so the mirror edit is intact. Move the")
+            print("    change into the live workspace (and restart whatever serves it),")
+            print("    then sync again. Use --force only to discard the mirror edit.")
+        for n in reverse:
+            print(f"  !! {n}: mirror mtime > live mtime")
 
     print()
     print(f"summary: new={len(new)} changed={len(changed)} same={len(same)} "
-          f"missing={len(missing)} blocked={len(blocked)}")
-    if not apply and (new or changed):
+          f"missing={len(missing)} blocked={len(blocked)} reverse-drift={len(reverse)}"
+          f" held-back={len(held)}")
+    if not apply and (new or to_copy):
         print("run with --apply to write")
-    return 1 if blocked else 0
+    if reverse and not force:
+        print("WARNING: reverse drift detected -- those files were left untouched")
+    return 1 if (blocked or reverse) else 0
 
 
 if __name__ == "__main__":

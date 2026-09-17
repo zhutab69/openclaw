@@ -63,25 +63,39 @@ function getAgentConfig() {
   }
 }
 
-// 检查端口是否在线
-function checkPort(port) {
+// 检查端口是否在线（单次 TCP 探测）
+function _probePortOnce(port, timeoutMs) {
   return new Promise((resolve) => {
     const net = require('net');
     const socket = new net.Socket();
-    socket.setTimeout(1000);
-    socket.on('connect', () => {
-      socket.destroy();
-      resolve(true);
-    });
-    socket.on('timeout', () => {
-      socket.destroy();
-      resolve(false);
-    });
-    socket.on('error', () => {
-      resolve(false);
-    });
+    let done = false;
+    const finish = (val) => { if (done) return; done = true; try { socket.destroy(); } catch {} resolve(val); };
+    socket.setTimeout(timeoutMs);
+    socket.on('connect', () => finish(true));
+    socket.on('timeout', () => finish(false));
+    socket.on('error', () => finish(false));
     socket.connect(port, '127.0.0.1');
   });
+}
+
+// 检查端口是否在线：2.5s 超时 + 一次重试，避免瞬时抖动误判离线
+async function checkPort(port) {
+  if (await _probePortOnce(port, 2500)) return true;
+  // 一次重试，间隔 300ms，吸收启动突发/瞬时负载导致的单次丢失
+  await new Promise(r => setTimeout(r, 300));
+  return _probePortOnce(port, 2500);
+}
+
+// ===== 状态迟滞（hysteresis）：连续 2 次探测离线才判离线，单次丢失不翻转 =====
+const _offlineStreak = new Map();
+async function checkPortStable(port) {
+  const online = await checkPort(port);
+  const key = String(port);
+  if (online) { _offlineStreak.set(key, 0); return true; }
+  const streak = (_offlineStreak.get(key) || 0) + 1;
+  _offlineStreak.set(key, streak);
+  // 需要连续 2 次离线才真正判离线；第一次离线暂视为在线（防抖）
+  return streak < 2;
 }
 
 // ===== Agent 启动/停止/重启 控制（多实例，路径与端口均从配置动态解析，不硬编码）=====
@@ -256,99 +270,108 @@ function _readCronJobs() {
 }
 
 // ===== Background resident tasks (long-running detached node procs + progress files) =====
-const { execSync: _execSync } = require('child_process');
 function _listNodeProcs() {
-  // returns array of {pid, cmd} for all node.exe processes (via WMIC-free CIM through PowerShell)
-  try {
-    const out = _execSync(
+  // Async, non-blocking: execSync here froze the event loop up to 8s and starved
+  // concurrent checkPort probes, flipping every project card to offline (flapping).
+  return new Promise((resolve) => {
+    _exec(
       'powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \\\"Name=\'node.exe\'\\\" | Select-Object ProcessId,CommandLine | ConvertTo-Json -Compress"',
-      { windowsHide: true, maxBuffer: 8 * 1024 * 1024, timeout: 8000 }
-    ).toString();
-    let arr = JSON.parse(out);
-    if (!Array.isArray(arr)) arr = [arr];
-    return arr.map(p => ({ pid: p.ProcessId, cmd: p.CommandLine || '' }));
-  } catch { return []; }
+      { windowsHide: true, maxBuffer: 8 * 1024 * 1024, timeout: 8000 },
+      (err, stdout) => {
+        if (err || !stdout) return resolve([]);
+        try {
+          let arr = JSON.parse(stdout.toString());
+          if (!Array.isArray(arr)) arr = [arr];
+          resolve(arr.map(p => ({ pid: p.ProcessId, cmd: p.CommandLine || '' })));
+        } catch { resolve([]); }
+      }
+    );
+  });
 }
 function _safeReadJson(p) { try { return JSON.parse(fs.readFileSync(p, 'utf-8')); } catch { return null; } }
-function _readBgTasks() {
-  const procs = _listNodeProcs();
-  const countCmd = (re) => procs.filter(p => re.test(p.cmd)).length;
-  const tasks = [];
+// 读任务清单（配置驱动；加新任务只改 bgtasks-manifest.json，不动代码）。
+function _loadManifest() {
+  const mf = _safeReadJson(path.join(__dirname, 'bgtasks-manifest.json'));
+  return (mf && Array.isArray(mf.tasks)) ? mf.tasks : [];
+}
 
-  // --- Task 1: overseas 4-band reap (dead-station deletion) ---
-  const reapDir = path.join('D:', 'Kiro', 'testspider', 'platform', 'data', 'bulk', 'cn', 'reach-overseas');
-  const bands = [];
-  let processedSum = 0, deletedSum = 0, reachableSum = 0, deadSum = 0, maxIdMax = 0, lastUpdate = 0;
-  for (let w = 1; w <= 4; w++) {
-    const j = _safeReadJson(path.join(reapDir, `reap-progress-w${w}.json`));
+// type=multiband：多带 progress 文件聚合（如 4 带 reap）
+function _buildMultiband(def, procs) {
+  const sums = {}; const bands = []; let lastUpdate = 0;
+  for (let w = 1; w <= (def.bandCount || 4); w++) {
+    const fp = path.join(def.bandDir, (def.bandFilePattern || 'reap-progress-w{w}.json').replace('{w}', w));
+    const j = _safeReadJson(fp);
     if (!j) continue;
-    processedSum += j.processed || 0;
-    deletedSum += j.deleted || 0;
-    reachableSum += j.reachable || 0;
-    deadSum += j.dead || 0;
-    if (j.maxId > maxIdMax) maxIdMax = j.maxId;
+    for (const [outK, inK] of Object.entries(def.sumFields || {})) sums[outK] = (sums[outK] || 0) + (j[inK] || 0);
     const ts = j.updatedAt ? Date.parse(j.updatedAt) : 0;
     if (ts > lastUpdate) lastUpdate = ts;
     bands.push({ band: 'w' + w, processed: j.processed || 0, deleted: j.deleted || 0, completed: !!j.completed, updatedAt: j.updatedAt || null });
   }
-  const reapWorkers = countCmd(/overseas-reap-supervised/);
-  if (bands.length) {
-    // universe ~= sum of per-band id spans; use maxId of last band as rough total scanned universe
-    const universe = 250234330; // last band maxId (full overseas id space)
-    const pct = universe > 0 ? +(processedSum / universe * 100).toFixed(2) : 0;
-    const deadRate = processedSum > 0 ? +(deadSum / processedSum * 100).toFixed(1) : 0;
-    const allDone = bands.length === 4 && bands.every(b => b.completed);
-    tasks.push({
-      id: 'overseas-reap',
-      name: '境外死站删除（4带并行）',
-      guardCron: 'f12dfe23 · 每小时巡检',
-      workers: reapWorkers,
-      expectedWorkers: 4,
-      alive: reapWorkers > 0,
-      allDone,
-      progressPct: pct,
-      metrics: {
-        '已扫描': processedSum,
-        '已删死站': deletedSum,
-        '可达': reachableSum,
-        '死站率%': deadRate,
-      },
-      bands,
-      lastUpdateMs: lastUpdate || null,
-    });
-  }
+  if (!bands.length) return null;
+  const workers = procs.filter(p => new RegExp(def.procMatch).test(p.cmd)).length;
+  const universe = def.universe || 0;
+  const pct = universe > 0 ? +((sums[def.pctField] || 0) / universe * 100).toFixed(2) : null;
+  const deadRate = (sums.processed > 0) ? +((sums.dead || 0) / sums.processed * 100).toFixed(1) : 0;
+  const metrics = {};
+  for (const [label, key] of Object.entries(def.metricsMap || {})) metrics[label] = (key === '__deadRate') ? deadRate : (sums[key] || 0);
+  const allDone = bands.length === (def.bandCount || 4) && bands.every(b => b.completed);
+  return { id: def.id, name: def.name, guardCron: def.guardCron, workers, expectedWorkers: def.expectedWorkers || 1,
+    alive: workers > 0, allDone, progressPct: pct, metrics, bands, lastUpdateMs: lastUpdate || null };
+}
 
-  // --- Task 2: domestic queue-runner (source census/expansion orchestrator) ---
-  const qLog = path.join('D:', 'Kiro', 'testspider', 'platform', 'data', 'bulk', 'cn', 'queue-runner.log');
-  const qAlive = countCmd(/sweep-queue-runner/);
-  let qDone = false, qLastPhase = '', qLastMs = null;
+// type=progress：单 progress 文件（如打标/分级）
+function _buildProgress(def, procs) {
+  const j = _safeReadJson(def.progressFile);
+  const workers = procs.filter(p => new RegExp(def.procMatch).test(p.cmd)).length;
+  let pct = null, lastUpdateMs = null;
+  const metrics = {};
+  if (j) {
+    const base = def.universeBase || 0;
+    const cur = (j[def.pctField] || 0) - base;
+    const span = (def.universe || 0) - base;
+    if (span > 0) pct = Math.max(0, Math.min(100, +(cur / span * 100).toFixed(1)));
+    for (const [label, key] of Object.entries(def.metricsMap || {})) metrics[label] = (j[key] != null ? j[key] : 0);
+    try { lastUpdateMs = fs.statSync(def.progressFile).mtimeMs; } catch {}
+  } else {
+    for (const label of Object.keys(def.metricsMap || {})) metrics[label] = 0;
+  }
+  const done = j && ((def.universe && (j[def.pctField] || 0) >= def.universe * 0.999) || j.event === 'done' || j.done === true);
+  return { id: def.id, name: def.name, guardCron: def.guardCron, workers, expectedWorkers: def.expectedWorkers || 1,
+    alive: workers > 0, allDone: !!done, progressPct: pct, metrics, bands: [], lastUpdateMs };
+}
+
+// type=log：日志事件型（如 queue-runner）
+function _buildLog(def, procs) {
+  const workers = procs.filter(p => new RegExp(def.procMatch).test(p.cmd)).length;
+  let done = false, lastPhase = '', lastMs = null;
   try {
-    const st = fs.statSync(qLog);
-    qLastMs = st.mtimeMs;
-    const buf = fs.readFileSync(qLog, 'utf-8');
-    const lines = buf.trimEnd().split(/\r?\n/).slice(-8);
+    const st = fs.statSync(def.logFile); lastMs = st.mtimeMs;
+    const lines = fs.readFileSync(def.logFile, 'utf-8').trimEnd().split(/\r?\n/).slice(-8);
     for (let i = lines.length - 1; i >= 0; i--) {
       let ev = null; try { ev = JSON.parse(lines[i]); } catch {}
       if (ev && ev.event) {
-        if (ev.event === 'queue_all_done') { qDone = true; qLastPhase = 'queue_all_done'; break; }
-        if (!qLastPhase) qLastPhase = ev.event + (ev.phase ? (':' + ev.phase) : '');
+        if (ev.event === def.doneEvent) { done = true; lastPhase = def.doneEvent; break; }
+        if (!lastPhase) lastPhase = ev.event + (ev.phase ? (':' + ev.phase) : '');
       }
     }
   } catch {}
-  tasks.push({
-    id: 'cn-queue-runner',
-    name: '境内信源普查编排器 (queue-runner)',
-    guardCron: '9305c313 · 每小时保活',
-    workers: qAlive,
-    expectedWorkers: 1,
-    alive: qAlive > 0,
-    allDone: qDone,
-    progressPct: qDone ? 100 : null,
-    metrics: { '最后事件': qLastPhase || '-' },
-    bands: [],
-    lastUpdateMs: qLastMs,
-  });
+  return { id: def.id, name: def.name, guardCron: def.guardCron, workers, expectedWorkers: def.expectedWorkers || 1,
+    alive: workers > 0, allDone: done, progressPct: done ? 100 : null, metrics: { '最后事件': lastPhase || '-' }, bands: [], lastUpdateMs: lastMs };
+}
 
+async function _readBgTasks() {
+  const procs = await _listNodeProcs();
+  const defs = _loadManifest();
+  const tasks = [];
+  for (const def of defs) {
+    try {
+      let t = null;
+      if (def.type === 'multiband') t = _buildMultiband(def, procs);
+      else if (def.type === 'progress') t = _buildProgress(def, procs);
+      else if (def.type === 'log') t = _buildLog(def, procs);
+      if (t) tasks.push(t);
+    } catch (e) { /* 单任务失败不影响其它 */ }
+  }
   return { updatedAt: new Date().toISOString(), tasks };
 }
 
@@ -388,7 +411,7 @@ const server = http.createServer(async (req, res) => {
     
     const statusPromises = agentConfigs.map(async (agent) => {
       const port = portMap[agent.id];
-      const online = port ? await checkPort(port) : false;
+      const online = port ? await checkPortStable(port) : false;
       return {
         ...agent,
         port,
@@ -444,7 +467,7 @@ const server = http.createServer(async (req, res) => {
   // 路由：后台常驻任务（只读，进程存活 + 进度文件聚合）
   if (req.url === '/api/bgtasks') {
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-    try { res.end(JSON.stringify(_readBgTasks())); }
+    try { res.end(JSON.stringify(await _readBgTasks())); }
     catch (e) { res.end(JSON.stringify({ error: e.message, tasks: [] })); }
     return;
   }
@@ -498,7 +521,7 @@ const server = http.createServer(async (req, res) => {
   if (req.url === '/api/webservers') {
     const list = _loadWebServers();
     const statuses = await Promise.all(list.map(async (ws) => {
-      const online = ws.port ? await checkPort(ws.port) : false;
+      const online = ws.port ? await checkPortStable(ws.port) : false;
       return { id: ws.id, name: ws.name, emoji: ws.emoji || '', desc: ws.desc || '', port: ws.port, url: ws.url || ('http://127.0.0.1:' + ws.port), online, status: online ? 'online' : 'offline' };
     }));
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });

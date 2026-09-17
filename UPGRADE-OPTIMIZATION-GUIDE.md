@@ -1427,3 +1427,79 @@ set OPENCLAW_HOME=C:\Users\zhuyulin\.ocsbx82
 - junction 已用 `rmdir` 安全拆除，目标数据未受影响；`.ocsbx82` 已移除。
 
 *评估记录：2026-09-02 —— 8.2 预评估完成，结论暂缓；本节为纯评估记录，未改动生产。*
+
+---
+
+## 十四、2026.7.1-2 → 2026.9.4 复核（2026-09-17）
+
+> 结论先行：**继续暂缓，生产保持 2026.7.1-2**。相比 §13 的 8.2 评估，新增了一条硬性前置条件——**必须先换 Node 运行时**；但插件/skill 侧的风险经实测**低于预期**。本节记录复核事实，避免下次重新排查。
+
+### 14.1 版本与 Node 分界（本次核心新发现）
+
+npm dist-tags（2026-09-17 实测）：`latest=2026.9.4`、`beta=2026.9.4`、`extended-stable=2026.6.35`（比生产还旧，不作为目标）。
+
+**Node 22 的支持在 9.3 被切断**，逐版实测 `engines.node`：
+
+| 版本 | `engines.node` | 本机 Node v22.23.2 |
+|---|---|---|
+| 2026.7.1 / 7.1-1 / 7.1-2 | `>=22.22.3 <23 \|\| >=24.15.0 <25 \|\| >=25.9.0` | 满足 |
+| 2026.8.1 / 8.2 | 同上 | 满足 |
+| 2026.9.1 / **9.2** | 同上 | 满足（**最后一个支持 Node 22 的版本**） |
+| **2026.9.3** / 9.4 | `>=24.16.0 <25 \|\| >=26.1.0` | **不满足** |
+
+9.3 release notes 将其列为 `Breaking — Node runtime`，并明确要求**先升 Node 再升 OpenClaw，否则会出现 SQLite 文本截断**（推荐 Node 26）。这是数据完整性问题，不是"先跑起来再说"能绕过的——不可用 Node 22 强行运行 9.3+。
+
+连带影响：`node-v22.23.2-win-x64` 在 `OpenClaw.ps1` 有 3 处硬编码路径（另 §13 起的文档中 7 处），换 Node 需一并处理，即 §11.2① 那套 npm 修剪/PATH 坑重新出现（§13.1 当时因 8.2 仍支持 Node 22 而省掉了这部分）。
+
+### 14.2 插件 / 工具 / skill 兼容性实测（结论：风险低于预期）
+
+| 对象 | 实测结果 |
+|---|---|
+| `@wecom/wecom-openclaw-plugin` | 最新 `2026.9.15`，peer `openclaw>=2026.3.28` → **覆盖 9.4** |
+| `@tencent-weixin/openclaw-weixin` | 最新 `2.4.9`，peer `openclaw>=2026.5.12` → **覆盖 9.4** |
+| 自研 `smart-memory-plugin`（10.6KB / 3 文件） | 仅用 `openclaw/plugin-sdk/plugin-entry`，**未命中任何 9.3 破坏性 SDK 面** |
+| 自研 `auto-learn-plugin`（9.5KB / 3 文件） | 同上 |
+| 40 个自定义 skill（`~/.openclaw/skills`） | 文档/脚本形态，不依赖 SDK；`skills.workshop.*` 未配置 → 9.3 的 Workshop 所有权变更影响不到 |
+| MCP | 仅 1 个本地 `openspace`（Python，`cwd=D:\Kiro\testopenclaw\OpenSpace`），与 openclaw 版本解耦 |
+
+已核对**未命中**的 9.3 破坏性 SDK 面：`infra-runtime`→`execPolicy` 迁移、`approval-native-runtime` 重定位、`buildChannelTurnMediaPayload`→`buildChannelInboundMediaPayload`、Find/Grep 的 `details.truncation.content`→`details.content`、`LsToolDetails.truncation`/`entryLimitReached` 退役、`abortAndDrainAgentHarnessRun` 返回形状。
+
+另注意 9.2 列出的 **Upcoming deprecations**：Plugin SDK 中 untrusted-named prompt-context 别名自 2026-09-08 起可被移除，需迁到 channel-named context 字段。当前两个自研插件未使用，暂不受影响。
+
+### 14.3 生产配置中"正在使用且会被 8.x/9.x 清理"的键（实测清单）
+
+在 §13.4 基础上，本次逐项确认了**当前实际取值**：
+
+| 配置项 | 当前值 | 迁移后果 |
+|---|---|---|
+| `agents.list` | 5 个 agent（main/writer/coder/info/image） | → `agents.entries`（keyed 对象），影响 `OpenClaw.ps1`、`sync_models.py`、`dashboard-server.cjs`、Bot Review、`memory_flush.py`、`purge_delivery_queue.py` |
+| `gateway.controlUi.allowInsecureAuth` | `true` | 移除。新键 `embedSandbox: "trusted"` / `allowExternalEmbedUrls: true` **已在位**，但 8899/8900 免鉴权仍需重验 |
+| `plugins.bundledDiscovery` | `"allowlist"`（配 `plugins.allow` 5 项） | 移除，§2.3 启动性能优化失效 |
+| `agents.defaults.models` | 存在 | → `agents.defaults.modelPolicy.allow` |
+| `mcp.sessionIdleTtlMs` | `0` | 退役 |
+| `cron.maxConcurrentRuns` / `cron.runLog` | `3` / `keepLines=2000, maxBytes=2mb` | 退役 |
+| `browser.profiles.*.color` | 2 处（openclaw `#ff6b35`、user `#4285f4`） | 退役 |
+| `memory.backend` / `memory.qmd` | `builtin` / `includeDefaultMemory=true` | 退役（builtin 成唯一引擎，本项目本就用它） |
+
+`meta.lastTouchedVersion` 仍为 `2026.7.1-2`，确认 §13.2 的沙箱未污染生产。
+
+### 14.4 升级反而能解掉的现存问题
+
+排期时应把这些计入收益：
+
+- **9.2** 新增 `cron.skipMissedJobs`（启动时跳过错过的周期任务）→ 对应本项目多任务 `queued_behind_active_work` 错峰问题。
+- **9.1** 模型可靠性改进：Anthropic 拒答改为**终止**而非重发；会话已持有 turn claim 时 fallback 不再轮遍所有 provider；瞬时 LLM 重试有界 → 正对 §"cron 假成功"根因族（当前靠换 opus-4.8 缓解）。
+- **9.1** 畸形 legacy cron 行被隔离而非阻塞启动；迁移告警降级而非拖垮网关。
+- **9.3** 更新前在隔离候选状态中预演 core/plugin 变更后再激活。
+
+### 14.5 若要升级：推荐目标与理由
+
+**推荐 9.4 + Node 26，不要停在 9.2。**
+
+停 9.2 可省掉换 Node，但 8.x 的配置层改造（§13.4 / §14.3）一分不少，同时拿不到 9.3 的更新安全性改进，且 9.2 已非 `latest`，等于把同一份迁移工作分两次做。
+
+工作清单沿用 §13.5，并在最前面插入两步：
+1. 先在隔离运行时装 **Node 26.x**，同步清理 `node-v22.23.2-win-x64` 的 3 处硬编码（`OpenClaw.ps1`）。
+2. 用新 Node 跑 §13.2 的 junction + `OPENCLAW_HOME` 沙箱，再 `plugins install` → `doctor --fix --yes`。
+
+*复核记录：2026-09-17 —— 目标从 8.2 更新为 9.4；新增 Node 运行时前置条件（9.3 起 + SQLite 截断风险）；插件/skill 侧经实测风险低于 §13 预估。用户决定继续暂缓，本节为纯评估记录，未改动生产。*

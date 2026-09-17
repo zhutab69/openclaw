@@ -1,0 +1,80 @@
+{
+  "_comment": "常驻后台任务清单（配置驱动，加新任务只改此文件不动代码）。dashboard-server.cjs 的 _readBgTasks() 读此清单动态生成。type: multiband(多带聚合) | progress(单进度文件) | log(日志事件)。",
+  "tasks": [
+    {
+      "id": "overseas-reap",
+      "name": "境外死站删除（4带并行）",
+      "guardCron": "f12dfe23 · 每小时巡检",
+      "type": "multiband",
+      "procMatch": "overseas-reap-supervised",
+      "expectedWorkers": 4,
+      "bandDir": "D:/Kiro/testspider/platform/data/bulk/cn/reach-overseas",
+      "bandFilePattern": "reap-progress-w{w}.json",
+      "bandCount": 4,
+      "universe": 250234330,
+      "sumFields": { "processed": "processed", "deleted": "deleted", "reachable": "reachable", "dead": "dead" },
+      "pctField": "processed",
+      "metricsMap": { "已扫描": "processed", "已删死站": "deleted", "可达": "reachable", "死站率%": "__deadRate" }
+    },
+    {
+      "id": "cn-queue-runner",
+      "name": "境内信源普查编排器 (queue-runner)",
+      "guardCron": "9305c313 · 每小时保活",
+      "type": "log",
+      "procMatch": "sweep-queue-runner",
+      "expectedWorkers": 1,
+      "logFile": "D:/Kiro/testspider/platform/data/bulk/cn/queue-runner.log",
+      "doneEvent": "queue_all_done"
+    },
+    {
+      "id": "tag-domestic",
+      "name": "境内信源打标（地域+行业）",
+      "guardCron": "257f6782 · 每5分钟巡检",
+      "type": "progress",
+      "procMatch": "tag-domestic",
+      "expectedWorkers": 1,
+      "progressFile": "D:/Kiro/testspider/platform/data/tag-domestic-progress.json",
+      "universe": 1097831,
+      "pctField": "lastId",
+      "metricsMap": { "已扫描": "scanned", "地域已标": "tagged_region", "行业已标": "tagged_industry" }
+    },
+    {
+      "id": "tag-overseas",
+      "name": "境外信源打标（国家+行业）",
+      "guardCron": "257f6782 · 每5分钟巡检",
+      "type": "progress",
+      "procMatch": "tag-overseas",
+      "expectedWorkers": 1,
+      "progressFile": "D:/Kiro/testspider/platform/data/tag-overseas-progress.json",
+      "universe": 250234330,
+      "universeBase": 232868233,
+      "pctField": "lastId",
+      "metricsMap": { "已扫描": "scanned", "国家已标": "tagged_country", "行业已标": "tagged_industry" }
+    },
+    {
+      "id": "tier-domestic",
+      "name": "境内信源分级（T0-T5）",
+      "guardCron": "257f6782 · 每5分钟巡检",
+      "type": "progress",
+      "procMatch": "tier-domestic",
+      "expectedWorkers": 1,
+      "progressFile": "D:/Kiro/testspider/platform/data/tier-domestic-progress.json",
+      "universe": 1097831,
+      "pctField": "lastId",
+      "metricsMap": { "已扫描": "scanned", "已分级": "tiered" }
+    },
+    {
+      "id": "tier-overseas",
+      "name": "境外信源分级（T0-T5）",
+      "guardCron": "257f6782 · 每5分钟巡检",
+      "type": "progress",
+      "procMatch": "tier-overseas",
+      "expectedWorkers": 1,
+      "progressFile": "D:/Kiro/testspider/platform/data/tier-overseas-progress.json",
+      "universe": 250234330,
+      "universeBase": 232868233,
+      "pctField": "lastId",
+      "metricsMap": { "已扫描": "scanned", "已分级": "tiered" }
+    }
+  ]
+}
