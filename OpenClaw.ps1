@@ -737,7 +737,7 @@ try {
 
 $psi1 = New-Object System.Diagnostics.ProcessStartInfo
 $psi1.FileName = "python"
-$psi1.Arguments = "main.py --port 9000"
+$psi1.Arguments = "main.py --host 127.0.0.1 --port 9000"
 $psi1.WorkingDirectory = "D:\Kiro\testopenclaw\kiro-gateway"
 $psi1.UseShellExecute = $false
 $psi1.CreateNoWindow = $true
@@ -1275,7 +1275,7 @@ while ($true) {
                 Write-Host "  │ " -NoNewline -ForegroundColor DarkYellow
                 Write-Host "[2/3] Starting new instance..." -NoNewline -ForegroundColor Yellow
                 $psi1r = New-Object System.Diagnostics.ProcessStartInfo
-                $psi1r.FileName = "python"; $psi1r.Arguments = "main.py --port 9000"
+                $psi1r.FileName = "python"; $psi1r.Arguments = "main.py --host 127.0.0.1 --port 9000"
                 $psi1r.WorkingDirectory = "D:\Kiro\testopenclaw\kiro-gateway"
                 $psi1r.UseShellExecute = $false; $psi1r.CreateNoWindow = $true
                 $script:p1 = [System.Diagnostics.Process]::Start($psi1r)
